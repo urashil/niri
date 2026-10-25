@@ -19,6 +19,7 @@ Scope {
                 critical: n.urgency === NotificationUrgency.Critical
             });
             if (UiState.dnd && n.urgency !== NotificationUrgency.Critical) return;   // kept in history only
+            UiState.pulse("notify", "\uf0f3", n.summary, -1, Theme.primary, 3000);
             n.tracked = true;
         }
     }
