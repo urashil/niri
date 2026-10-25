@@ -1,0 +1,56 @@
+pragma Singleton
+import Quickshell
+import QtQuick
+
+// Shared UI state: which overlays are open, notification history, and the dynamic-island event.
+Singleton {
+    id: root
+
+    // overlays
+    property bool calendar: false
+    property bool power: false
+    property bool wallpaper: false
+    property bool quick: false
+    property string quickPage: "main"
+    property bool history: false
+    property bool media: false
+
+    // toggles
+    property real brightness: 0.5
+    property bool caffeine: false
+    property bool dnd: false
+
+    // notification history (newest first)
+    property var notes: []
+    property int unread: 0
+    function addNote(n) {
+        notes = [n].concat(notes).slice(0, 60);
+        unread += 1;
+    }
+    function clearNotes() { notes = []; unread = 0; }
+
+    // dynamic island
+    property bool islandActive: false
+    property string islandKind: ""
+    property string islandIcon: ""
+    property string islandText: ""
+    property real islandValue: -1
+    property color islandColor: "#88c0d0"
+
+    function pulse(kind, icon, text, value, color, ms) {
+        islandKind = kind;
+        islandIcon = icon;
+        islandText = text;
+        islandValue = value;
+        islandColor = color;
+        islandActive = true;
+        islandTimer.interval = ms || 1800;
+        islandTimer.restart();
+    }
+    Timer { id: islandTimer; onTriggered: root.islandActive = false }
+
+    function openQuick(page) {
+        quickPage = page || "main";
+        quick = true;
+    }
+}

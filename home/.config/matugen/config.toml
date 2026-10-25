@@ -1,0 +1,46 @@
+[config]
+version_check = false
+
+[config.custom_colors]
+red = "#bf616a"
+green = "#a3be8c"
+yellow = "#ebcb8b"
+blue = "#81a1c1"
+magenta = "#b48ead"
+cyan = "#88c0d0"
+
+[templates.kitty]
+input_path = "~/.config/matugen/templates/kitty.conf"
+output_path = "~/.config/kitty/colors.conf"
+
+[templates.niri]
+input_path = "~/.config/matugen/templates/niri.kdl"
+output_path = "~/.config/niri/colors.kdl"
+
+[templates.fuzzel]
+input_path = "~/.config/matugen/templates/fuzzel.ini"
+output_path = "~/.config/fuzzel/colors.ini"
+
+[templates.swaylock]
+input_path = "~/.config/matugen/templates/swaylock"
+output_path = "~/.config/swaylock/config"
+
+[templates.gtk3]
+input_path = "~/.config/matugen/templates/gtk.css"
+output_path = "~/.config/gtk-3.0/gtk.css"
+
+[templates.gtk4]
+input_path = "~/.config/matugen/templates/gtk4.css"
+output_path = "~/.config/gtk-4.0/gtk.css"
+
+[templates.quickshell]
+input_path = "~/.config/matugen/templates/colors.json"
+output_path = "~/.config/quickshell/bar/colors.json"
+
+[templates.btop]
+input_path = "~/.config/matugen/templates/btop.theme"
+output_path = "~/.config/btop/themes/matugen.theme"
+
+[templates.sddm]
+input_path = "~/.config/matugen/templates/sddm.conf"
+output_path = "~/.cache/rice/sddm.conf"

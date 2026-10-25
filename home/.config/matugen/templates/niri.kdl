@@ -1,0 +1,19 @@
+layout {
+    focus-ring {
+        active-gradient from="{{colors.primary.default.hex}}" to="{{colors.tertiary.default.hex}}" angle=45
+        inactive-color "{{colors.outline_variant.default.hex}}"
+    }
+    border {
+        urgent-color "{{colors.error.default.hex}}"
+    }
+    shadow {
+        color "#00000080"
+    }
+    insert-hint {
+        color "{{colors.primary.default.hex}}80"
+    }
+}
+
+overview {
+    backdrop-color "{{colors.surface_container_lowest.default.hex}}"
+}

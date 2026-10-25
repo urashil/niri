@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""rice-net: root-side helper for the quickshell network/privacy menu (run through pkexec).
+
+  status                       print JSON state
+  mode <network|once|disabled> iwd [General].AddressRandomization (+ restart iwd)
+  range <full|nic>             iwd AddressRandomizationRange (nic keeps the vendor prefix)
+  always <ssid> <on|off>       per-network AlwaysRandomizeAddress (fresh MAC on every connect)
+  rotate                       new MAC now: always-random on the current network, reconnect
+  hostname <name|random>       set the transient hostname (lost on reboot unless boot-hostname is on)
+  boot-hostname <on|off>       randomize the hostname at every boot (before the network starts)
+  harden <on|off>              no LLMNR/mDNS announcements, IPv6 temporary addresses
+"""
+import configparser, json, os, random, re, socket, string, subprocess, sys
+
+MAIN = "/etc/iwd/main.conf"
+IWD_DIR = "/var/lib/iwd"
+IFACE = "wlan0"
+
+def run(*a, check=False):
+    return subprocess.run(a, capture_output=True, text=True, check=check)
+
+def read_main():
+    c = configparser.ConfigParser(strict=False, interpolation=None)
+    c.optionxform = str
+    c.read(MAIN)
+    return c
+
+def write_main(c):
+    os.makedirs(os.path.dirname(MAIN), exist_ok=True)
+    with open(MAIN, "w") as f:
+        c.write(f, space_around_delimiters=False)
+
+def restart_iwd():
+    run("systemctl", "restart", "iwd")
+
+def net_file(ssid):
+    safe = re.fullmatch(r"[A-Za-z0-9 _-]+", ssid) is not None
+    base = ssid if safe else "=" + ssid.encode().hex()
+    for ext in (".psk", ".open", ".8021x"):
+        p = os.path.join(IWD_DIR, base + ext)
+        if os.path.exists(p):
+            return p
+    return None
+
+def current_ssid():
+    out = run("iwctl", "station", IFACE, "show").stdout
+    out = re.sub(r"\x1b\[[0-9;]*m", "", out)
+    m = re.search(r"Connected network\s+(.+?)\s*$", out, re.M)
+    return m.group(1).strip() if m else None
+
+def set_always(ssid, on):
+    p = net_file(ssid)
+    if not p:
+        sys.exit(f"no saved profile for '{ssid}' (connect to it once first)")
+    c = configparser.ConfigParser(strict=False, interpolation=None)
+    c.optionxform = str
+    c.read(p)
+    if not c.has_section("Settings"):
+        c.add_section("Settings")
+    c["Settings"]["AlwaysRandomizeAddress"] = "true" if on else "false"
+    with open(p, "w") as f:
+        c.write(f, space_around_delimiters=False)
+    os.chmod(p, 0o600)
+
+def random_hostname():
+    return "DESKTOP-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=7))
+
+def status():
+    c = read_main()
+    g = c["General"] if c.has_section("General") else {}
+    cur = open(f"/sys/class/net/{IFACE}/address").read().strip() if os.path.exists(f"/sys/class/net/{IFACE}") else ""
+    perm = ""
+    r = run("ip", "-j", "link", "show", IFACE)
+    try:
+        perm = json.loads(r.stdout)[0].get("permaddr", "")
+    except Exception:
+        pass
+    ssid = current_ssid()
+    always = False
+    if ssid and net_file(ssid):
+        n = configparser.ConfigParser(strict=False, interpolation=None)
+        n.optionxform = str
+        n.read(net_file(ssid))
+        always = n.get("Settings", "AlwaysRandomizeAddress", fallback="false") == "true"
+    print(json.dumps({
+        "mode": g.get("AddressRandomization", "disabled"),
+        "range": g.get("AddressRandomizationRange", "full"),
+        "mac": cur, "permanent": perm, "ssid": ssid, "always": always,
+        "hostname": socket.gethostname(),
+        "bootHostname": run("systemctl", "is-enabled", "rice-hostname.service").stdout.strip() == "enabled",
+        "harden": os.path.exists("/etc/systemd/resolved.conf.d/rice.conf"),
+    }))
+
+UNIT = """[Unit]
+Description=Randomize the hostname at boot
+Before=network-pre.target iwd.service systemd-networkd.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/rice/net-helper hostname random
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] in ("-h", "--help"):
+        print(__doc__); return
+    cmd = a[0]
+    if cmd == "status":
+        status()
+    elif cmd == "mode" and len(a) == 2 and a[1] in ("network", "once", "disabled"):
+        c = read_main()
+        if not c.has_section("General"): c.add_section("General")
+        c["General"]["AddressRandomization"] = a[1]
+        c["General"].setdefault("AddressRandomizationRange", "nic")
+        write_main(c); restart_iwd()
+    elif cmd == "range" and len(a) == 2 and a[1] in ("full", "nic"):
+        c = read_main()
+        if not c.has_section("General"): c.add_section("General")
+        c["General"]["AddressRandomizationRange"] = a[1]
+        write_main(c); restart_iwd()
+    elif cmd == "always" and len(a) == 3 and a[2] in ("on", "off"):
+        c = read_main()
+        if c.get("General", "AddressRandomization", fallback="disabled") != "network":
+            sys.exit("per-network randomization needs mode 'network'")
+        set_always(a[1], a[2] == "on")
+        restart_iwd()
+    elif cmd == "rotate":
+        c = read_main()
+        if not c.has_section("General"): c.add_section("General")
+        c["General"]["AddressRandomization"] = "network"
+        c["General"].setdefault("AddressRandomizationRange", "nic")
+        write_main(c)
+        ssid = current_ssid()
+        if ssid and net_file(ssid):
+            set_always(ssid, True)
+        restart_iwd()
+    elif cmd == "hostname" and len(a) == 2:
+        name = random_hostname() if a[1] == "random" else a[1]
+        if not re.fullmatch(r"[A-Za-z0-9-]{1,63}", name):
+            sys.exit("invalid hostname")
+        run("hostnamectl", "--transient", "hostname", name, check=True)
+        print(name)
+    elif cmd == "boot-hostname" and len(a) == 2 and a[1] in ("on", "off"):
+        if a[1] == "on":
+            open("/etc/systemd/system/rice-hostname.service", "w").write(UNIT)
+            run("systemctl", "daemon-reload")
+            run("systemctl", "enable", "rice-hostname.service")
+        else:
+            run("systemctl", "disable", "rice-hostname.service")
+    elif cmd == "harden" and len(a) == 2 and a[1] in ("on", "off"):
+        d = "/etc/systemd/resolved.conf.d"; f = d + "/rice.conf"; s = "/etc/sysctl.d/99-rice-ipv6.conf"
+        if a[1] == "on":
+            os.makedirs(d, exist_ok=True)
+            open(f, "w").write("[Resolve]\nLLMNR=no\nMulticastDNS=no\n")
+            open(s, "w").write("net.ipv6.conf.all.use_tempaddr=2\nnet.ipv6.conf.default.use_tempaddr=2\n")
+            run("sysctl", "--system")
+        else:
+            for p in (f, s):
+                if os.path.exists(p): os.remove(p)
+        run("systemctl", "restart", "systemd-resolved")
+    else:
+        sys.exit(__doc__)
+
+if __name__ == "__main__":
+    main()

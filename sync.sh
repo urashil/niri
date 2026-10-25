@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Copy the live config from $HOME into this repo (generated colour files are skipped).
+set -euo pipefail
+cd "$(dirname "$0")"
+FILES=(
+  .zshrc .p10k.zsh .p10k-colors.zsh
+  .config/niri/config.kdl
+  .config/kitty/kitty.conf
+  .config/fuzzel/fuzzel.ini
+  .config/matugen
+  .config/quickshell/bar
+  .config/gtk-3.0/settings.ini .config/gtk-4.0/settings.ini
+  .config/btop/btop.conf
+  .config/fastfetch/config.jsonc
+  .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
+)
+for f in "${FILES[@]}"; do
+  mkdir -p "home/$(dirname "$f")"
+  rm -rf "home/$f"
+  cp -a "$HOME/$f" "home/$f"
+done
+rm -f home/.config/quickshell/bar/colors.json
+cp -a ~/deps.sh deps.sh
+echo "synced"

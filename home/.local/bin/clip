@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Clipboard history picker (cliphist + fuzzel)
+cliphist list | fuzzel --dmenu --prompt "  " | cliphist decode | wl-copy

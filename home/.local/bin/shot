@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# shot region  -> select an area, annotate in satty, copy + save
+# shot screen  -> whole screen to clipboard + file
+dir="$HOME/Pictures/Screenshots"; mkdir -p "$dir"
+f="$dir/shot-$(date +%Y%m%d-%H%M%S).png"
+case "${1:-region}" in
+  region)
+    geom=$(slurp -d -b '#00000066' -c '#88c0d0ff' -w 2) || exit 0
+    grim -g "$geom" - | satty --filename - --output-filename "$f" --early-exit \
+         --copy-command wl-copy --actions-on-enter save-to-clipboard ;;
+  screen)
+    grim "$f" && wl-copy < "$f" && notify-send -i "$f" "Screenshot saved" "$f" ;;
+esac

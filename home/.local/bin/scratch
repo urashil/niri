@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Drop-down style scratch terminal: spawn it, focus it, or close it when it is already focused."""
+import json, subprocess
+APP = "kitty-scratch"
+ws = json.loads(subprocess.run(["niri", "msg", "-j", "windows"], capture_output=True, text=True).stdout or "[]")
+w = next((x for x in ws if x.get("app_id") == APP), None)
+if w is None:
+    subprocess.Popen(["kitty", "--class", APP, "--title", "scratch"], start_new_session=True)
+elif w.get("is_focused"):
+    subprocess.run(["niri", "msg", "action", "close-window", "--id", str(w["id"])])
+else:
+    subprocess.run(["niri", "msg", "action", "focus-window", "--id", str(w["id"])])

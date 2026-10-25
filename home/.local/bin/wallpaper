@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# wallpaper [next|prev|random|restore|set <file>]
+# Sets the wallpaper with awww, then regenerates the whole color scheme from it
+# with matugen (kitty, niri, fuzzel, quickshell bar, swaylock, GTK accent).
+set -u
+
+DIR="${WALLPAPER_DIR:-$HOME/Pictures/Wallpapers}"
+STATE="$HOME/.cache/rice"
+CUR="$STATE/current"
+SCHEME="${WALLPAPER_SCHEME:-scheme-tonal-spot}"
+mkdir -p "$STATE"
+
+list() { find -L "$DIR" -maxdepth 2 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' \) | sort; }
+
+pick() {
+  local cur files n i
+  cur=$(cat "$CUR" 2>/dev/null)
+  mapfile -t files < <(list)
+  n=${#files[@]}
+  [ "$n" -gt 0 ] || { echo "no wallpapers in $DIR" >&2; exit 1; }
+  case "$1" in
+    next|prev)
+      i=-1
+      for k in "${!files[@]}"; do [ "${files[$k]}" = "$cur" ] && i=$k; done
+      if [ "$1" = next ]; then i=$(( (i + 1) % n )); else i=$(( (i - 1 + n) % n )); fi
+      echo "${files[$i]}" ;;
+    random)
+      if [ "$n" -eq 1 ]; then echo "${files[0]}"; return; fi
+      while :; do f=${files[RANDOM % n]}; [ "$f" != "$cur" ] && { echo "$f"; return; }; done ;;
+  esac
+}
+
+ensure_daemon() {
+  awww query >/dev/null 2>&1 && return
+  setsid -f awww-daemon >/dev/null 2>&1
+  for _ in $(seq 20); do awww query >/dev/null 2>&1 && return; sleep 0.1; done
+}
+
+apply() {
+  local img="$1" t
+  [ -f "$img" ] || { echo "not found: $img" >&2; exit 1; }
+  img=$(realpath "$img")
+  ensure_daemon
+  local types=(wipe wave grow outer center fade)
+  t=${types[RANDOM % ${#types[@]}]}
+  awww img "$img" --transition-type "$t" --transition-fps 120 --transition-duration 1.2 \
+       --transition-angle $(( RANDOM % 360 )) --transition-pos 0.5,0.5 >/dev/null 2>&1 &
+  echo "$img" > "$CUR"
+  ln -sf "$img" "$STATE/lock.png"
+
+  matugen image "$img" --mode dark --type "$SCHEME" --prefer saturation --quiet >/dev/null 2>&1 \
+    || echo "matugen failed" >&2
+
+  # kitty re-reads its config (and the included colors.conf) on SIGUSR1
+  pkill -USR1 -x kitty 2>/dev/null
+  pkill -USR2 -x btop 2>/dev/null
+
+  # login screen (SilentSDDM): only when deps.sh made the theme files writable
+  local theme=/usr/share/sddm/themes/silent
+  if [ -w "$theme/backgrounds/rice-bg.png" ] && [ -w "$theme/configs/rice.conf" ]; then
+    cp -f "$img" "$theme/backgrounds/rice-bg.png"
+    cp -f "$STATE/sddm.conf" "$theme/configs/rice.conf"
+  fi
+  wait
+}
+
+case "${1:-next}" in
+  next|prev|random) apply "$(pick "$1")" ;;
+  set) [ -n "${2:-}" ] || { echo "usage: wallpaper set <file>" >&2; exit 1; }; apply "$2" ;;
+  restore)
+    f=$(cat "$CUR" 2>/dev/null)
+    [ -f "$f" ] || f=$(pick random)
+    apply "$f" ;;
+  *) echo "usage: wallpaper [next|prev|random|restore|set <file>]" >&2; exit 1 ;;
+esac
