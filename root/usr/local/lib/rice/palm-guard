@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""rice palm guard: switch the touchpad off while you type, and keep it off for PALM_HOLD seconds after
+the last key (default 1.4 s). libinput's own disable-while-typing only waits about half a second and
+this touchpad reports no pressure or contact size, so palms resting between keystrokes still get through.
+
+It only looks at *when* a typing key is pressed. Nothing is stored or sent anywhere. Modifier keys alone
+(Super, Ctrl, Alt, Shift, Fn) do not count, so Super+click and similar still work.
+
+The touchpad is toggled through the kernel's `inhibited` switch in sysfs (needs root, hence a system
+service). `palm-guard --reset` turns it back on and runs after the service stops, whatever the reason.
+"""
+import glob, os, re, select, signal, struct, sys, time
+
+HOLD = float(os.environ.get("PALM_HOLD", "1.4"))
+EVENT = struct.Struct("llHHi")           # struct input_event on 64-bit
+EV_KEY = 1
+MODIFIERS = {29, 42, 54, 56, 97, 100, 125, 126, 58, 69, 70}   # ctrl shift alt meta caps/num/scroll lock
+
+def is_typing_key(code):
+    return code not in MODIFIERS and (1 <= code <= 88 or code in (96, 98) or 102 <= code <= 111)
+
+def devices():
+    """Parse /proc/bus/input/devices into [{name, handlers, sysfs, key}]."""
+    out = []
+    try:
+        blocks = open("/proc/bus/input/devices").read().split("\n\n")
+    except OSError:
+        return out
+    for b in blocks:
+        d = {"name": "", "handlers": "", "sysfs": "", "key": 0}
+        for line in b.splitlines():
+            if line.startswith("N: Name="): d["name"] = line.split("=", 1)[1].strip('"')
+            elif line.startswith("H: Handlers="): d["handlers"] = line.split("=", 1)[1]
+            elif line.startswith("S: Sysfs="): d["sysfs"] = line.split("=", 1)[1]
+            elif line.startswith("B: KEY="):
+                try: d["key"] = int("".join(w.zfill(16) for w in line.split("=", 1)[1].split()), 16)
+                except ValueError: pass
+        if d["name"]:
+            out.append(d)
+    return out
+
+def touchpads():
+    paths = []
+    for d in devices():
+        if "touchpad" in d["name"].lower() and d["sysfs"]:
+            p = "/sys" + d["sysfs"] + "/inhibited"
+            if os.path.exists(p): paths.append(p)
+    return paths
+
+def keyboards():
+    ev = []
+    for d in devices():
+        m = re.search(r"\bevent(\d+)\b", d["handlers"])
+        # a real keyboard has KEY_A (30) and KEY_SPACE (57)
+        if m and "kbd" in d["handlers"] and d["key"] >> 30 & 1 and d["key"] >> 57 & 1:
+            ev.append("/dev/input/event" + m.group(1))
+    return ev
+
+def set_inhibited(paths, on):
+    for p in paths:
+        try:
+            with open(p, "w") as f: f.write("1" if on else "0")
+        except OSError:
+            pass
+
+class Guard:
+    """State machine kept free of I/O so it can be tested: feed it key times, ask it when to turn back on."""
+    def __init__(self, apply, hold=HOLD):
+        self.apply, self.hold, self.off = apply, hold, False
+        self.until = 0.0
+    def key(self, now):
+        self.until = now + self.hold
+        if not self.off:
+            self.off = True
+            self.apply(True)
+    def tick(self, now):
+        if self.off and now >= self.until:
+            self.off = False
+            self.apply(False)
+    def timeout(self, now):
+        return max(0.05, self.until - now) if self.off else 5.0
+
+def main():
+    if "--reset" in sys.argv:
+        set_inhibited(touchpads(), False)
+        return
+    pads = touchpads()
+    guard = Guard(lambda on: set_inhibited(pads, on))
+    fds = {}
+    stop = []
+    def bye(*_): stop.append(1)
+    signal.signal(signal.SIGTERM, bye); signal.signal(signal.SIGINT, bye)
+    last_scan = 0.0
+    try:
+        while not stop:
+            now = time.monotonic()
+            if now - last_scan > 10:                       # pick up hotplugged keyboards
+                last_scan = now
+                pads = touchpads() or pads
+                for path in keyboards():
+                    if path not in fds:
+                        try: fds[path] = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+                        except OSError: pass
+            try:
+                ready, _, _ = select.select(list(fds.values()), [], [], guard.timeout(now))
+            except (OSError, ValueError):
+                ready = []
+            for fd in ready:
+                try: data = os.read(fd, EVENT.size * 32)
+                except BlockingIOError: continue
+                except OSError:
+                    for k, v in list(fds.items()):
+                        if v == fd: del fds[k]
+                    continue
+                for off in range(0, len(data) - EVENT.size + 1, EVENT.size):
+                    _, _, typ, code, val = EVENT.unpack_from(data, off)
+                    if typ == EV_KEY and val in (1, 2) and is_typing_key(code):
+                        guard.key(time.monotonic())
+            guard.tick(time.monotonic())
+    finally:
+        set_inhibited(pads, False)
+
+if __name__ == "__main__":
+    main()

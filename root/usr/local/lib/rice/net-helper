@@ -16,6 +16,8 @@
   pia-killswitch <on|auto|off> PIA killswitch: always on / only with the VPN / off
   boot-hostname <on|off>       pick a new random Wi-Fi hostname at every boot (before iwd starts)
   harden <on|off>              no LLMNR/mDNS announcements, IPv6 temporary addresses
+  palm <on|off>                touchpad off while typing (rice-palm-guard service)
+  palm-hold <seconds>          how long the touchpad stays off after the last key (default 1.4)
 """
 import configparser, json, os, random, re, socket, string, subprocess, sys
 
@@ -188,6 +190,13 @@ def known_rules():
     except (OSError, ValueError):
         return []
 
+def palm_hold():
+    try:
+        m = re.search(r"^PALM_HOLD=([0-9.]+)", open("/etc/rice-palm.conf").read(), re.M)
+        return float(m.group(1)) if m else 1.4
+    except OSError:
+        return 1.4
+
 def status():
     c = read_main()
     g = c["General"] if c.has_section("General") else {}
@@ -215,6 +224,8 @@ def status():
         "harden": os.path.exists("/etc/systemd/resolved.conf.d/rice.conf"),
         "dhcpHostname": wifi_hostname() != "",
         "rules": known_rules(),
+        "palm": run("systemctl", "is-active", "rice-palm-guard.service").stdout.strip() == "active",
+        "palmHold": palm_hold(),
     }))
 
 UNIT = """[Unit]
@@ -307,6 +318,15 @@ def dispatch(cmd, a):
             pia_settings({"method": "openvpn", "protocol": "tcp", "remotePortTCP": 443, "automaticTransport": False})
         else:
             pia_settings({"protocol": "udp", "remotePortTCP": 0, "remotePortUDP": 0, "automaticTransport": True})
+    elif cmd == "palm" and len(a) == 2 and a[1] in ("on", "off"):
+        if a[1] == "on":
+            run("systemctl", "enable", "--now", "rice-palm-guard.service")
+        else:
+            run("systemctl", "disable", "--now", "rice-palm-guard.service")
+    elif cmd == "palm-hold" and len(a) == 2 and re.fullmatch(r"[0-9](\.[0-9]+)?|10", a[1]):
+        with open("/etc/rice-palm.conf", "w") as f:
+            f.write(f"PALM_HOLD={a[1]}\n")
+        run("systemctl", "try-restart", "rice-palm-guard.service")
     elif cmd == "boot-hostname" and len(a) == 2 and a[1] in ("on", "off"):
         if a[1] == "on":
             open("/etc/systemd/system/rice-hostname.service", "w").write(UNIT)

@@ -28,6 +28,12 @@ install -Dm644 "$SRC/usr/share/polkit-1/actions/org.rice.net.policy" /usr/share/
 # world-readable mirror of the per-network MAC policy (/var/lib/iwd is root-only)
 /usr/local/lib/rice/net-helper sync || true
 
+echo "==> palm guard (touchpad off while typing)"
+install -Dm755 "$SRC/usr/local/lib/rice/palm-guard" /usr/local/lib/rice/palm-guard
+install -Dm644 "$SRC/etc/systemd/system/rice-palm-guard.service" /etc/systemd/system/rice-palm-guard.service
+systemctl daemon-reload
+systemctl enable --now rice-palm-guard.service
+
 echo "==> logind: react to the lid soon after a resume"
 # logind ignores lid events for 30 s after resuming, so closing the lid right after opening it never slept
 install -d /etc/systemd/logind.conf.d

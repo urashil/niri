@@ -226,6 +226,16 @@ PanelWindow {
                         onToggled: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rec", UiState.recording ? "stop" : "screen"])
                         onOpened: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rec", "region"])
                     }
+                    Controls.Tile {
+                        Layout.fillWidth: true
+                        icon: "\uf256"
+                        title: "Palm guard"
+                        subtitle: priv.s.palm ? "pad off while typing · " + priv.s.palmHold + "s" : "Off"
+                        on: !!priv.s.palm
+                        chevron: !!priv.s.palm
+                        onToggled: priv.run("Applying", ["palm", priv.s.palm ? "off" : "on"])
+                        onOpened: { const o = [1.0, 1.4, 2.0, 3.0]; priv.run("Applying", ["palm-hold", String(o[(o.indexOf(priv.s.palmHold) + 1) % o.length])]); }
+                    }
                 }
 
                 Rectangle {
