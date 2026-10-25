@@ -15,6 +15,13 @@ Singleton {
     property bool history: false
     property bool media: false
     property bool launcher: false
+    property bool monitor: false
+    property string monitorTab: "cpu"
+    function openMonitor(tab) {
+        if (monitor && monitorTab === tab) { monitor = false; return; }
+        monitorTab = tab;
+        monitor = true;
+    }
     property bool switcher: false
     signal switcherStep(int dir)
 

@@ -32,16 +32,22 @@ Island {
     Timer { interval: 2000; running: true; repeat: true; triggeredOnStart: true; onTriggered: proc.running = true }
 
     Row {
+        TapHandler { onTapped: UiState.openMonitor("cpu") }
+        HoverHandler { cursorShape: Qt.PointingHandCursor }
         spacing: 5
         Glyph { text: ""; color: root.cpu > 85 ? Theme.error : Theme.green; font.pixelSize: 14 }
         Label { text: root.cpu + "%" }
     }
     Row {
+        TapHandler { onTapped: UiState.openMonitor("mem") }
+        HoverHandler { cursorShape: Qt.PointingHandCursor }
         spacing: 5
         Glyph { text: "󰍛"; color: root.mem > 85 ? Theme.error : Theme.yellow; font.pixelSize: 14 }
         Label { text: root.mem + "%" }
     }
     Row {
+        TapHandler { onTapped: UiState.openMonitor("net") }
+        HoverHandler { cursorShape: Qt.PointingHandCursor }
         spacing: 4
         Glyph { text: "\uf063"; color: Theme.cyan; font.pixelSize: 11 }
         Label { text: NetStats.fmt(NetStats.down); font.pixelSize: 12; width: 38 }
@@ -49,6 +55,8 @@ Island {
         Label { text: NetStats.fmt(NetStats.up); font.pixelSize: 12; width: 38 }
     }
     Row {
+        TapHandler { onTapped: UiState.openMonitor("cpu") }
+        HoverHandler { cursorShape: Qt.PointingHandCursor }
         visible: root.temp > 0
         spacing: 5
         Glyph { text: ""; color: root.temp > 85 ? Theme.error : Theme.magenta; font.pixelSize: 14 }

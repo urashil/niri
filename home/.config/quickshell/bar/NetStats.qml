@@ -9,6 +9,8 @@ Singleton {
     property real down: 0   // bytes/s
     property real up: 0
     property var last: null
+    property var downHist: []
+    property var upHist: []
 
     function fmt(b) {
         if (b < 1024) return Math.round(b) + "B";
@@ -26,7 +28,12 @@ Singleton {
                 const now = Date.now();
                 if (root.last) {
                     const dt = (now - root.last.t) / 1000;
-                    if (dt > 0) { root.down = Math.max(0, (p[0] - root.last.rx) / dt); root.up = Math.max(0, (p[1] - root.last.tx) / dt); }
+                    if (dt > 0) {
+                        root.down = Math.max(0, (p[0] - root.last.rx) / dt);
+                        root.up = Math.max(0, (p[1] - root.last.tx) / dt);
+                        root.downHist = root.downHist.concat([root.down]).slice(-60);
+                        root.upHist = root.upHist.concat([root.up]).slice(-60);
+                    }
                 }
                 root.last = { rx: p[0], tx: p[1], t: now };
             }

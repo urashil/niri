@@ -10,6 +10,7 @@ ShellRoot {
     History {}
     MediaPopup {}
     Launcher {}
+    Monitor {}
     Switcher {}
     PowerMenu {}
     WallpaperPicker {}
@@ -27,6 +28,11 @@ ShellRoot {
     }
     IpcHandler { target: "history";   function toggle(): void { UiState.history = !UiState.history; } }
     IpcHandler { target: "media";     function toggle(): void { UiState.media = !UiState.media; } }
+    IpcHandler {
+        target: "monitor"
+        function toggle(): void { UiState.monitor = !UiState.monitor; }
+        function open(tab: string): void { UiState.monitorTab = tab; UiState.monitor = true; }
+    }
     IpcHandler { target: "launcher";  function toggle(): void { UiState.launcher = !UiState.launcher; } }
     IpcHandler {
         target: "switcher"
