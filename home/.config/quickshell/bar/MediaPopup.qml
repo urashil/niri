@@ -15,6 +15,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: UiState.media ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
+    BackgroundEffect.blurRegion: Region { item: card; radius: Theme.radius + 4 }
     readonly property var p: Mpris.players.values.length > 0 ? Mpris.players.values[0] : null
 
     MouseArea { anchors.fill: parent; onClicked: UiState.media = false }
@@ -24,11 +25,12 @@ PanelWindow {
     Timer { interval: 1000; running: win.visible && win.p && win.p.isPlaying; repeat: true; onTriggered: if (win.p) win.p.positionChanged() }
 
     Rectangle {
+        id: card
         anchors { top: parent.top; right: parent.right; topMargin: 56; rightMargin: 260 }
         width: 340
         height: col.implicitHeight + 32
         radius: Theme.radius + 4
-        color: Qt.alpha(Theme.surface, 0.985)
+        color: Qt.alpha(Theme.surface, 0.82)
         border.width: 1
         border.color: Theme.outlineVariant
         MouseArea { anchors.fill: parent }

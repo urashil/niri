@@ -355,6 +355,14 @@ overview {
     zoom 0.5
 }
 
+// Background blur used by the rules above.
+blur {
+    passes 3
+    offset 3.0
+    noise 0.02
+    saturation 1.3
+}
+
 // Window rules let you adjust behavior for individual windows.
 // Find more information on the wiki:
 // https://niri-wm.github.io/niri/Configuration:-Window-Rules
@@ -430,13 +438,20 @@ window-rule {
     shadow { on; }
 }
 window-rule {
-    match app-id=r#"^kitty$"#
-    opacity 0.92
+    match app-id=r#"^kitty"#
+    opacity 0.88
     draw-border-with-background false
+    background-effect { blur true; }
 }
 window-rule {
     match app-id=r#"^kitty$"# is-focused=false
     opacity 0.86
+}
+
+// Blur behind the launcher (the quickshell panels ask for their own blur regions).
+layer-rule {
+    match namespace="^launcher$"
+    background-effect { blur true; }
 }
 
 // Quickshell notifications and OSD get a shadow-less, blurless pass.

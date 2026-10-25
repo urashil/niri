@@ -13,6 +13,7 @@ PanelWindow {
     WlrLayershell.namespace: "qs-calendar"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    BackgroundEffect.blurRegion: Region { item: card; radius: Theme.radius + 4 }
 
     property date today: new Date()
     property int year: today.getFullYear()
@@ -37,7 +38,7 @@ PanelWindow {
         width: 300
         height: inner.implicitHeight + 32
         radius: Theme.radius + 4
-        color: Qt.alpha(Theme.surface, 0.985)
+        color: Qt.alpha(Theme.surface, 0.80)
         border.width: 1
         border.color: Theme.outlineVariant
 

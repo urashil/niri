@@ -1,0 +1,34 @@
+@import url("colors.css");
+
+/* New tab, home and Firefox's own about: pages follow the wallpaper too */
+@-moz-document url(about:home), url(about:newtab), url(about:blank), url-prefix(about:privatebrowsing) {
+  :root, body {
+    --newtab-background-color: var(--rice-bg) !important;
+    --newtab-background-color-secondary: var(--rice-bg-mid) !important;
+    --newtab-text-primary-color: var(--rice-fg) !important;
+    --newtab-primary-action-background: var(--rice-accent) !important;
+    --newtab-element-hover-color: var(--rice-bg-high) !important;
+    --newtab-border-color: var(--rice-outline) !important;
+    background-color: var(--rice-bg) !important;
+  }
+  .search-handoff-button, .search-wrapper input { background-color: var(--rice-bg-mid) !important; border-radius: 12px !important; color: var(--rice-fg) !important; }
+  .card-outer, .card-outer .card { border-radius: 14px !important; }
+}
+
+@-moz-document url-prefix(about:preferences), url-prefix(about:addons), url-prefix(about:config), url-prefix(about:logins), url-prefix(about:downloads), url-prefix(about:settings) {
+  :root {
+    --in-content-page-background: var(--rice-bg) !important;
+    --in-content-page-color: var(--rice-fg) !important;
+    --in-content-box-background: var(--rice-bg-low) !important;
+    --in-content-box-border-color: var(--rice-outline) !important;
+    --in-content-primary-button-background: var(--rice-accent) !important;
+    --in-content-primary-button-text-color: var(--rice-accent-fg) !important;
+    --in-content-accent-color: var(--rice-accent) !important;
+    --in-content-link-color: var(--rice-accent) !important;
+    --in-content-item-selected: var(--rice-accent-bg) !important;
+    --in-content-item-selected-text: var(--rice-accent-bg-fg) !important;
+    --in-content-button-background: var(--rice-bg-mid) !important;
+    --in-content-button-background-hover: var(--rice-bg-high) !important;
+    --in-content-text-color: var(--rice-fg) !important;
+  }
+}

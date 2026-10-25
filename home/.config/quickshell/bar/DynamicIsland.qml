@@ -10,7 +10,7 @@ Rectangle {
     width: active ? eventW : idleW
     height: Theme.islandHeight + (active ? 4 : 0)
     radius: height / 2
-    color: Qt.alpha(Theme.surface, 0.92)
+    color: Qt.alpha(Theme.surface, 0.86)
     border.width: 1
     border.color: active ? Qt.alpha(UiState.islandColor, 0.7) : Qt.alpha(Theme.outlineVariant, 0.8)
     clip: true

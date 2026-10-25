@@ -8,7 +8,7 @@ PanelWindow {
     id: win
     visible: UiState.power
     anchors { top: true; left: true; right: true; bottom: true }
-    color: Qt.rgba(0, 0, 0, 0.55)
+    color: Qt.rgba(0, 0, 0, 0.35)
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "qs-power"
     WlrLayershell.layer: WlrLayer.Overlay
@@ -20,6 +20,8 @@ PanelWindow {
         run.command = ["sh", "-c", cmd];
         run.running = true;
     }
+    BackgroundEffect.blurRegion: Region { item: backdrop }
+    Item { id: backdrop; anchors.fill: parent }
     readonly property var items: [
         { icon: "", name: "Lock",     key: "l", cmd: "pidof swaylock || swaylock -f", color: Theme.blue },
         { icon: "", name: "Suspend",  key: "s", cmd: "systemctl suspend",             color: Theme.cyan },

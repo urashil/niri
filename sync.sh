@@ -12,6 +12,9 @@ FILES=(
   .config/gtk-3.0/settings.ini .config/gtk-4.0/settings.ini
   .config/btop/btop.conf
   .config/fastfetch/config.jsonc
+  .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userChrome.css
+  .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userContent.css
+  .config/librewolf/librewolf/6yv4qbnb.default-release/user.js
   .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
 )
 for f in "${FILES[@]}"; do

@@ -35,6 +35,15 @@ Scope {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "qs-notifications"
         WlrLayershell.layer: WlrLayer.Overlay
+        // one blur region per card (a single region over the column blurs the gaps too)
+        BackgroundEffect.blurRegion: Region {
+            Region { item: rep.count > 0 ? rep.itemAt(0) : null; radius: Theme.radius + 2 }
+            Region { item: rep.count > 1 ? rep.itemAt(1) : null; radius: Theme.radius + 2 }
+            Region { item: rep.count > 2 ? rep.itemAt(2) : null; radius: Theme.radius + 2 }
+            Region { item: rep.count > 3 ? rep.itemAt(3) : null; radius: Theme.radius + 2 }
+            Region { item: rep.count > 4 ? rep.itemAt(4) : null; radius: Theme.radius + 2 }
+            Region { item: rep.count > 5 ? rep.itemAt(5) : null; radius: Theme.radius + 2 }
+        }
 
         Column {
             id: col
@@ -42,6 +51,7 @@ Scope {
             spacing: 10
 
             Repeater {
+                id: rep
                 model: server.trackedNotifications
                 delegate: Rectangle {
                     id: card
@@ -49,7 +59,7 @@ Scope {
                     width: col.width
                     implicitHeight: content.implicitHeight + 28
                     radius: Theme.radius + 2
-                    color: Qt.alpha(Theme.surface, 0.96)
+                    color: Qt.alpha(Theme.surface, 0.84)
                     border.width: 1
                     border.color: modelData.urgency === NotificationUrgency.Critical ? Theme.error : Theme.outlineVariant
 

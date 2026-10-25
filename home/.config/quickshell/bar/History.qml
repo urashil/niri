@@ -14,16 +14,18 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: UiState.history ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     onVisibleChanged: if (visible) UiState.unread = 0
+    BackgroundEffect.blurRegion: Region { item: panel; radius: Theme.radius + 4 }
 
     MouseArea { anchors.fill: parent; onClicked: UiState.history = false }
     Item { focus: win.visible; Keys.onEscapePressed: UiState.history = false }
 
     Rectangle {
+        id: panel
         anchors { top: parent.top; right: parent.right; topMargin: 56; rightMargin: 12 }
         width: 380
         height: Math.min(parent.height - 90, 120 + Math.min(UiState.notes.length, 6) * 92)
         radius: Theme.radius + 4
-        color: Qt.alpha(Theme.surface, 0.985)
+        color: Qt.alpha(Theme.surface, 0.82)
         border.width: 1
         border.color: Theme.outlineVariant
 

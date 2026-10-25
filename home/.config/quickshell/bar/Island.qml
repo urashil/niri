@@ -10,7 +10,7 @@ Rectangle {
     implicitWidth: row.implicitWidth + pad * 2
     implicitHeight: Theme.islandHeight
     radius: Theme.radius
-    color: Qt.alpha(Theme.surface, 0.88)
+    color: Qt.alpha(Theme.surface, 0.80)
     border.width: 1
     border.color: Qt.alpha(Theme.outlineVariant, 0.8)
 

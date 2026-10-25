@@ -44,3 +44,7 @@ output_path = "~/.config/btop/themes/matugen.theme"
 [templates.sddm]
 input_path = "~/.config/matugen/templates/sddm.conf"
 output_path = "~/.cache/rice/sddm.conf"
+
+[templates.librewolf]
+input_path = "~/.config/matugen/templates/librewolf-colors.css"
+output_path = "~/.config/librewolf/librewolf/6yv4qbnb.default-release/chrome/colors.css"

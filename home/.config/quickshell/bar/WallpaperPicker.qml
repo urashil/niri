@@ -14,6 +14,8 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: UiState.wallpaper ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
+    BackgroundEffect.blurRegion: Region { item: backdrop }
+    Item { id: backdrop; anchors.fill: parent }
     readonly property string dir: Quickshell.env("HOME") + "/Pictures/Wallpapers"
     property var files: []
     property string current: ""
@@ -48,11 +50,12 @@ PanelWindow {
     MouseArea { anchors.fill: parent; onClicked: UiState.wallpaper = false }
 
     Rectangle {
+        id: card
         anchors.centerIn: parent
         width: Math.min(parent.width - 120, 1100)
         height: Math.min(parent.height - 160, 100 + Math.max(1, Math.ceil(win.files.length / Math.max(1, Math.floor((width - 32) / 300)))) * 190)
         radius: Theme.radius + 6
-        color: Qt.alpha(Theme.surface, 0.99)
+        color: Qt.alpha(Theme.surface, 0.84)
         border.width: 1
         border.color: Theme.outlineVariant
 

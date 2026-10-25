@@ -18,6 +18,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: UiState.quick ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
+    BackgroundEffect.blurRegion: Region { item: card; radius: Theme.radius + 6 }
     readonly property string page: UiState.quickPage
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var bt: Bluetooth.defaultAdapter
@@ -75,7 +76,7 @@ PanelWindow {
         width: 400
         height: Math.min(win.height - 80, body.implicitHeight + 36)
         radius: Theme.radius + 6
-        color: Qt.alpha(Theme.surface, 0.985)
+        color: Qt.alpha(Theme.surface, 0.82)
         border.width: 1
         border.color: Theme.outlineVariant
         clip: true
