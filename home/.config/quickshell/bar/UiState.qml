@@ -34,7 +34,7 @@ Singleton {
     // toggles
     property real brightness: 0.5
     property bool caffeine: false
-    property bool superCaffeine: false     // also ignores the lid switch and blocks suspend
+    property bool superCaffeine: false     // blocks suspend
     // off -> caffeine -> super caffeine -> off
     function cycleCaffeine() {
         if (!caffeine) caffeine = true;

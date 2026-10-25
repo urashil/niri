@@ -211,7 +211,7 @@ Scope {
         function onSuperCaffeineChanged() {
             superFlag.command = ["sh", "-c", UiState.superCaffeine ? "mkdir -p \"$HOME/.cache/rice\" && touch \"$HOME/.cache/rice/super\"" : "rm -f \"$HOME/.cache/rice/super\""];
             superFlag.running = true;
-            UiState.pulse("toggle", UiState.superCaffeine ? "\uf023" : "\uf0f4", UiState.superCaffeine ? "Super caffeine · lid ignored" : "Super caffeine off", -1, Theme.red, 2200);
+            UiState.pulse("toggle", UiState.superCaffeine ? "\uf023" : "\uf0f4", UiState.superCaffeine ? "Super caffeine" : "Super caffeine off", -1, Theme.red, 2200);
         }
     }
 

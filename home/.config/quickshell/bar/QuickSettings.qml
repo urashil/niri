@@ -174,7 +174,7 @@ PanelWindow {
                         Layout.fillWidth: true
                         icon: UiState.superCaffeine ? "\uf023" : "\uf0f4"
                         title: UiState.superCaffeine ? "Super caffeine" : "Caffeine"
-                        subtitle: UiState.superCaffeine ? "Lid close ignored" : UiState.caffeine ? "Screen stays on · tap for super" : "Idle lock on"
+                        subtitle: UiState.superCaffeine ? "" : UiState.caffeine ? "Screen stays on · tap for super" : "Idle lock on"
                         on: UiState.caffeine
                         onToggled: UiState.cycleCaffeine()
                     }
