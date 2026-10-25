@@ -100,11 +100,57 @@ Scope {
         }
     }
 
+    // ---- vpn ----
+    property string lastVpn: ""
+    Connections {
+        target: Vpn
+        function onStateChanged() {
+            const s = Vpn.state;
+            if (root.lastVpn === "" ) { root.lastVpn = s; return; }
+            if (s === root.lastVpn) return;
+            root.lastVpn = s;
+            if (s === "Connected") UiState.pulse("vpn", "\uf132", "VPN on · " + Vpn.pretty(Vpn.region) + " · " + Vpn.label, -1, Theme.green, 3200);
+            else if (s === "Disconnected") UiState.pulse("vpn", "\udb82\udd9d", "VPN off", -1, Theme.error, 2500);
+            else if (s === "Connecting" || s === "Reconnecting") UiState.pulse("vpn", "\uf132", "Connecting VPN…", -1, Theme.yellow, 2500);
+            else if (s === "Interrupted") UiState.pulse("warn", "\uf071", "VPN interrupted", -1, Theme.error, 5000);
+        }
+    }
+
+    // ---- theme mode ----
+    FileView {
+        path: Quickshell.env("HOME") + "/.cache/rice/mode"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: UiState.mode = text().trim() === "light" ? "light" : "dark"
+    }
+
+    // ---- super caffeine: hold logind's lid-switch / sleep / idle locks and drop a flag for the lid script ----
+    Process {
+        id: superLock
+        running: UiState.superCaffeine
+        command: ["systemd-inhibit", "--what=handle-lid-switch:sleep:idle", "--who=rice", "--why=Super caffeine", "--mode=block", "sleep", "infinity"]
+    }
+    Process { id: superFlag }
+    Process {
+        id: superRestore
+        command: ["sh", "-c", "test -f \"$HOME/.cache/rice/super\" && echo 1"]
+        running: true
+        stdout: StdioCollector { onStreamFinished: if (text.trim() === "1") UiState.superCaffeine = true }
+    }
+    Connections {
+        target: UiState
+        function onSuperCaffeineChanged() {
+            superFlag.command = ["sh", "-c", UiState.superCaffeine ? "mkdir -p \"$HOME/.cache/rice\" && touch \"$HOME/.cache/rice/super\"" : "rm -f \"$HOME/.cache/rice/super\""];
+            superFlag.running = true;
+            UiState.pulse("toggle", UiState.superCaffeine ? "\uf023" : "\uf0f4", UiState.superCaffeine ? "Super caffeine · lid ignored" : "Super caffeine off", -1, Theme.red, 2200);
+        }
+    }
+
     // ---- toggles ----
     property bool togReady: false
     Connections {
         target: UiState
-        function onCaffeineChanged() { UiState.pulse("toggle", "", UiState.caffeine ? "Staying awake" : "Idle lock on", -1, Theme.yellow, 1600); }
+        function onCaffeineChanged() { if (!UiState.superCaffeine) UiState.pulse("toggle", "\uf0f4", UiState.caffeine ? "Staying awake" : "Idle lock on", -1, Theme.yellow, 1600); }
         function onDndChanged() { UiState.pulse("toggle", UiState.dnd ? "" : "", UiState.dnd ? "Do not disturb" : "Notifications on", -1, Theme.magenta, 1600); }
     }
 }

@@ -23,7 +23,7 @@ PanelWindow {
     BackgroundEffect.blurRegion: Region { item: backdrop }
     Item { id: backdrop; anchors.fill: parent }
     readonly property var items: [
-        { icon: "", name: "Lock",     key: "l", cmd: "pidof swaylock || swaylock -f", color: Theme.blue },
+        { icon: "", name: "Lock",     key: "l", cmd: "$HOME/.local/bin/lock", color: Theme.blue },
         { icon: "", name: "Suspend",  key: "s", cmd: "systemctl suspend",             color: Theme.cyan },
         { icon: "", name: "Log out",  key: "e", cmd: "niri msg action quit --skip-confirmation", color: Theme.yellow },
         { icon: "", name: "Reboot",   key: "r", cmd: "systemctl reboot",              color: Theme.magenta },

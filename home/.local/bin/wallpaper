@@ -48,8 +48,13 @@ apply() {
   echo "$img" > "$CUR"
   ln -sf "$img" "$STATE/lock.png"
 
-  matugen image "$img" --mode dark --type "$SCHEME" --prefer saturation --quiet >/dev/null 2>&1 \
+  local mode; mode=$(cat "$STATE/mode" 2>/dev/null); [ "$mode" = light ] || mode=dark
+  matugen image "$img" --mode "$mode" --type "$SCHEME" --prefer saturation --quiet >/dev/null 2>&1 \
     || echo "matugen failed" >&2
+  # libadwaita/GTK4: Nordic-darker underneath in dark mode only (light mode uses stock Adwaita)
+  if [ "$mode" = dark ] && [ -f "$HOME/.config/gtk-4.0/gtk.css" ]; then
+    sed -i '1i @import url("file://'"$HOME"'/.themes/Nordic-darker/gtk-4.0/gtk-dark.css");' "$HOME/.config/gtk-4.0/gtk.css"
+  fi
 
   # kitty re-reads its config (and the included colors.conf) on SIGUSR1
   pkill -USR1 -x kitty 2>/dev/null

@@ -1,0 +1,4 @@
+singleton Theme 1.0 Theme.qml
+singleton Wifi 1.0 Wifi.qml
+singleton Vpn 1.0 Vpn.qml
+singleton Weather 1.0 Weather.qml

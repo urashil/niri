@@ -18,3 +18,10 @@ History 1.0 History.qml
 QuickSettings 1.0 QuickSettings.qml
 Controls 1.0 Controls.qml
 MediaPopup 1.0 MediaPopup.qml
+singleton Vpn 1.0 Vpn.qml
+singleton NetStats 1.0 NetStats.qml
+singleton Weather 1.0 Weather.qml
+singleton Captive 1.0 Captive.qml
+Launcher 1.0 Launcher.qml
+Switcher 1.0 Switcher.qml
+TrayMenu 1.0 TrayMenu.qml

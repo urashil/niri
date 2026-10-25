@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Lid closed (niri switch-event): lock, then make sure the machine really sleeps.
+# logind ignores lid events for HoldoffTimeoutSec (30 s) after a resume, so closing the lid soon after
+# opening it never suspended; this finishes the job. Super caffeine (flag file) skips all of it.
+STATE="$HOME/.cache/rice"
+[ -f "$STATE/super" ] && exit 0
+
+"$HOME/.local/bin/lock" &
+sleep 2
+
+# still closed, and logind did not already start sleeping?
+grep -q closed /proc/acpi/button/lid/*/state 2>/dev/null || exit 0
+[ "$(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager PreparingForSleep 2>/dev/null)" = "b true" ] && exit 0
+[ -f "$STATE/super" ] && exit 0
+
+# docked (another monitor attached): keep running, like logind's HandleLidSwitchDocked=ignore
+n=$(niri msg -j outputs 2>/dev/null | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo 1)
+[ "${n:-1}" -gt 1 ] && exit 0
+
+exec systemctl suspend

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Lock the session with the quickshell lock; fall back to swaylock if it never engages.
+STATE="$HOME/.cache/rice"; mkdir -p "$STATE"
+
+# already locked?
+pgrep -x swaylock >/dev/null && exit 0
+if [ -f "$STATE/locked" ] && pgrep -f '^quickshell -c lock' >/dev/null; then exit 0; fi
+
+rm -f "$STATE/locked"
+setsid -f quickshell -c lock >"$STATE/lock.log" 2>&1 </dev/null
+
+for _ in $(seq 40); do
+  [ -f "$STATE/locked" ] && exit 0
+  sleep 0.1
+done
+
+# the fancy lock did not come up: never leave the session open
+pkill -f '^quickshell -c lock' 2>/dev/null
+pgrep -x swaylock >/dev/null || exec swaylock -f

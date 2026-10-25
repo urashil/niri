@@ -33,6 +33,7 @@ PanelWindow {
     onPageChanged: { if (page === "wifi" && visible) Wifi.scan(); if (page === "privacy") priv.refresh(); }
 
     property string askSsid: ""
+    property string detailSsid: ""
 
     function back() { UiState.quickPage = "main"; askSsid = ""; }
 
@@ -45,10 +46,13 @@ PanelWindow {
         property var s: ({ mode: "disabled", range: "full", mac: "", permanent: "", ssid: null, always: false, hostname: "", bootHostname: false, harden: false })
         property bool installed: true
         property string busy: ""
+        property string note: ""
+        property bool noteErr: false
         property string hostInput: ""
         function refresh() { stat.running = true; }
         function run(label, args) {
             busy = label;
+            note = "";
             act.command = ["pkexec", win.helper].concat(args);
             act.running = true;
         }
@@ -63,9 +67,25 @@ PanelWindow {
     }
     Process {
         id: act
-        onExited: { priv.busy = ""; settle.restart(); }
+        stdout: StdioCollector { id: actOut }
+        stderr: StdioCollector { id: actErr }
+        onExited: code => {
+            priv.busy = "";
+            if (code === 0) { priv.note = actOut.text.trim() ? "→ " + actOut.text.trim() : "Done"; priv.noteErr = false; }
+            else if (code === 126 || code === 127) { priv.note = "Cancelled"; priv.noteErr = true; }
+            else { priv.note = actErr.text.trim().split("\n").pop() || ("failed (" + code + ")"); priv.noteErr = true; }
+            priv.refresh(); Wifi.refresh();
+            burst.n = 0; burst.restart();
+        }
     }
-    Timer { id: settle; interval: 3500; onTriggered: { priv.refresh(); Wifi.refresh(); } }
+    // iwd restarts and the new MAC only shows after it reconnects: keep polling for a few seconds
+    Timer {
+        id: burst
+        property int n: 0
+        interval: 900; repeat: true
+        onTriggered: { priv.refresh(); Wifi.refresh(); if (++n >= 8) stop(); }
+    }
+    Timer { id: noteClear; interval: 6000; running: priv.note !== ""; onTriggered: priv.note = "" }
 
     Process { id: bright }
     Process { id: prof }
@@ -91,6 +111,8 @@ PanelWindow {
                           : win.page === "wifi" ? wifiPage.implicitHeight
                           : win.page === "bluetooth" ? btPage.implicitHeight
                           : win.page === "audio" ? audioPage.implicitHeight
+                          : win.page === "vpn" ? vpnPage.implicitHeight
+                          : win.page === "weather" ? weatherPage.implicitHeight
                           : privPage.implicitHeight
 
             // ================= main =================
@@ -126,6 +148,16 @@ PanelWindow {
                     }
                     Controls.Tile {
                         Layout.fillWidth: true
+                        icon: Vpn.connected ? "\uf132" : "\udb82\udd9d"
+                        title: "VPN"
+                        subtitle: Vpn.connected ? Vpn.pretty(Vpn.region) + " · " + (Vpn.method === "openvpn" ? "OpenVPN" : "WireGuard") : Vpn.busy ? "Working…" : "Off"
+                        on: Vpn.connected
+                        chevron: true
+                        onToggled: Vpn.toggle()
+                        onOpened: UiState.quickPage = "vpn"
+                    }
+                    Controls.Tile {
+                        Layout.fillWidth: true
                         icon: UiState.dnd ? "" : ""
                         title: "Do not disturb"
                         subtitle: UiState.dnd ? "On" : "Off"
@@ -134,11 +166,11 @@ PanelWindow {
                     }
                     Controls.Tile {
                         Layout.fillWidth: true
-                        icon: ""
-                        title: "Caffeine"
-                        subtitle: UiState.caffeine ? "Screen stays on" : "Idle lock on"
+                        icon: UiState.superCaffeine ? "\uf023" : "\uf0f4"
+                        title: UiState.superCaffeine ? "Super caffeine" : "Caffeine"
+                        subtitle: UiState.superCaffeine ? "Lid close ignored" : UiState.caffeine ? "Screen stays on · tap for super" : "Idle lock on"
                         on: UiState.caffeine
-                        onToggled: UiState.caffeine = !UiState.caffeine
+                        onToggled: UiState.cycleCaffeine()
                     }
                     Controls.Tile {
                         Layout.fillWidth: true
@@ -159,6 +191,36 @@ PanelWindow {
                         onToggled: UiState.quickPage = "privacy"
                         onOpened: UiState.quickPage = "privacy"
                     }
+                    Controls.Tile {
+                        Layout.fillWidth: true
+                        icon: UiState.mode === "dark" ? "\uf186" : "\uf185"
+                        title: UiState.mode === "dark" ? "Dark mode" : "Light mode"
+                        subtitle: "Tap to switch"
+                        on: UiState.mode === "light"
+                        onToggled: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/theme-mode", "toggle"])
+                    }
+                    Controls.Tile {
+                        Layout.fillWidth: true
+                        Layout.columnSpan: 1
+                        icon: Weather.configured && Weather.loaded ? Weather.icon : "\ue302"
+                        title: Weather.configured ? (Weather.loaded ? Weather.tempText + "  " + Weather.desc : "Weather…") : "Weather"
+                        subtitle: Weather.configured ? Weather.name : "Set a city"
+                        on: false
+                        chevron: true
+                        onToggled: UiState.quickPage = "weather"
+                        onOpened: UiState.quickPage = "weather"
+                    }
+                }
+
+                Rectangle {
+                    visible: Captive.status === "portal"
+                    Layout.fillWidth: true
+                    height: 44; radius: 14
+                    color: Qt.alpha(Theme.yellow, 0.18)
+                    border.width: 1; border.color: Theme.yellow
+                    Text { anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter } text: "\uf0ac  Wi-Fi needs a sign-in"; font.family: Theme.font; font.pixelSize: 12; color: Theme.text }
+                    Text { anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter } text: "Open login page"; font.family: Theme.font; font.pixelSize: 11; font.bold: true; color: Theme.yellow }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Captive.openLogin() }
                 }
 
                 Controls.Slider {
@@ -220,7 +282,7 @@ PanelWindow {
                         id: row
                         required property var modelData
                         width: ListView.view.width
-                        height: win.askSsid === modelData.ssid ? 96 : 46
+                        height: win.askSsid === modelData.ssid ? 96 : win.detailSsid === modelData.ssid ? 94 : 46
                         radius: 12
                         color: modelData.connected ? Theme.primaryContainer : Theme.surfaceContainer
                         Behavior on height { NumberAnimation { duration: 160 } }
@@ -243,7 +305,9 @@ PanelWindow {
                         }
                         Text {
                             anchors { left: wi.right; leftMargin: 12; top: parent.top; topMargin: 24 }
-                            text: row.modelData.connected ? "Connected" : row.modelData.security === "8021x" ? "802.1X (enterprise)" : (row.modelData.known ? "Saved · " : "") + (row.modelData.security === "open" ? "Open" : "Secured")
+                            readonly property var rule: Wifi.rules[row.modelData.ssid]
+                            text: (row.modelData.connected ? "Connected" : row.modelData.security === "8021x" ? "802.1X (enterprise)" : (row.modelData.known ? "Saved · " : "") + (row.modelData.security === "open" ? "Open" : "Secured"))
+                                  + (rule ? (rule.override ? " · custom MAC" : rule.always ? " · random MAC" : "") : "")
                             font.family: Theme.font; font.pixelSize: 10
                             color: row.modelData.connected ? Qt.alpha(Theme.fgContainer, 0.8) : Theme.textDim
                         }
@@ -260,13 +324,24 @@ PanelWindow {
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                             onClicked: mouse => {
                                 const n = row.modelData;
-                                if (mouse.button === Qt.RightButton) { if (n.known) Wifi.forget(n.ssid); return; }
+                                if (mouse.button === Qt.RightButton) { if (n.known) win.detailSsid = win.detailSsid === n.ssid ? "" : n.ssid; return; }
                                 if (n.connected) { Wifi.disconnect(); return; }
                                 if (n.security === "8021x" && !n.known) { Wifi.error = "802.1X networks need a profile in /var/lib/iwd/" + n.ssid + ".8021x (see iwd.network(5))"; return; }
                                 if (n.security === "open" || n.known) Wifi.connectTo(n.ssid, "");
                                 else { win.askSsid = n.ssid; pass.text = ""; pass.forceActiveFocus(); }
                             }
                         }
+                        // saved-network options (right-click)
+                        Row {
+                            visible: win.detailSsid === row.modelData.ssid
+                            anchors { left: parent.left; bottom: parent.bottom; margins: 10 }
+                            spacing: 6
+                            readonly property var rule: Wifi.rules[row.modelData.ssid]
+                            Controls.Chip { label: "Random MAC"; on: parent.rule ? parent.rule.always && !parent.rule.override : false; onClicked: priv.run("Applying", ["rule", row.modelData.ssid, "random"]) }
+                            Controls.Chip { label: "Stable MAC"; on: parent.rule ? !parent.rule.always && !parent.rule.override : false; onClicked: priv.run("Applying", ["rule", row.modelData.ssid, "stable"]) }
+                            Controls.Chip { label: "Forget"; accent: Theme.error; onClicked: { Wifi.forget(row.modelData.ssid); win.detailSsid = ""; } }
+                        }
+
                         // password prompt
                         Rectangle {
                             visible: win.askSsid === row.modelData.ssid
@@ -293,7 +368,7 @@ PanelWindow {
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: "click: connect · click connected: disconnect · right-click saved: forget"
+                    text: "click: connect · click connected: disconnect · right-click saved: MAC policy / forget"
                     font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                     wrapMode: Text.Wrap
                 }
@@ -368,6 +443,154 @@ PanelWindow {
                 }
             }
 
+            // ================= vpn (PIA) =================
+            ColumnLayout {
+                id: vpnPage
+                visible: win.page === "vpn"
+                width: parent.width
+                spacing: 10
+                onVisibleChanged: if (visible) Vpn.loadRegions()
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
+                    Text { text: "VPN  ·  PIA"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
+                    Controls.Switch { on: Vpn.connected || Vpn.busy; onToggled: Vpn.toggle() }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: vcol.implicitHeight + 24
+                    radius: 14
+                    color: Vpn.connected ? Qt.alpha(Theme.green, 0.16) : Vpn.busy ? Qt.alpha(Theme.yellow, 0.16) : Theme.surfaceContainer
+                    border.width: 1
+                    border.color: Vpn.connected ? Theme.green : Vpn.busy ? Theme.yellow : Theme.outlineVariant
+                    ColumnLayout {
+                        id: vcol
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
+                        spacing: 3
+                        Text { text: (Vpn.connected ? "Connected" : Vpn.busy ? Vpn.state : Vpn.state === "Interrupted" ? "Interrupted" : "Disconnected") + "  ·  " + Vpn.pretty(Vpn.region); font.family: Theme.font; font.pixelSize: 13; font.bold: true; color: Theme.text }
+                        Text { text: Vpn.label; font.family: Theme.font; font.pixelSize: 11; color: Theme.textDim }
+                        Text { visible: Vpn.vpnIp !== ""; text: "VPN IP  " + Vpn.vpnIp; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                        Text { visible: Vpn.pubIp !== ""; text: "Public  " + Vpn.pubIp; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                        Text { visible: Vpn.forwardedPort !== "Inactive"; text: "Forwarded port  " + Vpn.forwardedPort; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                    }
+                }
+
+                Text { text: "Connection"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "WireGuard"; on: Vpn.method === "wireguard"; onClicked: Vpn.useWireguard() }
+                    Controls.Chip { label: "OpenVPN · TCP 443"; on: Vpn.method === "openvpn" && Vpn.schoolConfigured; accent: Theme.yellow; onClicked: Vpn.useSchool() }
+                    Controls.Chip { label: "OpenVPN · auto"; on: Vpn.method === "openvpn" && !Vpn.schoolConfigured; onClicked: Vpn.useOpenvpnAuto() }
+                }
+                Text {
+                    visible: !Vpn.schoolConfigured
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: "The first time you pick TCP 443, the transport is pinned in PIA's daemon settings (asks for your password once). piactl can't set a port; you can also set Network → Transport TCP, port 443 in the PIA app. After that, switching is one tap."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
+                }
+                Text { visible: Vpn.lastError !== ""; Layout.fillWidth: true; wrapMode: Text.Wrap; text: Vpn.lastError; font.family: Theme.font; font.pixelSize: 10; color: Theme.error }
+
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "Allow LAN"; on: Vpn.allowLan; onClicked: Vpn.setAllowLan(!Vpn.allowLan) }
+                    Controls.Chip { label: "Port forwarding"; on: Vpn.requestPortForward; onClicked: Vpn.setPortForward(!Vpn.requestPortForward) }
+                }
+
+                Text { text: "Region"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Rectangle {
+                    Layout.fillWidth: true; height: 30; radius: 10; color: Theme.surfaceHigh
+                    TextInput {
+                        id: regionFilter
+                        anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: Theme.text; font.family: Theme.font; font.pixelSize: 12
+                        selectionColor: Theme.primary
+                        Text { visible: !regionFilter.text; text: "filter regions"; color: Theme.outline; font: regionFilter.font; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(contentHeight, 190)
+                    clip: true; spacing: 4
+                    model: ["auto"].concat(Vpn.regions).filter(r => !regionFilter.text || Vpn.pretty(r).toLowerCase().indexOf(regionFilter.text.toLowerCase()) >= 0)
+                    delegate: Rectangle {
+                        required property string modelData
+                        width: ListView.view.width; height: 34; radius: 10
+                        color: Vpn.region === modelData ? Theme.primaryContainer : Theme.surfaceContainer
+                        Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter } text: Vpn.pretty(modelData); font.family: Theme.font; font.pixelSize: 11; color: Vpn.region === modelData ? Theme.fgContainer : Theme.text }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Vpn.setRegion(modelData) }
+                    }
+                }
+            }
+
+            // ================= weather =================
+            ColumnLayout {
+                id: weatherPage
+                visible: win.page === "weather"
+                width: parent.width
+                spacing: 10
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
+                    Text { text: "Weather"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
+                    Controls.Chip { label: "°F"; on: Weather.unit === "f"; onClicked: Weather.setUnit("f") }
+                    Controls.Chip { label: "°C"; on: Weather.unit === "c"; onClicked: Weather.setUnit("c") }
+                }
+                Rectangle {
+                    visible: Weather.configured
+                    Layout.fillWidth: true
+                    implicitHeight: wcol.implicitHeight + 28
+                    radius: 16; color: Theme.surfaceContainer
+                    RowLayout {
+                        id: wcol
+                        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 16 }
+                        Text { text: Weather.icon; font.family: Theme.font; font.pixelSize: 44; color: Weather.color }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 2
+                            Text { text: Weather.loaded ? Weather.tempText : "…"; font.family: Theme.font; font.pixelSize: 26; font.bold: true; color: Theme.text }
+                            Text { text: Weather.desc + (Weather.loaded ? "  ·  feels " + Math.round(Weather.feels) + "°" : ""); font.family: Theme.font; font.pixelSize: 12; color: Theme.textDim }
+                            Text { text: Weather.name; font.family: Theme.font; font.pixelSize: 10; color: Theme.outline; elide: Text.ElideRight; Layout.fillWidth: true }
+                        }
+                        ColumnLayout {
+                            spacing: 2
+                            Text { text: "\uf062 " + Math.round(Weather.high) + "°"; font.family: Theme.font; font.pixelSize: 12; color: Theme.red }
+                            Text { text: "\uf063 " + Math.round(Weather.low) + "°"; font.family: Theme.font; font.pixelSize: 12; color: Theme.blue }
+                            Text { text: "\ue31b " + Math.round(Weather.wind); font.family: Theme.font; font.pixelSize: 11; color: Theme.textDim }
+                        }
+                    }
+                }
+                Text { text: Weather.configured ? "Change city" : "Pick your city"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 8
+                    Rectangle {
+                        Layout.fillWidth: true; height: 30; radius: 10; color: Theme.surfaceHigh
+                        TextInput {
+                            id: cityIn
+                            anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: Theme.text; font.family: Theme.font; font.pixelSize: 12
+                            selectionColor: Theme.primary
+                            onAccepted: Weather.search(text)
+                            Text { visible: !cityIn.text; text: "city name"; color: Theme.outline; font: cityIn.font; anchors.verticalCenter: parent.verticalCenter }
+                        }
+                    }
+                    Controls.Chip { label: "Search"; onClicked: Weather.search(cityIn.text) }
+                }
+                Repeater {
+                    model: Weather.results
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true; height: 38; radius: 10; color: Theme.surfaceContainer
+                        Text { anchors { left: parent.left; leftMargin: 12; right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter } text: modelData.name + (modelData.admin1 ? ", " + modelData.admin1 : "") + (modelData.country ? " · " + modelData.country : ""); elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 11; color: Theme.text }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Weather.choose(modelData) }
+                    }
+                }
+                Text { text: "Open-Meteo · no account, your city name goes to geocoding-api.open-meteo.com"; font.family: Theme.font; font.pixelSize: 9; color: Theme.outline; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            }
+
             // ================= privacy =================
             ColumnLayout {
                 id: privPage
@@ -380,6 +603,7 @@ PanelWindow {
                     Text { text: ""; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
                     Text { text: "Network privacy"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
                     Text { visible: priv.busy !== ""; text: priv.busy + "…"; font.family: Theme.font; font.pixelSize: 11; color: Theme.yellow }
+                    Text { visible: priv.busy === "" && priv.note !== ""; text: priv.note; font.family: Theme.font; font.pixelSize: 11; color: priv.noteErr ? Theme.error : Theme.green }
                 }
 
                 Text {
@@ -399,7 +623,8 @@ PanelWindow {
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
                         spacing: 4
                         Text { text: "MAC  " + (priv.s.mac || "—"); font.family: Theme.font; font.pixelSize: 12; color: Theme.text }
-                        Text { text: "Host  " + (priv.s.hostname || "—"); font.family: Theme.font; font.pixelSize: 12; color: Theme.text }
+                        Text { text: "Wi-Fi sees  " + (priv.s.wifiHostname ? priv.s.wifiHostname : "no hostname"); font.family: Theme.font; font.pixelSize: 12; color: Theme.text }
+                        Text { text: "System host  " + (priv.s.hostname || "—") + "  (never changed)"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
                         Text { text: priv.s.ssid ? "Network  " + priv.s.ssid : "Not connected"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
                     }
                 }
@@ -423,7 +648,7 @@ PanelWindow {
                     Text { Layout.fillWidth: true; text: "reconnects with a fresh address"; font.family: Theme.font; font.pixelSize: 10; color: Theme.outline }
                 }
 
-                Text { text: "Hostname"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 4 }
+                Text { text: "Hostname shown to Wi-Fi networks (system hostname stays as is)"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 4 }
                 RowLayout {
                     Layout.fillWidth: true; spacing: 8
                     Rectangle {
@@ -434,21 +659,22 @@ PanelWindow {
                             verticalAlignment: TextInput.AlignVCenter
                             color: Theme.text; font.family: Theme.font; font.pixelSize: 12
                             selectionColor: Theme.primary
-                            onAccepted: if (text) priv.run("Setting hostname", ["hostname", text])
+                            onAccepted: if (text) priv.run("Setting Wi-Fi hostname", ["hostname", text])
                             Text { visible: !hostIn.text; text: "custom name"; color: Theme.outline; font: hostIn.font; anchors.verticalCenter: parent.verticalCenter }
                         }
                     }
-                    Controls.Chip { label: "Set"; onClicked: if (hostIn.text) priv.run("Setting hostname", ["hostname", hostIn.text]) }
+                    Controls.Chip { label: "Set"; onClicked: if (hostIn.text) priv.run("Setting Wi-Fi hostname", ["hostname", hostIn.text]) }
                     Controls.Chip { label: "Random"; accent: Theme.yellow; onClicked: priv.run("Randomizing", ["hostname", "random"]) }
                 }
                 Flow {
                     Layout.fillWidth: true; spacing: 8
-                    Controls.Chip { label: "Random hostname at boot"; on: priv.s.bootHostname; onClicked: priv.run("Applying", ["boot-hostname", priv.s.bootHostname ? "off" : "on"]) }
+                    Controls.Chip { label: "Announce it (DHCP)"; on: !!priv.s.dhcpHostname; onClicked: priv.run("Applying", ["dhcp-hostname", priv.s.dhcpHostname ? "off" : "on"]) }
+                    Controls.Chip { label: "New one every boot"; on: priv.s.bootHostname; onClicked: priv.run("Applying", ["boot-hostname", priv.s.bootHostname ? "off" : "on"]) }
                     Controls.Chip { label: "Quiet network (no mDNS/LLMNR)"; on: priv.s.harden; onClicked: priv.run("Applying", ["harden", priv.s.harden ? "off" : "on"]) }
                 }
                 Text {
                     Layout.fillWidth: true; wrapMode: Text.Wrap
-                    text: "Changes ask for your password once, then stay unlocked for a few minutes. iwd restarts when the MAC settings change, so Wi-Fi drops for a second."
+                    text: "Only iwd gets the spoofed name (it runs in its own hostname namespace), so your real hostname, shell prompt and other apps are untouched. With nothing set, iwd sends no hostname at all. Changes restart iwd, so Wi-Fi drops for a second."
                     font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
             }

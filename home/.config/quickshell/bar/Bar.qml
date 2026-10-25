@@ -104,6 +104,18 @@ Variants {
                     }
                 }
 
+                Island {
+                    visible: Weather.configured && Weather.loaded
+                    spacing: 6
+                    Glyph { text: Weather.icon; color: Weather.color; font.pixelSize: 16 }
+                    Label { text: Weather.tempText }
+                    overlay: MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: UiState.openQuick("weather")
+                    }
+                }
+
                 Stats {}
 
                 Island {
@@ -121,14 +133,16 @@ Variants {
                                 implicitSize: 18
                                 source: trayItem.modelData.icon
                             }
-                            QsMenuAnchor {
-                                id: menu
-                                menu: trayItem.modelData.menu
-                                anchor.window: win
-                                anchor.rect.x: trayItem.mapToItem(null, 0, 0).x
-                                anchor.rect.y: win.height
-                                anchor.rect.width: 18
-                                anchor.rect.height: 1
+                            Loader {
+                                id: menuLoader
+                                active: false
+                                sourceComponent: TrayMenu {
+                                    menu: trayItem.modelData.menu
+                                    target: trayItem
+                                    parentWindow: win
+                                    visible: true
+                                    onVisibleChanged: if (!visible) menuLoader.active = false
+                                }
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -137,7 +151,7 @@ Variants {
                                 onClicked: mouse => {
                                     if (mouse.button === Qt.LeftButton) trayItem.modelData.activate();
                                     else if (mouse.button === Qt.MiddleButton) trayItem.modelData.secondaryActivate();
-                                    else if (trayItem.modelData.hasMenu) menu.open();
+                                    else if (trayItem.modelData.hasMenu) menuLoader.active = !menuLoader.active;
                                 }
                             }
                         }
@@ -166,9 +180,27 @@ Variants {
                     // caffeine (only while on)
                     Glyph {
                         visible: UiState.caffeine
-                        text: ""
-                        color: Theme.yellow
-                        MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: UiState.caffeine = false }
+                        text: UiState.superCaffeine ? "\uf023" : "\uf0f4"
+                        color: UiState.superCaffeine ? Theme.red : Theme.yellow
+                        MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: UiState.cycleCaffeine() }
+                    }
+
+                    // vpn (PIA): left = page, middle = connect/disconnect
+                    Glyph {
+                        text: Vpn.connected ? "\uf132" : Vpn.busy ? "\uf132" : "\udb82\udd9d"
+                        color: Vpn.connected ? Theme.green : Vpn.busy ? Theme.yellow : Vpn.state === "Interrupted" ? Theme.error : Theme.outline
+                        SequentialAnimation on opacity {
+                            running: Vpn.busy; loops: Animation.Infinite
+                            NumberAnimation { to: 0.35; duration: 500 }
+                            NumberAnimation { to: 1; duration: 500 }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -4
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                            onClicked: mouse => { if (mouse.button === Qt.MiddleButton) Vpn.toggle(); else UiState.openQuick("vpn"); }
+                        }
                     }
 
                     // wifi (iwd) -> quick settings, wifi page

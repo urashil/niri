@@ -6,13 +6,21 @@
   range <full|nic>             iwd AddressRandomizationRange (nic keeps the vendor prefix)
   always <ssid> <on|off>       per-network AlwaysRandomizeAddress (fresh MAC on every connect)
   rotate                       new MAC now: always-random on the current network, reconnect
-  hostname <name|random>       set the transient hostname (lost on reboot unless boot-hostname is on)
-  boot-hostname <on|off>       randomize the hostname at every boot (before the network starts)
+  hostname <name|random>       the hostname Wi-Fi networks see (DHCP). Only iwd gets it, in a private hostname
+                               namespace (systemd ProtectHostname=private:NAME); the system hostname is never changed
+  dhcp-hostname <on|off>       announce that name on every saved network (off: iwd sends no hostname at all)
+  rule <ssid> <random|stable|custom> [mac]
+                               per-network MAC policy (switches iwd to 'network' mode if needed)
+  rules                        JSON list of saved networks and their policy
+  pia <school|auto>            PIA OpenVPN transport: TCP/443 ('school') or back to automatic
+  boot-hostname <on|off>       pick a new random Wi-Fi hostname at every boot (before iwd starts)
   harden <on|off>              no LLMNR/mDNS announcements, IPv6 temporary addresses
 """
 import configparser, json, os, random, re, socket, string, subprocess, sys
 
 MAIN = "/etc/iwd/main.conf"
+STATE_DIR = "/var/lib/rice-net"
+STATE = STATE_DIR + "/state.json"
 IWD_DIR = "/var/lib/iwd"
 IFACE = "wlan0"
 
@@ -65,6 +73,107 @@ def set_always(ssid, on):
 def random_hostname():
     return "DESKTOP-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=7))
 
+DROPIN_DIR = "/etc/systemd/system/iwd.service.d"
+DROPIN = DROPIN_DIR + "/rice-hostname.conf"
+
+def systemd_version():
+    m = re.search(r"systemd (\d+)", run("systemctl", "--version").stdout)
+    return int(m.group(1)) if m else 0
+
+def wifi_hostname():
+    """The name iwd announces, or '' when none is configured."""
+    try:
+        m = re.search(r"^ProtectHostname=private:(\S+)", open(DROPIN).read(), re.M)
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
+
+def set_wifi_hostname(name, restart=True):
+    """Give iwd (and only iwd) its own hostname. iwd's DHCP client announces gethostname(), and
+    ProtectHostname=private:NAME runs the service in a private UTS namespace where that name is NAME,
+    so the real system hostname is untouched. An empty name removes the override and stops sending one."""
+    if name and systemd_version() < 256:
+        sys.exit("needs systemd >= 256 (ProtectHostname=private:NAME)")
+    if name:
+        os.makedirs(DROPIN_DIR, exist_ok=True)
+        with open(DROPIN, "w") as f:
+            f.write(f"[Service]\nProtectHostname=private:{name}\n")
+        os.chmod(DROPIN, 0o644)
+    elif os.path.exists(DROPIN):
+        os.remove(DROPIN)
+    for p in profiles():
+        edit_profile(p["_path"], "IPv4", "SendHostname", "true" if name else None)
+    run("systemctl", "daemon-reload")
+    if restart:
+        restart_iwd()
+
+def profiles():
+    out = []
+    try:
+        names = os.listdir(IWD_DIR)
+    except OSError:
+        return out
+    for fn in sorted(names):
+        base, ext = os.path.splitext(fn)
+        if ext not in (".psk", ".open", ".8021x"):
+            continue
+        ssid = bytes.fromhex(base[1:]).decode(errors="replace") if base.startswith("=") else base
+        n = configparser.ConfigParser(strict=False, interpolation=None)
+        n.optionxform = str
+        n.read(os.path.join(IWD_DIR, fn))
+        out.append({
+            "ssid": ssid,
+            "always": n.get("Settings", "AlwaysRandomizeAddress", fallback="false") == "true",
+            "override": n.get("Settings", "AddressOverride", fallback=""),
+            "sendHostname": n.get("IPv4", "SendHostname", fallback="false") == "true",
+            "_path": os.path.join(IWD_DIR, fn),
+        })
+    return out
+
+def edit_profile(p, section, key, value):
+    c = configparser.ConfigParser(strict=False, interpolation=None)
+    c.optionxform = str
+    c.read(p)
+    if not c.has_section(section):
+        c.add_section(section)
+    if value is None:
+        c.remove_option(section, key)
+    else:
+        c[section][key] = value
+    with open(p, "w") as f:
+        c.write(f, space_around_delimiters=False)
+    os.chmod(p, 0o600)
+
+def ensure_network_mode():
+    c = read_main()
+    if not c.has_section("General"):
+        c.add_section("General")
+    if c["General"].get("AddressRandomization", "disabled") != "network":
+        c["General"]["AddressRandomization"] = "network"
+        c["General"].setdefault("AddressRandomizationRange", "nic")
+        write_main(c)
+
+def write_state():
+    """World-readable mirror of the per-network policy (/var/lib/iwd is root-only)."""
+    try:
+        os.makedirs(STATE_DIR, mode=0o755, exist_ok=True)
+        os.chmod(STATE_DIR, 0o755)
+        data = [{k: v for k, v in p.items() if k != "_path"} for p in profiles()]
+        with open(STATE, "w") as f:
+            json.dump(data, f)
+        os.chmod(STATE, 0o644)
+    except OSError:
+        pass
+
+def known_rules():
+    live = [{k: v for k, v in p.items() if k != "_path"} for p in profiles()]
+    if live:
+        return live
+    try:
+        return json.load(open(STATE))
+    except (OSError, ValueError):
+        return []
+
 def status():
     c = read_main()
     g = c["General"] if c.has_section("General") else {}
@@ -86,19 +195,22 @@ def status():
         "mode": g.get("AddressRandomization", "disabled"),
         "range": g.get("AddressRandomizationRange", "full"),
         "mac": cur, "permanent": perm, "ssid": ssid, "always": always,
-        "hostname": socket.gethostname(),
+        "hostname": socket.gethostname(),                 # the real system hostname, never modified
+        "wifiHostname": wifi_hostname(),                  # what Wi-Fi networks see ('' = nothing sent)
         "bootHostname": run("systemctl", "is-enabled", "rice-hostname.service").stdout.strip() == "enabled",
         "harden": os.path.exists("/etc/systemd/resolved.conf.d/rice.conf"),
+        "dhcpHostname": wifi_hostname() != "",
+        "rules": known_rules(),
     }))
 
 UNIT = """[Unit]
-Description=Randomize the hostname at boot
+Description=Pick a new random Wi-Fi hostname (iwd only; the system hostname is not touched)
 Before=network-pre.target iwd.service systemd-networkd.service
 Wants=network-pre.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/lib/rice/net-helper hostname random
+ExecStart=/usr/local/lib/rice/net-helper hostname random --no-restart
 
 [Install]
 WantedBy=multi-user.target
@@ -109,7 +221,16 @@ def main():
     if not a or a[0] in ("-h", "--help"):
         print(__doc__); return
     cmd = a[0]
-    if cmd == "status":
+    try:
+        dispatch(cmd, a)
+    finally:
+        if os.geteuid() == 0 and cmd in ("mode", "always", "rotate", "rule", "dhcp-hostname", "hostname", "sync"):
+            write_state()
+
+def dispatch(cmd, a):
+    if cmd == "sync":
+        pass
+    elif cmd == "status":
         status()
     elif cmd == "mode" and len(a) == 2 and a[1] in ("network", "once", "disabled"):
         c = read_main()
@@ -138,12 +259,45 @@ def main():
         if ssid and net_file(ssid):
             set_always(ssid, True)
         restart_iwd()
-    elif cmd == "hostname" and len(a) == 2:
+    elif cmd == "hostname" and len(a) >= 2:
         name = random_hostname() if a[1] == "random" else a[1]
         if not re.fullmatch(r"[A-Za-z0-9-]{1,63}", name):
             sys.exit("invalid hostname")
-        run("hostnamectl", "--transient", "hostname", name, check=True)
+        # INVOCATION_ID is set when systemd runs us (the boot unit, ordered before iwd): restarting iwd
+        # from there would deadlock, and iwd has not started yet anyway
+        restart = "--no-restart" not in a and "INVOCATION_ID" not in os.environ
+        set_wifi_hostname(name, restart)
         print(name)
+    elif cmd == "dhcp-hostname" and len(a) == 2 and a[1] in ("on", "off"):
+        set_wifi_hostname((wifi_hostname() or random_hostname()) if a[1] == "on" else "")
+    elif cmd == "rules":
+        print(json.dumps([{k: v for k, v in p.items() if k != "_path"} for p in profiles()]))
+    elif cmd == "rule" and len(a) >= 3 and a[2] in ("random", "stable", "custom"):
+        path = next((p["_path"] for p in profiles() if p["ssid"] == a[1]), None)
+        if not path:
+            sys.exit(f"no saved profile for '{a[1]}'")
+        ensure_network_mode()
+        if a[2] == "random":
+            edit_profile(path, "Settings", "AlwaysRandomizeAddress", "true"); edit_profile(path, "Settings", "AddressOverride", None)
+        elif a[2] == "stable":
+            edit_profile(path, "Settings", "AlwaysRandomizeAddress", None); edit_profile(path, "Settings", "AddressOverride", None)
+        else:
+            if len(a) != 4 or not re.fullmatch(r"([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}", a[3]):
+                sys.exit("custom needs a MAC like aa:bb:cc:dd:ee:ff")
+            edit_profile(path, "Settings", "AlwaysRandomizeAddress", None); edit_profile(path, "Settings", "AddressOverride", a[3].lower())
+        restart_iwd()
+    elif cmd == "pia" and len(a) == 2 and a[1] in ("school", "auto"):
+        f = "/opt/piavpn/etc/settings.json"
+        run("systemctl", "stop", "piavpn")
+        try:
+            d = json.load(open(f))
+            if a[1] == "school":
+                d.update({"method": "openvpn", "protocol": "tcp", "remotePortTCP": 443, "automaticTransport": False})
+            else:
+                d.update({"protocol": "udp", "remotePortTCP": 0, "remotePortUDP": 0, "automaticTransport": True})
+            json.dump(d, open(f, "w"))
+        finally:
+            run("systemctl", "start", "piavpn")
     elif cmd == "boot-hostname" and len(a) == 2 and a[1] in ("on", "off"):
         if a[1] == "on":
             open("/etc/systemd/system/rice-hostname.service", "w").write(UNIT)

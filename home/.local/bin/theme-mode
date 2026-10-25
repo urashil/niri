@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# theme-mode [dark|light|toggle]: regenerate every colour scheme in the other mode.
+set -u
+STATE="$HOME/.cache/rice"; mkdir -p "$STATE"
+cur=$(cat "$STATE/mode" 2>/dev/null); [ "$cur" = light ] || cur=dark
+case "${1:-toggle}" in
+  toggle) [ "$cur" = dark ] && mode=light || mode=dark ;;
+  dark|light) mode=$1 ;;
+  *) echo "usage: theme-mode [dark|light|toggle]" >&2; exit 1 ;;
+esac
+echo "$mode" > "$STATE/mode"
+
+if [ "$mode" = dark ]; then theme=Nordic-darker; scheme=prefer-dark; pd=1; else theme=Adwaita; scheme=prefer-light; pd=0; fi
+gsettings set org.gnome.desktop.interface color-scheme "$scheme" 2>/dev/null
+gsettings set org.gnome.desktop.interface gtk-theme "$theme" 2>/dev/null
+for f in "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"; do
+  [ -f "$f" ] && sed -i "s/^gtk-theme-name=.*/gtk-theme-name=$theme/; s/^gtk-application-prefer-dark-theme=.*/gtk-application-prefer-dark-theme=$pd/" "$f"
+done
+exec "$HOME/.local/bin/wallpaper" restore

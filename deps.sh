@@ -16,13 +16,22 @@ pacman -S --needed --noconfirm \
   zsh-autosuggestions zsh-syntax-highlighting zsh-completions \
   eza bat fd ripgrep zoxide fzf btop fastfetch \
   cliphist wl-clipboard grim slurp satty libnotify \
-  papirus-icon-theme capitaine-cursors
+  papirus-icon-theme capitaine-cursors \
+  neovim tree-sitter-cli gcc make git unzip curl
 
-echo "==> network privacy helper (MAC / hostname menu)"
+echo "==> network privacy helper (MAC / hostname / PIA transport)"
 SRC="$UHOME/dotfiles/root"
 [ -d "$SRC" ] || SRC="$HERE/root"
 install -Dm755 "$SRC/usr/local/lib/rice/net-helper" /usr/local/lib/rice/net-helper
 install -Dm644 "$SRC/usr/share/polkit-1/actions/org.rice.net.policy" /usr/share/polkit-1/actions/org.rice.net.policy
+# world-readable mirror of the per-network MAC policy (/var/lib/iwd is root-only)
+/usr/local/lib/rice/net-helper sync || true
+
+echo "==> logind: react to the lid soon after a resume"
+# logind ignores lid events for 30 s after resuming, so closing the lid right after opening it never slept
+install -d /etc/systemd/logind.conf.d
+printf '[Login]\nHoldoffTimeoutSec=3s\n' > /etc/systemd/logind.conf.d/rice-lid.conf
+systemctl kill -s HUP systemd-logind || true
 
 echo "==> SilentSDDM: follow the wallpaper"
 T=/usr/share/sddm/themes/silent

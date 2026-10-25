@@ -16,6 +16,7 @@ Singleton {
     property var known: []
     property bool scanning: false
     property string error: ""
+    property var rules: ({})        // ssid -> {always, override, sendHostname} (mirror written by the helper)
 
     readonly property bool connected: state === "connected"
     readonly property int bars: !connected ? 0 : rssi > -55 ? 4 : rssi > -65 ? 3 : rssi > -75 ? 2 : 1
@@ -116,6 +117,19 @@ Singleton {
                 root.networks = out;
                 root.scanning = false;
             }
+        }
+    }
+
+    FileView {
+        path: "/var/lib/rice-net/state.json"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                const m = {};
+                for (const r of JSON.parse(text())) m[r.ssid] = r;
+                root.rules = m;
+            } catch (e) {}
         }
     }
 

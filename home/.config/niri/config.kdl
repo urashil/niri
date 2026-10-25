@@ -277,7 +277,7 @@ spawn-at-startup "xwayland-satellite"
 spawn-sh-at-startup "wl-paste --type text --watch cliphist store"
 spawn-sh-at-startup "wl-paste --type image --watch cliphist store"
 // Lock before suspend (lid close -> logind suspend), lock after 5 min idle, screens off after 10.
-spawn-sh-at-startup "swayidle -w before-sleep 'pidof swaylock || swaylock -f' lock 'pidof swaylock || swaylock -f' timeout 300 'pidof swaylock || swaylock -f' timeout 600 'niri msg action power-off-monitors'"
+spawn-sh-at-startup "swayidle -w before-sleep '/home/nyx/.local/bin/lock' lock '/home/nyx/.local/bin/lock' timeout 300 '/home/nyx/.local/bin/lock' timeout 600 'niri msg action power-off-monitors'"
 spawn-at-startup "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
@@ -454,15 +454,10 @@ layer-rule {
     background-effect { blur true; }
 }
 
-// Quickshell notifications and OSD get a shadow-less, blurless pass.
-layer-rule {
-    match namespace="^qs-"
-    shadow { on; }
-}
 
-// Lid close locks immediately, even when logind is set to ignore the lid (docked / external monitor).
+// Lid close: lock, then make sure it sleeps (logind skips lid events for 30 s after a resume). Super caffeine ignores it.
 switch-events {
-    lid-close { spawn "sh" "-c" "pidof swaylock || swaylock -f"; }
+    lid-close { spawn "/home/nyx/.local/bin/lid-close"; }
 }
 
 binds {
@@ -482,8 +477,12 @@ binds {
 
     // Suggested binds for running programs: terminal, app launcher, screen locker.
     Mod+Return hotkey-overlay-title="Open a Terminal: kitty" { spawn "kitty"; }
-    Mod+Space hotkey-overlay-title="Run an Application: fuzzel" { spawn "fuzzel"; }
-    Mod+D hotkey-overlay-title=null { spawn "fuzzel"; }
+    Mod+Space hotkey-overlay-title="Launcher" { spawn "quickshell" "-c" "bar" "ipc" "call" "launcher" "toggle"; }
+    Mod+D hotkey-overlay-title=null { spawn "quickshell" "-c" "bar" "ipc" "call" "launcher" "toggle"; }
+    Mod+Shift+Space hotkey-overlay-title="Fallback launcher: fuzzel" { spawn "fuzzel"; }
+    Alt+Tab repeat=false hotkey-overlay-title="Window Switcher" { spawn "quickshell" "-c" "bar" "ipc" "call" "switcher" "next"; }
+    Alt+Shift+Tab repeat=false hotkey-overlay-title=null { spawn "quickshell" "-c" "bar" "ipc" "call" "switcher" "prev"; }
+    Mod+Shift+T hotkey-overlay-title="Light / Dark" { spawn "/home/nyx/.local/bin/theme-mode" "toggle"; }
 
     // Wallpaper: next random wallpaper (colors follow it via matugen).
     Mod+X hotkey-overlay-title="Power Menu" { spawn "quickshell" "-c" "bar" "ipc" "call" "power" "toggle"; }
@@ -493,13 +492,13 @@ binds {
     Mod+N hotkey-overlay-title="Notification History" { spawn "quickshell" "-c" "bar" "ipc" "call" "history" "toggle"; }
     Mod+Shift+M hotkey-overlay-title=null { spawn "quickshell" "-c" "bar" "ipc" "call" "media" "toggle"; }
     Mod+Shift+D hotkey-overlay-title="Do Not Disturb" { spawn "quickshell" "-c" "bar" "ipc" "call" "dnd" "toggle"; }
-    Mod+Shift+B hotkey-overlay-title="Caffeine" { spawn "quickshell" "-c" "bar" "ipc" "call" "caffeine" "toggle"; }
+    Mod+Shift+B hotkey-overlay-title="Caffeine / Super caffeine" { spawn "quickshell" "-c" "bar" "ipc" "call" "caffeine" "cycle"; }
     Mod+Y hotkey-overlay-title="Clipboard History" { spawn "/home/nyx/.local/bin/clip"; }
     Mod+Shift+S hotkey-overlay-title="Screenshot + Annotate" { spawn "/home/nyx/.local/bin/shot" "region"; }
     Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "/home/nyx/.local/bin/scratch"; }
     Ctrl+Grave hotkey-overlay-title="Next Wallpaper" { spawn "/home/nyx/.local/bin/wallpaper" "next"; }
     Ctrl+Shift+Grave hotkey-overlay-title=null { spawn "/home/nyx/.local/bin/wallpaper" "prev"; }
-    Super+Alt+L hotkey-overlay-title="Lock the Screen: swaylock" { spawn-sh "pidof swaylock || swaylock -f"; }
+    Super+Alt+L hotkey-overlay-title="Lock the Screen" { spawn "/home/nyx/.local/bin/lock"; }
 
     // Use spawn-sh to run a shell command. Do this if you need pipes, multiple commands, etc.
     // Note: the entire command goes as a single argument. It's passed verbatim to `sh -c`.

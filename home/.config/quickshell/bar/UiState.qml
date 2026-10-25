@@ -14,10 +14,25 @@ Singleton {
     property string quickPage: "main"
     property bool history: false
     property bool media: false
+    property bool launcher: false
+    property bool switcher: false
+    signal switcherStep(int dir)
+
+    // light / dark (written by the theme-mode script)
+    property string mode: "dark"
+    property bool vpnPage: false
 
     // toggles
     property real brightness: 0.5
     property bool caffeine: false
+    property bool superCaffeine: false     // also ignores the lid switch and blocks suspend
+    // off -> caffeine -> super caffeine -> off
+    function cycleCaffeine() {
+        if (!caffeine) caffeine = true;
+        else if (!superCaffeine) superCaffeine = true;
+        else { superCaffeine = false; caffeine = false; }
+    }
+    onSuperCaffeineChanged: if (superCaffeine) caffeine = true
     property bool dnd: false
 
     // notification history (newest first)

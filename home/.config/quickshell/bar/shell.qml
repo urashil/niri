@@ -9,6 +9,8 @@ ShellRoot {
     QuickSettings {}
     History {}
     MediaPopup {}
+    Launcher {}
+    Switcher {}
     PowerMenu {}
     WallpaperPicker {}
     Notifications {}
@@ -25,6 +27,17 @@ ShellRoot {
     }
     IpcHandler { target: "history";   function toggle(): void { UiState.history = !UiState.history; } }
     IpcHandler { target: "media";     function toggle(): void { UiState.media = !UiState.media; } }
+    IpcHandler { target: "launcher";  function toggle(): void { UiState.launcher = !UiState.launcher; } }
+    IpcHandler {
+        target: "switcher"
+        function next(): void { UiState.switcherStep(1); }
+        function prev(): void { UiState.switcherStep(-1); }
+    }
     IpcHandler { target: "dnd";       function toggle(): void { UiState.dnd = !UiState.dnd; } }
-    IpcHandler { target: "caffeine";  function toggle(): void { UiState.caffeine = !UiState.caffeine; } }
+    IpcHandler {
+        target: "caffeine"
+        function toggle(): void { UiState.caffeine = !UiState.caffeine; }
+        function cycle(): void { UiState.cycleCaffeine(); }
+        function superMode(): void { UiState.superCaffeine = !UiState.superCaffeine; }
+    }
 }
