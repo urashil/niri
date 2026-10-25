@@ -177,6 +177,20 @@ Variants {
                         }
                     }
 
+                    // screen recording timer (click to stop)
+                    Row {
+                        visible: UiState.recording
+                        spacing: 6
+                        readonly property int secs: Math.max(0, Math.floor(clock.date.getTime() / 1000) - UiState.recStart)
+                        Glyph {
+                            text: "\uf111"; color: Theme.red; font.pixelSize: 11
+                            SequentialAnimation on opacity { running: UiState.recording; loops: Animation.Infinite; NumberAnimation { to: 0.25; duration: 600 } NumberAnimation { to: 1; duration: 600 } }
+                        }
+                        Label { text: String(Math.floor(parent.secs / 60)).padStart(2, "0") + ":" + String(parent.secs % 60).padStart(2, "0"); color: Theme.red }
+                        TapHandler { onTapped: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rec", "stop"]) }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    }
+
                     // caffeine (only while on)
                     Glyph {
                         visible: UiState.caffeine
@@ -188,7 +202,7 @@ Variants {
                     // vpn (PIA): left = page, middle = connect/disconnect
                     Glyph {
                         text: Vpn.connected ? "\uf132" : Vpn.busy ? "\uf132" : "\udb82\udd9d"
-                        color: Vpn.connected ? Theme.green : Vpn.busy ? Theme.yellow : Vpn.state === "Interrupted" ? Theme.error : Theme.outline
+                        color: Vpn.connected ? Theme.green : Vpn.busy ? Theme.yellow : (Vpn.blocked && Wifi.connected) || Vpn.state === "Interrupted" ? Theme.error : Theme.outline
                         SequentialAnimation on opacity {
                             running: Vpn.busy; loops: Animation.Infinite
                             NumberAnimation { to: 0.35; duration: 500 }

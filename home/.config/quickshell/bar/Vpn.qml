@@ -25,11 +25,17 @@ Singleton {
     property string killswitch: "auto"
     readonly property bool schoolConfigured: transport === "tcp" && tcpPort === 443 && !autoTransport
 
+    // what the user picked, shown at once; cleared when PIA reports it (or after 25 s)
+    property string pending: ""          // "" | wireguard | school | auto
+    property string pendingKs: ""        // "" | on | auto | off
+    readonly property string choice: pending !== "" ? pending : method === "wireguard" ? "wireguard" : schoolConfigured ? "school" : "auto"
+    readonly property string ksMode: pendingKs !== "" ? pendingKs : killswitch
+    // traffic is cut while the killswitch is armed and the tunnel is not up
+    readonly property bool blocked: ksMode === "on" ? state !== "Connected" : ksMode === "auto" ? (state === "Interrupted" || state === "Reconnecting") : false
+
     readonly property bool connected: state === "Connected"
     readonly property bool busy: state === "Connecting" || state === "Reconnecting" || state === "DisconnectingToReconnect" || state === "Disconnecting"
-    readonly property string label: method === "openvpn"
-        ? (schoolConfigured ? "OpenVPN · TCP 443" : "OpenVPN · " + transport.toUpperCase() + (tcpPort > 0 && transport === "tcp" ? " " + tcpPort : ""))
-        : "WireGuard"
+    readonly property string label: choice === "wireguard" ? "WireGuard" : choice === "school" ? "OpenVPN · TCP 443" : "OpenVPN · auto"
 
     function pretty(id) {
         if (id === "auto") return "Auto";
@@ -45,20 +51,36 @@ Singleton {
 
     // WireGuard: one piactl call, no password.
     function useWireguard() {
+        pick("wireguard");
         run(["sh", "-c", "piactl set protocol wireguard && piactl background enable; piactl connect"]);
     }
     // OpenVPN over TCP 443 (the only thing a locked-down school network lets through).
     // The very first time, the transport has to be pinned in the daemon settings, which needs root once.
     function useSchool() {
+        pick("school");
         if (schoolConfigured) {
             run(["sh", "-c", "piactl set protocol openvpn && piactl background enable; piactl connect"]);
         } else {
-            run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia school && sleep 2 && piactl set protocol openvpn && piactl background enable; piactl connect"]);
+            // first time only: pin TCP/443 in the daemon settings (helper restarts the daemon), then connect
+            run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia school && piactl set protocol openvpn && piactl background enable; piactl connect"]);
         }
     }
     function useOpenvpnAuto() {
-        run(["sh", "-c", "piactl set protocol openvpn && piactl background enable; piactl connect"]);
+        pick("auto");
+        run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia auto; piactl set protocol openvpn && piactl background enable; piactl connect"]);
     }
+
+    // killswitch: always (blocks everything while the VPN is down) / auto (only while it should be up) / off
+    function setKillswitch(mode) {
+        pendingKs = mode;
+        pendingTimer.restart();
+        const reconnect = connected || busy;
+        run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia-killswitch " + mode + "; sleep 1; piactl background enable" + (reconnect ? "; piactl connect" : "")]);
+    }
+    function pick(c) { pending = c; pendingTimer.restart(); }
+    Timer { id: pendingTimer; interval: 25000; onTriggered: { root.pending = ""; root.pendingKs = ""; } }
+    onMethodChanged: if (pending !== "" && ((pending === "wireguard") === (method === "wireguard"))) pending = ""
+    onKillswitchChanged: if (pendingKs === killswitch) pendingKs = ""
 
     property string lastError: ""
     function run(cmd) { lastError = ""; act.command = cmd; act.running = true; }

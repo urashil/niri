@@ -13,6 +13,7 @@
                                per-network MAC policy (switches iwd to 'network' mode if needed)
   rules                        JSON list of saved networks and their policy
   pia <school|auto>            PIA OpenVPN transport: TCP/443 ('school') or back to automatic
+  pia-killswitch <on|auto|off> PIA killswitch: always on / only with the VPN / off
   boot-hostname <on|off>       pick a new random Wi-Fi hostname at every boot (before iwd starts)
   harden <on|off>              no LLMNR/mDNS announcements, IPv6 temporary addresses
 """
@@ -153,6 +154,19 @@ def ensure_network_mode():
         c["General"].setdefault("AddressRandomizationRange", "nic")
         write_main(c)
 
+def pia_settings(changes):
+    """The PIA daemon owns settings.json and rewrites it on exit, so stop it, edit, start it again.
+    (piactl has no setting for transport, port or killswitch.)"""
+    f = "/opt/piavpn/etc/settings.json"
+    run("systemctl", "stop", "piavpn")
+    try:
+        d = json.load(open(f))
+        d.update(changes)
+        with open(f, "w") as fh:
+            json.dump(d, fh)
+    finally:
+        run("systemctl", "start", "piavpn")
+
 def write_state():
     """World-readable mirror of the per-network policy (/var/lib/iwd is root-only)."""
     try:
@@ -286,18 +300,13 @@ def dispatch(cmd, a):
                 sys.exit("custom needs a MAC like aa:bb:cc:dd:ee:ff")
             edit_profile(path, "Settings", "AlwaysRandomizeAddress", None); edit_profile(path, "Settings", "AddressOverride", a[3].lower())
         restart_iwd()
+    elif cmd == "pia-killswitch" and len(a) == 2 and a[1] in ("on", "auto", "off"):
+        pia_settings({"killswitch": a[1]})
     elif cmd == "pia" and len(a) == 2 and a[1] in ("school", "auto"):
-        f = "/opt/piavpn/etc/settings.json"
-        run("systemctl", "stop", "piavpn")
-        try:
-            d = json.load(open(f))
-            if a[1] == "school":
-                d.update({"method": "openvpn", "protocol": "tcp", "remotePortTCP": 443, "automaticTransport": False})
-            else:
-                d.update({"protocol": "udp", "remotePortTCP": 0, "remotePortUDP": 0, "automaticTransport": True})
-            json.dump(d, open(f, "w"))
-        finally:
-            run("systemctl", "start", "piavpn")
+        if a[1] == "school":
+            pia_settings({"method": "openvpn", "protocol": "tcp", "remotePortTCP": 443, "automaticTransport": False})
+        else:
+            pia_settings({"protocol": "udp", "remotePortTCP": 0, "remotePortUDP": 0, "automaticTransport": True})
     elif cmd == "boot-hostname" and len(a) == 2 and a[1] in ("on", "off"):
         if a[1] == "on":
             open("/etc/systemd/system/rice-hostname.service", "w").write(UNIT)

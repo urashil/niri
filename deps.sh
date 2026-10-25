@@ -17,7 +17,8 @@ pacman -S --needed --noconfirm \
   eza bat fd ripgrep zoxide fzf btop fastfetch \
   cliphist wl-clipboard grim slurp satty libnotify \
   papirus-icon-theme capitaine-cursors \
-  neovim tree-sitter-cli gcc make git unzip curl
+  neovim tree-sitter-cli gcc make git unzip curl \
+  wf-recorder
 
 echo "==> network privacy helper (MAC / hostname / PIA transport)"
 SRC="$UHOME/dotfiles/root"

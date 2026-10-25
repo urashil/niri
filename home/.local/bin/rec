@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# rec [screen|region|stop|toggle] [--mic]   (wf-recorder; the bar shows a red timer while recording)
+STATE="$HOME/.cache/rice"; mkdir -p "$STATE" "$HOME/Videos/Recordings"
+FLAG="$STATE/recording"
+mode="${1:-toggle}"; shift
+mic=""; for a in "$@"; do [ "$a" = "--mic" ] && mic="-a"; done
+
+recording() { pgrep -x wf-recorder >/dev/null; }
+
+stop() {
+  recording && pkill -INT -x wf-recorder
+  # wait for the file to be finalised
+  for _ in $(seq 40); do recording || break; sleep 0.1; done
+  rm -f "$FLAG"
+  [ -f "$STATE/rec-last" ] && notify-send -a rice -i video-x-generic "Recording saved" "$(cat "$STATE/rec-last")"
+}
+
+start() {
+  command -v wf-recorder >/dev/null || { notify-send -a rice "wf-recorder is not installed" "run: sudo bash ~/deps.sh"; exit 1; }
+  local f="$HOME/Videos/Recordings/rec-$(date +%Y%m%d-%H%M%S).mp4" geom=""
+  if [ "$1" = region ]; then
+    geom=$(slurp -d -b '#00000066' -c '#88c0d0ff' -w 2) || exit 0
+  fi
+  echo "$f" > "$STATE/rec-last"
+  date +%s > "$FLAG"
+  if [ -n "$geom" ]; then
+    wf-recorder -g "$geom" $mic -f "$f" >/dev/null 2>&1 &
+  else
+    wf-recorder $mic -f "$f" >/dev/null 2>&1 &
+  fi
+  # if the recorder died straight away, clear the flag
+  sleep 0.6; recording || { rm -f "$FLAG"; notify-send -a rice "Recording failed to start"; exit 1; }
+  wait
+  rm -f "$FLAG"
+}
+
+case "$mode" in
+  stop) stop ;;
+  toggle) if recording; then stop; else start screen; fi ;;
+  screen|region) if recording; then stop; else start "$mode"; fi ;;
+  *) echo "usage: rec [screen|region|stop|toggle] [--mic]" >&2; exit 1 ;;
+esac

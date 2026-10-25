@@ -17,7 +17,7 @@ FILES=(
   .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userChrome.css
   .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userContent.css
   .config/librewolf/librewolf/6yv4qbnb.default-release/user.js
-  .local/bin/lock .local/bin/lid-close .local/bin/theme-mode .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
+  .local/bin/lock .local/bin/lid-close .local/bin/rec .local/bin/theme-mode .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
 )
 for f in "${FILES[@]}"; do
   mkdir -p "home/$(dirname "$f")"

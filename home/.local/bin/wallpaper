@@ -43,7 +43,7 @@ apply() {
   ensure_daemon
   local types=(wipe wave grow outer center fade)
   t=${types[RANDOM % ${#types[@]}]}
-  awww img "$img" --transition-type "$t" --transition-fps 120 --transition-duration 1.2 \
+  awww img --all "$img" --transition-type "$t" --transition-fps 120 --transition-duration 1.2 \
        --transition-angle $(( RANDOM % 360 )) --transition-pos 0.5,0.5 >/dev/null 2>&1 &
   echo "$img" > "$CUR"
   ln -sf "$img" "$STATE/lock.png"

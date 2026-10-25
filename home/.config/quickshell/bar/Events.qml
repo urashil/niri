@@ -100,6 +100,9 @@ Scope {
         }
     }
 
+    // per-network rules apply as soon as Wi-Fi connects
+    Component.onCompleted: Automation.rules
+
     // ---- vpn ----
     property string lastVpn: ""
     Connections {
@@ -110,9 +113,75 @@ Scope {
             if (s === root.lastVpn) return;
             root.lastVpn = s;
             if (s === "Connected") UiState.pulse("vpn", "\uf132", "VPN on · " + Vpn.pretty(Vpn.region) + " · " + Vpn.label, -1, Theme.green, 3200);
-            else if (s === "Disconnected") UiState.pulse("vpn", "\udb82\udd9d", "VPN off", -1, Theme.error, 2500);
+            else if (s === "Disconnected") { if (Vpn.blocked && Wifi.connected) UiState.pulse("warn", "\uf071", "Blocked by killswitch", -1, Theme.error, 6000); else UiState.pulse("vpn", "\udb82\udd9d", "VPN off", -1, Theme.error, 2500); }
             else if (s === "Connecting" || s === "Reconnecting") UiState.pulse("vpn", "\uf132", "Connecting VPN…", -1, Theme.yellow, 2500);
             else if (s === "Interrupted") UiState.pulse("warn", "\uf071", "VPN interrupted", -1, Theme.error, 5000);
+        }
+    }
+
+    // ---- caps / num lock: the keyboard LEDs in sysfs (no change notifications there, so reload in-process) ----
+    property string capsPath: ""
+    property string numPath: ""
+    property int caps: -1
+    property int num: -1
+    Process {
+        running: true
+        command: ["sh", "-c", "ls -d /sys/class/leds/*::capslock /sys/class/leds/*::numlock 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                for (const l of text.trim().split("\n")) {
+                    if (l.endsWith("capslock")) root.capsPath = l + "/brightness";
+                    else if (l.endsWith("numlock")) root.numPath = l + "/brightness";
+                }
+            }
+        }
+    }
+    FileView {
+        id: capsFile
+        path: root.capsPath
+        onLoaded: {
+            const v = parseInt(text()) > 0 ? 1 : 0;
+            if (root.caps !== -1 && v !== root.caps) UiState.pulse("lock", "\uf11c", v ? "Caps Lock on" : "Caps Lock off", -1, v ? Theme.yellow : Theme.outline, 1500);
+            root.caps = v;
+        }
+    }
+    FileView {
+        id: numFile
+        path: root.numPath
+        onLoaded: {
+            const v = parseInt(text()) > 0 ? 1 : 0;
+            if (root.num !== -1 && v !== root.num) UiState.pulse("lock", "\uf11c", v ? "Num Lock on" : "Num Lock off", -1, v ? Theme.cyan : Theme.outline, 1500);
+            root.num = v;
+        }
+    }
+    Timer { interval: 180; running: root.capsPath !== ""; repeat: true; onTriggered: { capsFile.reload(); if (root.numPath !== "") numFile.reload(); } }
+
+    // ---- microphone mute ----
+    readonly property var mic: Pipewire.defaultAudioSource
+    PwObjectTracker { objects: [Pipewire.defaultAudioSource] }
+    Connections {
+        target: root.mic ? root.mic.audio : null
+        ignoreUnknownSignals: true
+        function onMutedChanged() {
+            const m = root.mic.audio.muted;
+            UiState.pulse("mic", m ? "\uf131" : "\uf130", m ? "Microphone muted" : "Microphone on", -1, m ? Theme.error : Theme.green, 1700);
+        }
+    }
+
+    // ---- screen recording (the rec script keeps ~/.cache/rice/recording = start time) ----
+    FileView {
+        id: recFile
+        path: Quickshell.env("HOME") + "/.cache/rice/recording"
+        onLoaded: UiState.recStart = parseInt(text()) || 0
+        onLoadFailed: UiState.recStart = 0
+    }
+    Timer { interval: 1000; running: true; repeat: true; triggeredOnStart: true; onTriggered: recFile.reload() }
+    property bool recSeen: false
+    Connections {
+        target: UiState
+        function onRecordingChanged() {
+            if (!root.recSeen) { root.recSeen = true; if (!UiState.recording) return; }
+            UiState.pulse("rec", UiState.recording ? "\uf111" : "\uf03d", UiState.recording ? "Recording" : "Recording saved", -1, Theme.red, 2500);
         }
     }
 

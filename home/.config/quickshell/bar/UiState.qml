@@ -16,6 +16,8 @@ Singleton {
     property bool media: false
     property bool launcher: false
     property bool monitor: false
+    property real recStart: 0           // epoch seconds while a recording runs (written by the rec script)
+    readonly property bool recording: recStart > 0
     property string monitorTab: "cpu"
     function openMonitor(tab) {
         if (monitor && monitorTab === tab) { monitor = false; return; }

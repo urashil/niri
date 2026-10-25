@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Lid closed (niri switch-event): lock, then make sure the machine really sleeps.
 # logind ignores lid events for HoldoffTimeoutSec (30 s) after a resume, so closing the lid soon after
-# opening it never suspended; this finishes the job. Super caffeine (flag file) skips all of it.
+# opening it never suspended; this finishes the job. Super caffeine (flag file): lock + screen off, no suspend.
 STATE="$HOME/.cache/rice"
-[ -f "$STATE/super" ] && exit 0
+# Super caffeine: stay running (logind is blocked from suspending) but lock and turn the screen off
+if [ -f "$STATE/super" ]; then
+  "$HOME/.local/bin/lock" &
+  sleep 1
+  niri msg action power-off-monitors
+  exit 0
+fi
 
 "$HOME/.local/bin/lock" &
 sleep 2

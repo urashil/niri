@@ -34,6 +34,12 @@ PanelWindow {
 
     property string askSsid: ""
     property string detailSsid: ""
+    property real nowSec: Math.floor(Date.now() / 1000)
+    Timer { interval: 1000; running: win.visible; repeat: true; onTriggered: win.nowSec = Math.floor(Date.now() / 1000) }
+    readonly property string recElapsed: {
+        const t = Math.max(0, nowSec - UiState.recStart);
+        return "\u25cf " + String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+    }
 
     function back() { UiState.quickPage = "main"; askSsid = ""; }
 
@@ -210,6 +216,16 @@ PanelWindow {
                         onToggled: UiState.quickPage = "weather"
                         onOpened: UiState.quickPage = "weather"
                     }
+                    Controls.Tile {
+                        Layout.fillWidth: true
+                        icon: UiState.recording ? "\uf04d" : "\uf03d"
+                        title: UiState.recording ? "Stop recording" : "Record screen"
+                        subtitle: UiState.recording ? win.recElapsed : "tap: screen · ›: region"
+                        on: UiState.recording
+                        chevron: !UiState.recording
+                        onToggled: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rec", UiState.recording ? "stop" : "screen"])
+                        onOpened: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/rec", "region"])
+                    }
                 }
 
                 Rectangle {
@@ -221,6 +237,27 @@ PanelWindow {
                     Text { anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter } text: "\uf0ac  Wi-Fi needs a sign-in"; font.family: Theme.font; font.pixelSize: 12; color: Theme.text }
                     Text { anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter } text: "Open login page"; font.family: Theme.font; font.pixelSize: 11; font.bold: true; color: Theme.yellow }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Captive.openLogin() }
+                }
+
+                Rectangle {
+                    visible: Vpn.blocked && Wifi.connected
+                    Layout.fillWidth: true
+                    implicitHeight: bk.implicitHeight + 22
+                    radius: 14
+                    color: Qt.alpha(Theme.error, 0.16)
+                    border.width: 1; border.color: Theme.error
+                    ColumnLayout {
+                        id: bk
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 11 }
+                        spacing: 8
+                        Text { text: "\uf071  Blocked by the VPN killswitch"; font.family: Theme.font; font.pixelSize: 12; font.bold: true; color: Theme.text }
+                        Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: "Traffic is cut until the VPN connects."; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                        RowLayout {
+                            spacing: 8
+                            Controls.Chip { label: Vpn.busy ? "Connecting…" : "Connect VPN"; on: Vpn.busy; onClicked: Vpn.connect() }
+                            Controls.Chip { label: "Turn killswitch off"; accent: Theme.error; onClicked: Vpn.setKillswitch("off") }
+                        }
+                    }
                 }
 
                 Controls.Slider {
@@ -247,7 +284,7 @@ PanelWindow {
                         elide: Text.ElideRight
                         font.family: Theme.font; font.pixelSize: 11; color: Theme.textDim
                     }
-                    Controls.Chip { label: "Outputs"; onClicked: UiState.quickPage = "audio" }
+                    Controls.Chip { label: "Mixer"; onClicked: UiState.quickPage = "audio" }
                 }
             }
 
@@ -282,7 +319,7 @@ PanelWindow {
                         id: row
                         required property var modelData
                         width: ListView.view.width
-                        height: win.askSsid === modelData.ssid ? 96 : win.detailSsid === modelData.ssid ? 94 : 46
+                        height: win.askSsid === modelData.ssid ? 96 : win.detailSsid === modelData.ssid ? 160 : 46
                         radius: 12
                         color: modelData.connected ? Theme.primaryContainer : Theme.surfaceContainer
                         Behavior on height { NumberAnimation { duration: 160 } }
@@ -331,15 +368,20 @@ PanelWindow {
                                 else { win.askSsid = n.ssid; pass.text = ""; pass.forceActiveFocus(); }
                             }
                         }
-                        // saved-network options (right-click)
-                        Row {
+                        // saved-network options (right-click): MAC policy + what happens when you connect
+                        Flow {
                             visible: win.detailSsid === row.modelData.ssid
-                            anchors { left: parent.left; bottom: parent.bottom; margins: 10 }
+                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 10 }
                             spacing: 6
                             readonly property var rule: Wifi.rules[row.modelData.ssid]
                             Controls.Chip { label: "Random MAC"; on: parent.rule ? parent.rule.always && !parent.rule.override : false; onClicked: priv.run("Applying", ["rule", row.modelData.ssid, "random"]) }
                             Controls.Chip { label: "Stable MAC"; on: parent.rule ? !parent.rule.always && !parent.rule.override : false; onClicked: priv.run("Applying", ["rule", row.modelData.ssid, "stable"]) }
                             Controls.Chip { label: "Forget"; accent: Theme.error; onClicked: { Wifi.forget(row.modelData.ssid); win.detailSsid = ""; } }
+                            Text { height: 30; verticalAlignment: Text.AlignVCenter; text: "on connect:"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                            Controls.Chip { label: "WireGuard"; on: Automation.rule(row.modelData.ssid).vpn === "wg"; onClicked: Automation.set(row.modelData.ssid, "vpn", Automation.rule(row.modelData.ssid).vpn === "wg" ? "" : "wg") }
+                            Controls.Chip { label: "TCP 443"; accent: Theme.yellow; on: Automation.rule(row.modelData.ssid).vpn === "443"; onClicked: Automation.set(row.modelData.ssid, "vpn", Automation.rule(row.modelData.ssid).vpn === "443" ? "" : "443") }
+                            Controls.Chip { label: "VPN off"; on: Automation.rule(row.modelData.ssid).vpn === "off"; onClicked: Automation.set(row.modelData.ssid, "vpn", Automation.rule(row.modelData.ssid).vpn === "off" ? "" : "off") }
+                            Controls.Chip { label: "Quiet"; on: Automation.rule(row.modelData.ssid).dnd; onClicked: Automation.set(row.modelData.ssid, "dnd", !Automation.rule(row.modelData.ssid).dnd) }
                         }
 
                         // password prompt
@@ -423,7 +465,7 @@ PanelWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     Text { text: ""; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
-                    Text { text: "Audio output"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
+                    Text { text: "Audio"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
                 }
                 Repeater {
                     model: Pipewire.nodes.values.filter(n => n.isSink && !n.isStream)
@@ -441,6 +483,27 @@ PanelWindow {
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Pipewire.preferredDefaultAudioSink = modelData }
                     }
                 }
+
+                Text { text: "Apps"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 6 }
+                Repeater {
+                    id: mixer
+                    model: Pipewire.nodes.values.filter(n => n.isStream && !n.isSink && n.audio && n.properties && n.properties["media.class"] === "Stream/Output/Audio")
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 0
+                        Text { text: modelData.properties["application.name"] || modelData.description || modelData.name; elide: Text.ElideRight; Layout.fillWidth: true; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                        Controls.Slider {
+                            Layout.fillWidth: true
+                            icon: modelData.audio.muted ? "\udb81\udd81" : "\uf028"
+                            accent: Theme.primary
+                            value: modelData.audio.volume
+                            onMoved: v => { modelData.audio.muted = false; modelData.audio.volume = v; }
+                            onIconClicked: modelData.audio.muted = !modelData.audio.muted
+                        }
+                    }
+                }
+                Text { visible: mixer.count === 0; text: "Nothing is playing"; font.family: Theme.font; font.pixelSize: 11; color: Theme.outline }
             }
 
             // ================= vpn (PIA) =================
@@ -456,6 +519,27 @@ PanelWindow {
                     Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
                     Text { text: "VPN  ·  PIA"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
                     Controls.Switch { on: Vpn.connected || Vpn.busy; onToggled: Vpn.toggle() }
+                }
+
+                Rectangle {
+                    visible: Vpn.blocked && Wifi.connected
+                    Layout.fillWidth: true
+                    implicitHeight: bk2.implicitHeight + 22
+                    radius: 14
+                    color: Qt.alpha(Theme.error, 0.16)
+                    border.width: 1; border.color: Theme.error
+                    ColumnLayout {
+                        id: bk2
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 11 }
+                        spacing: 8
+                        Text { text: "\uf071  Blocked by the VPN killswitch"; font.family: Theme.font; font.pixelSize: 12; font.bold: true; color: Theme.text }
+                        Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: "Traffic is cut until the VPN connects."; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                        RowLayout {
+                            spacing: 8
+                            Controls.Chip { label: Vpn.busy ? "Connecting…" : "Connect VPN"; on: Vpn.busy; onClicked: Vpn.connect() }
+                            Controls.Chip { label: "Turn killswitch off"; accent: Theme.error; onClicked: Vpn.setKillswitch("off") }
+                        }
+                    }
                 }
 
                 Rectangle {
@@ -480,14 +564,14 @@ PanelWindow {
                 Text { text: "Connection"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
                 Flow {
                     Layout.fillWidth: true; spacing: 8
-                    Controls.Chip { label: "WireGuard"; on: Vpn.method === "wireguard"; onClicked: Vpn.useWireguard() }
-                    Controls.Chip { label: "OpenVPN · TCP 443"; on: Vpn.method === "openvpn" && Vpn.schoolConfigured; accent: Theme.yellow; onClicked: Vpn.useSchool() }
-                    Controls.Chip { label: "OpenVPN · auto"; on: Vpn.method === "openvpn" && !Vpn.schoolConfigured; onClicked: Vpn.useOpenvpnAuto() }
+                    Controls.Chip { label: "WireGuard"; on: Vpn.choice === "wireguard"; onClicked: Vpn.useWireguard() }
+                    Controls.Chip { label: "OpenVPN · TCP 443"; on: Vpn.choice === "school"; accent: Theme.yellow; onClicked: Vpn.useSchool() }
+                    Controls.Chip { label: "OpenVPN · auto"; on: Vpn.choice === "auto"; onClicked: Vpn.useOpenvpnAuto() }
                 }
                 Text {
                     visible: !Vpn.schoolConfigured
                     Layout.fillWidth: true; wrapMode: Text.Wrap
-                    text: "The first time you pick TCP 443, the transport is pinned in PIA's daemon settings (asks for your password once). piactl can't set a port; you can also set Network → Transport TCP, port 443 in the PIA app. After that, switching is one tap."
+                    text: "The first time you pick TCP 443 it is pinned in PIA's daemon settings (piactl has no port option), which restarts the PIA service for a second. After that, switching is instant."
                     font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
                 Text { visible: Vpn.lastError !== ""; Layout.fillWidth: true; wrapMode: Text.Wrap; text: Vpn.lastError; font.family: Theme.font; font.pixelSize: 10; color: Theme.error }
@@ -496,6 +580,19 @@ PanelWindow {
                     Layout.fillWidth: true; spacing: 8
                     Controls.Chip { label: "Allow LAN"; on: Vpn.allowLan; onClicked: Vpn.setAllowLan(!Vpn.allowLan) }
                     Controls.Chip { label: "Port forwarding"; on: Vpn.requestPortForward; onClicked: Vpn.setPortForward(!Vpn.requestPortForward) }
+                }
+
+                Text { text: "Killswitch"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "Always on"; on: Vpn.ksMode === "on"; onClicked: Vpn.setKillswitch("on") }
+                    Controls.Chip { label: "Auto"; on: Vpn.ksMode === "auto"; onClicked: Vpn.setKillswitch("auto") }
+                    Controls.Chip { label: "Off"; accent: Theme.error; on: Vpn.ksMode === "off"; onClicked: Vpn.setKillswitch("off") }
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: Vpn.ksMode === "on" ? "Always on: nothing leaves this machine while the VPN is down." : Vpn.ksMode === "auto" ? "Auto: traffic is blocked only if the tunnel drops while it should be up." : "Off: traffic flows normally when the VPN is disconnected."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
 
                 Text { text: "Region"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }

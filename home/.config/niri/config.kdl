@@ -271,6 +271,7 @@ layout {
 
 // This line starts waybar, a commonly used bar for Wayland compositors.
 spawn-at-startup "awww-daemon"
+spawn-at-startup "awww-daemon" "--namespace" "backdrop"
 spawn-sh-at-startup "sleep 0.5 && /home/nyx/.local/bin/wallpaper restore"
 spawn-at-startup "quickshell" "-c" "bar"
 spawn-at-startup "xwayland-satellite"
@@ -455,6 +456,12 @@ layer-rule {
 }
 
 
+// The second awww daemon paints the same wallpaper into the overview backdrop.
+layer-rule {
+    match namespace="^awww-daemonbackdrop$"
+    place-within-backdrop true
+}
+
 // Lid close: lock, then make sure it sleeps (logind skips lid events for 30 s after a resume). Super caffeine ignores it.
 switch-events {
     lid-close { spawn "/home/nyx/.local/bin/lid-close"; }
@@ -494,6 +501,8 @@ binds {
     Mod+Shift+D hotkey-overlay-title="Do Not Disturb" { spawn "quickshell" "-c" "bar" "ipc" "call" "dnd" "toggle"; }
     Mod+Shift+B hotkey-overlay-title="Caffeine / Super caffeine" { spawn "quickshell" "-c" "bar" "ipc" "call" "caffeine" "cycle"; }
     Ctrl+Shift+Escape hotkey-overlay-title="Task Monitor" { spawn "quickshell" "-c" "bar" "ipc" "call" "monitor" "open" "cpu"; }
+    Mod+Alt+R hotkey-overlay-title="Record Screen (toggle)" { spawn "/home/nyx/.local/bin/rec" "toggle"; }
+    Mod+Alt+Shift+R hotkey-overlay-title="Record Region" { spawn "/home/nyx/.local/bin/rec" "region"; }
     Mod+Y hotkey-overlay-title="Clipboard History" { spawn "/home/nyx/.local/bin/clip"; }
     Mod+Shift+S hotkey-overlay-title="Screenshot + Annotate" { spawn "/home/nyx/.local/bin/shot" "region"; }
     Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "/home/nyx/.local/bin/scratch"; }
