@@ -31,7 +31,6 @@ Variants {
 
         SystemClock { id: clock; precision: SystemClock.Seconds }
 
-        Process { id: wp; command: [Quickshell.env("HOME") + "/.local/bin/wallpaper", "next"] }
         Process { id: launcher; command: ["fuzzel"] }
 
         Item {
@@ -39,12 +38,12 @@ Variants {
             // false when the weather chip would run into the island (it steps aside instead of overlapping)
             property bool weatherOk: true
             function fitWeather() {
-                const mine = weatherChip.visible ? weatherChip.width + rightRow.spacing : 0;
-                weatherOk = (content.width - (rightRow.width - mine) - weatherChip.width - rightRow.spacing) > (content.width + island.width) / 2 + 14;
+                const mine = weatherChip.visible ? weatherChip.width + leftRow.spacing : 0;
+                weatherOk = (leftRow.width - mine + weatherChip.width + leftRow.spacing) < (content.width - island.width) / 2 - 14;
             }
             onWidthChanged: fitWeather()
             Component.onCompleted: fitWeather()
-            Connections { target: rightRow; function onWidthChanged() { content.fitWeather(); } }
+            Connections { target: leftRow; function onWidthChanged() { content.fitWeather(); } }
             Connections { target: island; function onWidthChanged() { content.fitWeather(); } }
             anchors.fill: parent
             anchors.topMargin: 8
@@ -53,6 +52,7 @@ Variants {
 
             // ---- left ----
             Row {
+                id: leftRow
                 anchors.left: parent.left
                 spacing: 8
 
@@ -73,6 +73,19 @@ Variants {
                         elide: Text.ElideRight
                         width: Math.min(implicitWidth, 340)
                         color: Theme.textDim
+                    }
+                }
+                Island {
+                    id: weatherChip
+                    // off by choice (weather page, "In bar"), and hidden when it would touch the island
+                    visible: Weather.configured && Weather.loaded && Weather.showInBar && content.weatherOk
+                    spacing: 6
+                    Glyph { text: Weather.icon; color: Weather.color; font.pixelSize: 16 }
+                    Label { text: Weather.tempText }
+                    overlay: MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: UiState.openQuick("weather")
                     }
                 }
             }
@@ -114,20 +127,6 @@ Variants {
                             else if (mouse.button === Qt.MiddleButton) win.player.togglePlaying();
                             else UiState.media = !UiState.media;
                         }
-                    }
-                }
-
-                Island {
-                    id: weatherChip
-                    // off by choice (weather page, "In bar"), and hidden when it would touch the island
-                    visible: Weather.configured && Weather.loaded && Weather.showInBar && content.weatherOk
-                    spacing: 6
-                    Glyph { text: Weather.icon; color: Weather.color; font.pixelSize: 16 }
-                    Label { text: Weather.tempText }
-                    overlay: MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: UiState.openQuick("weather")
                     }
                 }
 
@@ -175,22 +174,6 @@ Variants {
 
                 Island {
                     spacing: 14
-
-                    // wallpaper: left = picker, right = next
-                    Glyph {
-                        text: ""
-                        color: Theme.secondary
-                        MouseArea {
-                            anchors.fill: parent
-                            anchors.margins: -4
-                            cursorShape: Qt.PointingHandCursor
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onClicked: mouse => {
-                                if (mouse.button === Qt.RightButton) wp.running = true;
-                                else UiState.wallpaper = true;
-                            }
-                        }
-                    }
 
                     // screen recording timer (click to stop)
                     Row {
@@ -252,7 +235,8 @@ Variants {
 
                     // volume
                     Row {
-                        visible: win.sink !== null && win.sink.audio !== null
+                        // nothing to show at zero
+                        visible: win.sink !== null && win.sink.audio !== null && Math.round(win.sink.audio.volume * 100) > 0
                         spacing: 6
                         Glyph {
                             readonly property real v: win.sink && win.sink.audio ? win.sink.audio.volume : 0
@@ -287,7 +271,7 @@ Variants {
                             text: parent.charging ? "" : parent.pct > 87 ? "" : parent.pct > 62 ? "" : parent.pct > 37 ? "" : parent.pct > 12 ? "" : ""
                             color: parent.charging ? Theme.green : parent.pct <= 15 ? Theme.error : Theme.text
                         }
-                        Label { text: Math.round(parent.pct) + "%" }
+                        Label { visible: Math.round(parent.pct) < 100; text: Math.round(parent.pct) + "%" }
                         TapHandler { onTapped: UiState.openQuick("main") }
                     }
 
