@@ -232,8 +232,8 @@ Variants {
 
                     // volume
                     Row {
-                        // nothing to show at zero
-                        visible: win.sink !== null && win.sink.audio !== null && Math.round(win.sink.audio.volume * 100) > 0
+                        // nothing to show at zero or when muted
+                        visible: win.sink !== null && win.sink.audio !== null && Math.round(win.sink.audio.volume * 100) > 0 && !win.sink.audio.muted
                         spacing: 6
                         Glyph {
                             readonly property real v: win.sink && win.sink.audio ? win.sink.audio.volume : 0
