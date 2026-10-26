@@ -44,11 +44,12 @@ while read -r f; do
   cp -a "home/$f" "$HOME/$f"
 done < <(cd home && find . -type f)
 [ "$made_bak" = 1 ] && echo "   replaced files were saved in $bak"
-# the repo was made under /home/nyx: point absolute paths at this user's home
+# the repo was made under /home/nyx: point every absolute path at this user's home
 if [ "$HOME" != /home/nyx ]; then
-  for f in .config/niri/config.kdl .librewolf/native-messaging-hosts/rice_theme.json; do
-    [ -f "$HOME/$f" ] && sed -i "s|/home/nyx|$HOME|g" "$HOME/$f"
-  done
+  while read -r f; do
+    case "$f" in ./.config/librewolf/*) continue ;; esac
+    grep -Iq '/home/nyx' "$HOME/$f" 2>/dev/null && sed -i "s|/home/nyx|$HOME|g" "$HOME/$f"
+  done < <(cd home && find . -type f)
 fi
 chmod +x "$HOME"/.local/bin/* 2>/dev/null || true
 mkdir -p "$HOME/Pictures/Screenshots" "$HOME/.cache/rice" "$HOME/.config/rice"
