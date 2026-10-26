@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Native messaging host for the "rice theme" LibreWolf extension: sends the wallpaper colours as a browser
+theme now and again every time ~/.config/quickshell/bar/colors.json changes. Exits when the browser goes away."""
+import json, os, struct, sys, time
+
+LOG = os.path.expanduser("~/.cache/rice/lw-theme-host.log")
+def log(msg):
+    try:
+        with open(LOG, "a") as f: f.write(time.strftime("%H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
+log("started pid %d" % os.getpid())
+
+COLORS = os.path.expanduser("~/.config/quickshell/bar/colors.json")
+
+def theme(c):
+    return {"colors": {
+        "frame": c["surface"], "frame_inactive": c["surface"],
+        "toolbar": c["surface"], "toolbar_text": c["text"],
+        "toolbar_field": c["surfaceContainer"], "toolbar_field_text": c["text"],
+        "toolbar_field_focus": c["surfaceHigh"], "toolbar_field_text_focus": c["text"],
+        "toolbar_field_border": c["surfaceContainer"], "toolbar_field_border_focus": c["primary"],
+        "toolbar_vertical_separator": c["outlineVariant"],
+        "tab_background_text": c["textDim"], "tab_text": c["fgContainer"],
+        "tab_selected": c["primaryContainer"], "tab_line": c["primary"], "tab_loading": c["primary"],
+        "icons": c["text"], "icons_attention": c["primary"],
+        "popup": c["surfaceLow"], "popup_text": c["text"], "popup_border": c["outlineVariant"],
+        "popup_highlight": c["primaryContainer"], "popup_highlight_text": c["fgContainer"],
+        "sidebar": c["surfaceLow"], "sidebar_text": c["text"], "sidebar_border": c["outlineVariant"],
+        "ntp_background": c["surface"], "ntp_text": c["text"],
+        "button_background_hover": c["surfaceHigh"], "button_background_active": c["primaryContainer"],
+        "bookmark_text": c["text"],
+    }}
+
+def send(obj):
+    data = json.dumps(obj).encode()
+    sys.stdout.buffer.write(struct.pack("@I", len(data)) + data)
+    sys.stdout.buffer.flush()
+
+last = None
+while True:
+    try:
+        mtime = os.stat(COLORS).st_mtime
+        if mtime != last:
+            with open(COLORS) as f:
+                send(theme(json.load(f)))
+            log("sent theme")
+            last = mtime
+    except (BrokenPipeError, ValueError) as e:
+        log("exit: %r" % e)
+        sys.exit(0)
+    except (OSError, KeyError):
+        pass
+    time.sleep(0.7)

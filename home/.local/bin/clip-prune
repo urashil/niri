@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Keep clipboard history for MAX_MIN minutes only (default 60). cliphist stores no timestamps, so the
+# first time an entry id is seen is recorded in a state file and entries older than the limit are deleted.
+# clip-prune          prune once
+# clip-prune --daemon prune every 30 s (started from niri)
+# clip-prune --wipe   delete the whole history
+MAX_MIN=${CLIP_MAX_MIN:-60}
+STATE=${XDG_CACHE_HOME:-$HOME/.cache}/rice/clip-seen
+mkdir -p "$(dirname "$STATE")"
+
+prune() {
+  local now first=0; now=$(date +%s)
+  [ -f "$STATE" ] || first=1
+  : >> "$STATE"; chmod 600 "$STATE"
+  # entries without a recorded time on the very first run are of unknown age: drop them
+  cliphist list 2>/dev/null | awk -F'\t' -v now="$now" -v max=$((MAX_MIN*60)) -v first="$first" -v state="$STATE" '
+    BEGIN { while ((getline l < state) > 0) { split(l, a, " "); seen[a[1]] = a[2] } }
+    { id = $1
+      if (!(id in seen)) seen[id] = now
+      if (first || now - seen[id] > max) print > "/dev/stderr"; else keep[id] = seen[id] }
+    END { for (i in keep) print i, keep[i] > state ".new" }' 2> >(cat > "$STATE.del")
+  wait
+  [ -s "$STATE.del" ] && cliphist delete < "$STATE.del"
+  [ -f "$STATE.new" ] && mv "$STATE.new" "$STATE" || : > "$STATE"
+  rm -f "$STATE.del"
+}
+
+case "${1:-}" in
+  --wipe) cliphist wipe; : > "$STATE" ;;
+  --daemon) while :; do prune; sleep 30; done ;;
+  *) prune ;;
+esac

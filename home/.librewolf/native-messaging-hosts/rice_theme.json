@@ -1,0 +1,7 @@
+{
+  "name": "rice_theme",
+  "description": "wallpaper colours for the rice theme extension",
+  "path": "/home/nyx/.local/bin/librewolf-theme-host",
+  "type": "stdio",
+  "allowed_extensions": ["rice-theme@local"]
+}

@@ -18,6 +18,10 @@ FILES=(
   .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userContent.css
   .config/librewolf/librewolf/6yv4qbnb.default-release/user.js
   .local/bin/lock .local/bin/lid-close .local/bin/rec .local/bin/notify-me .local/bin/caffeine-off .local/bin/theme-mode .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
+  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host
+  .config/quickshell/bootpreview
+  .local/share/rice/librewolf-ext
+  .librewolf/native-messaging-hosts/rice_theme.json
 )
 for f in "${FILES[@]}"; do
   mkdir -p "home/$(dirname "$f")"

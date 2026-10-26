@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Open two windows that imitate the GRUB menu and the Plymouth passphrase screen with the current wallpaper colours.
+# No root needed. The windows are an approximation: the real screens render a little differently.
+T="$HOME/dotfiles/boot/boot-theme.sh"; [ -f "$T" ] || T="$HOME/boot-theme.sh"
+D="$HOME/.cache/rice/bootpreview"
+bash "$T" preview "$D" >/dev/null || exit 1
+BOOTPREVIEW="$D" exec quickshell -c bootpreview

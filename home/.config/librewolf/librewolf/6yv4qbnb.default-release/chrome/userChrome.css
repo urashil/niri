@@ -1,34 +1,17 @@
-@import url("colors.css");
-
-/* Browser chrome: floating rounded tabs, flat toolbars, colours from the wallpaper */
+/* Browser chrome: floating rounded tabs, flat toolbars.
+   Colours come from the browser theme, which the "rice theme" extension updates live from the wallpaper
+   (extension + ~/.local/bin/librewolf-theme-host); the --rice-* names below just point at those theme variables. */
 :root {
-  --toolbar-bgcolor: var(--rice-bg) !important;
-  --toolbar-color: var(--rice-fg) !important;
-  --toolbar-field-background-color: var(--rice-bg-mid) !important;
-  --toolbar-field-color: var(--rice-fg) !important;
-  --toolbar-field-focus-background-color: var(--rice-bg-high) !important;
-  --toolbar-field-focus-color: var(--rice-fg) !important;
+  --rice-bg: var(--toolbar-background-color);
+  --rice-bg-low: var(--panel-background-color);
+  --rice-bg-mid: var(--toolbar-field-background-color);
+  --rice-bg-high: var(--toolbar-field-background-color-focus);
+  --rice-fg: var(--toolbar-text-color);
+  --rice-outline: var(--panel-border-color);
+  --rice-accent: var(--toolbar-field-border-color-focus);
+  --rice-accent-bg: var(--tab-background-color-selected);
+  --rice-accent-bg-fg: var(--tab-text-color-selected);
   --toolbar-field-border-color: transparent !important;
-  --toolbar-field-focus-border-color: var(--rice-accent) !important;
-  --lwt-accent-color: var(--rice-bg) !important;
-  --lwt-text-color: var(--rice-fg) !important;
-  --tab-selected-bgcolor: var(--rice-accent-bg) !important;
-  --tab-selected-textcolor: var(--rice-accent-bg-fg) !important;
-  --tabpanel-background-color: var(--rice-bg) !important;
-  --arrowpanel-background: var(--rice-bg-low) !important;
-  --arrowpanel-color: var(--rice-fg) !important;
-  --arrowpanel-border-color: var(--rice-outline) !important;
-  --panel-separator-color: var(--rice-outline) !important;
-  --button-hover-bgcolor: var(--rice-bg-high) !important;
-  --button-active-bgcolor: var(--rice-accent-bg) !important;
-  --urlbar-box-bgcolor: var(--rice-bg-mid) !important;
-  --urlbar-box-hover-bgcolor: var(--rice-bg-high) !important;
-  --urlbar-box-text-color: var(--rice-fg) !important;
-  --focus-outline-color: var(--rice-accent) !important;
-  --sidebar-background-color: var(--rice-bg-low) !important;
-  --sidebar-text-color: var(--rice-fg) !important;
-  --newtab-background-color: var(--rice-bg) !important;
-  --newtab-text-primary-color: var(--rice-fg) !important;
 }
 
 #navigator-toolbox { border-bottom: none !important; background: var(--rice-bg) !important; }

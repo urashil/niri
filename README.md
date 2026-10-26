@@ -25,6 +25,8 @@ settings VPN page, no password prompt once deps.sh has installed the polkit rule
 
 Clipboard history keeps only the last 60 minutes (`clip-prune --daemon`, started by niri; `CLIP_MAX_MIN` changes it, `clip-prune --wipe` clears it).
 
+LibreWolf colours follow the wallpaper live: the "rice theme" extension (`.local/share/rice/librewolf-ext`, zip it to `<profile>/extensions/rice-theme@local.xpi`) is fed by `librewolf-theme-host`; needs `xpinstall.signatures.required=false` in user.js.
+
 Neovim: `lua/palette.lua` is rewritten by matugen and re-applied live in every running Neovim.
 
 Agent utilities (for scripts and AI agents):

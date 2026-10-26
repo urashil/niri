@@ -1,0 +1,9 @@
+{
+  "manifest_version": 2,
+  "name": "rice theme",
+  "version": "1.0",
+  "description": "Applies the wallpaper colours to the browser theme, live (fed by ~/.local/bin/librewolf-theme-host).",
+  "browser_specific_settings": { "gecko": { "id": "rice-theme@local" } },
+  "permissions": ["theme", "nativeMessaging"],
+  "background": { "scripts": ["background.js"] }
+}

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Connect the VPN (PIA) once per login. Turn it off in quick settings > VPN > "Connect at startup",
+# or with: vpn-autoconnect off | on | status
+CONF="$HOME/.config/rice/vpn.json"
+FLAG="${XDG_RUNTIME_DIR:-/tmp}/rice-vpn-autoconnect"
+
+enabled() { ! grep -Eq '"autoConnect"[[:space:]]*:[[:space:]]*false' "$CONF" 2>/dev/null; }
+setting() { mkdir -p "$(dirname "$CONF")"; printf '{"autoConnect": %s}\n' "$1" > "$CONF"; }
+
+case "${1:-}" in
+  off) setting false; echo "VPN will not connect at startup"; exit 0 ;;
+  on) setting true; echo "VPN will connect at startup"; exit 0 ;;
+  status) enabled && echo on || echo off; exit 0 ;;
+esac
+
+enabled || exit 0
+[ -e "$FLAG" ] && exit 0            # already handled this login (a restarted bar must not undo a manual disconnect)
+: > "$FLAG"
+
+# the daemon starts with the system; wait for it to answer
+state=""
+for _ in $(seq 1 40); do
+  state=$(timeout 5 piactl get connectionstate 2>/dev/null) && [ -n "$state" ] && break
+  sleep 2
+done
+[ -n "$state" ] || exit 1
+enabled || exit 0                    # switched off while we waited
+case "$state" in
+  Disconnected) piactl background enable; piactl connect ;;
+esac
