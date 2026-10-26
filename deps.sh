@@ -20,6 +20,23 @@ pacman -S --needed --noconfirm \
   neovim tree-sitter-cli gcc make git unzip curl \
   wf-recorder
 
+# the base desktop and the tools the boot / lock / bar scripts call; installed one by one so one missing name cannot abort the rest
+echo "==> desktop packages"
+for pkg in niri quickshell kitty fuzzel sddm librewolf iwd bluez bluez-utils upower power-profiles-daemon polkit-gnome \
+           ffmpeg librsvg imagemagick python grub efibootmgr plymouth mkinitcpio \
+           ttf-jetbrains-mono-nerd ttf-nerd-fonts-symbols noto-fonts-emoji \
+           qt6-svg qt6-virtualkeyboard qt6-multimedia-ffmpeg qt6-imageformats zip jq; do
+  pacman -S --needed --noconfirm "$pkg" >/dev/null 2>&1 || echo "   (could not install $pkg from the repos: install it yourself if you need it)"
+done
+# AUR packages: PIA is what the VPN controls talk to
+if ! pacman -Q piavpn-bin >/dev/null 2>&1; then
+  if command -v yay >/dev/null; then
+    sudo -u "$USER_NAME" yay -S --needed --noconfirm piavpn-bin || echo "   (piavpn-bin did not install; the VPN controls need it)"
+  else
+    echo "   (piavpn-bin is an AUR package and yay is not installed: install it yourself for the VPN controls)"
+  fi
+fi
+
 echo "==> network privacy helper (MAC / hostname / PIA transport)"
 SRC="$UHOME/dotfiles/root"
 [ -d "$SRC" ] || SRC="$HERE/root"
@@ -34,8 +51,20 @@ install -d /etc/systemd/logind.conf.d
 printf '[Login]\nHoldoffTimeoutSec=3s\n' > /etc/systemd/logind.conf.d/rice-lid.conf
 systemctl kill -s HUP systemd-logind || true
 
-echo "==> SilentSDDM: follow the wallpaper"
+echo "==> SilentSDDM theme"
 T=/usr/share/sddm/themes/silent
+if [ ! -d "$T" ] && command -v git >/dev/null; then
+  tmp=$(mktemp -d)
+  if git clone --depth 1 https://github.com/uiriansan/SilentSDDM "$tmp/silent" >/dev/null 2>&1; then
+    mkdir -p /usr/share/sddm/themes && cp -a "$tmp/silent" "$T" && rm -rf "$T/.git"
+    install -d /usr/share/fonts/silent-sddm && cp -a "$T"/fonts/* /usr/share/fonts/silent-sddm/ 2>/dev/null && fc-cache -f >/dev/null 2>&1 || true
+  else
+    echo "   (could not download SilentSDDM, needs network)"
+  fi
+  rm -rf "$tmp"
+fi
+if [ ! -f /etc/sddm.conf ] && [ -f "$SRC/etc/sddm.conf" ]; then install -Dm644 "$SRC/etc/sddm.conf" /etc/sddm.conf; fi
+echo "==> SilentSDDM: follow the wallpaper"
 if [ -d "$T" ]; then
   [ -f "$T/configs/rice.conf" ] || cp "$T/configs/default.conf" "$T/configs/rice.conf"
   [ -f "$UHOME/.cache/rice/sddm.conf" ] && cp "$UHOME/.cache/rice/sddm.conf" "$T/configs/rice.conf"
@@ -66,6 +95,11 @@ if [ -z "${SKIP_BOOT_THEME:-}" ] && [ -f "$BOOT_DIR/boot-theme.sh" ]; then
   bash "$BOOT_DIR/boot-theme.sh" plymouth || echo "   (Plymouth step stopped, see above)"
   bash "$BOOT_DIR/boot-theme.sh" grub || echo "   (GRUB theme step stopped, see above)"
 fi
+
+echo "==> services"
+# the login manager is only enabled, not started (that would end this session)
+systemctl enable sddm >/dev/null 2>&1 || true
+systemctl enable --now iwd bluetooth power-profiles-daemon upower >/dev/null 2>&1 || true
 
 echo "==> login shell"
 if [ "$(getent passwd "$USER_NAME" | cut -d: -f7)" != /usr/bin/zsh ]; then

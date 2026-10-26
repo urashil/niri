@@ -20,6 +20,7 @@ FILES=(
   .local/bin/lock .local/bin/lid-close .local/bin/rec .local/bin/notify-me .local/bin/caffeine-off .local/bin/theme-mode .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
   .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host
   .config/quickshell/bootpreview
+  .config/rice/wallpaper-modes.json
   .local/share/rice/librewolf-ext
   .librewolf/native-messaging-hosts/rice_theme.json
 )
@@ -30,4 +31,10 @@ for f in "${FILES[@]}"; do
 done
 rm -f home/.config/quickshell/bar/colors.json
 cp -a ~/deps.sh deps.sh
+# wallpapers (generated placeholders named *.ai are left out), the GTK theme archive, the display manager config
+rm -rf wallpapers && mkdir -p wallpapers
+find -L "$HOME/Pictures/Wallpapers" -maxdepth 1 -type f ! -name '*.ai' -exec cp -p {} wallpapers/ \;
+mkdir -p assets root/etc
+[ -f "$HOME/.themes/Nordic-darker.tar.xz" ] && cp -p "$HOME/.themes/Nordic-darker.tar.xz" assets/
+[ -r /etc/sddm.conf ] && cp /etc/sddm.conf root/etc/sddm.conf
 echo "synced"

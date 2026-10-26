@@ -2,10 +2,21 @@
 
 niri + quickshell bar, matugen colours from the wallpaper, kitty/zsh/p10k, SilentSDDM synced to the wallpaper.
 
-- `sync.sh`    copy live config from `$HOME` into `home/`
-- `install.sh` copy `home/` back onto a fresh machine
-- `deps.sh`    root part: packages, network-privacy helper + polkit rule, SDDM theme permissions
-- `root/`      files installed as root by `deps.sh`
+## Install (Arch Linux)
+
+```
+./install.sh               # everything: packages, root helpers, configs, wallpapers, themes, GRUB/Plymouth
+./install.sh --no-root     # user part only (no sudo): configs, wallpapers, themes
+./install.sh --no-boot     # leave GRUB / Plymouth alone
+```
+
+It is safe to re-run; anything it replaces in `$HOME` is first saved to `~/.config-backup-<date>`. After it finishes, log out
+and back in, and restart LibreWolf once.
+
+- `install.sh`  the one entry point (calls `deps.sh` through sudo, then copies `home/`, `wallpapers/`, builds the LibreWolf extension)
+- `deps.sh`     root part: packages (+ PIA from the AUR via yay), network-privacy helper + polkit rule, SilentSDDM, services
+- `sync.sh`     the other direction: copy the live config, scripts and wallpapers from `$HOME` into this repo
+- `home/`       dotfiles and scripts, `wallpapers/` the wallpaper set, `assets/` GTK theme archive, `root/` root-owned files, `boot/` GRUB + Plymouth scripts
 
 Keybinds worth knowing: `Ctrl+\`` next wallpaper, `Mod+Shift+W` picker, `Mod+Space` launcher
 (`w ` windows, `c ` clipboard, `> ` run, `s ` web, maths inline), `Alt+Tab` window switcher,
