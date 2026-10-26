@@ -36,5 +36,5 @@ Timer and todo: `Mod+Alt+T`, the chips next to the clock, the launcher (`t 25`, 
 Boot: `sudo bash deps.sh` also applies the GRUB theme and builds the extra Plymouth entry (`SKIP_BOOT_THEME=1` skips). This machine boots GRUB 2.16, which starts the unified kernel images (UKIs) in /boot/EFI/Linux.
 `boot/switch-to-grub.sh` (called by deps.sh) reads the running loader from the LoaderInfo firmware variable and
 does nothing when it already says GRUB; on systemd-boot it installs GRUB beside it and only makes it first after checks.
-`sudo bash boot/boot-theme.sh status` first; `grub` themes the menu, `splash` puts a matching picture in the kernel
-image, `plymouth` builds an extra boot entry with an animated passphrase screen (normal entry untouched).
+`sudo bash boot/boot-theme.sh status` first; `preview` draws pictures of both screens without root, `grub` themes the menu and tidies its entries (one per kernel image, extras under Advanced), `splash` puts a matching picture in the kernel
+image, `plymouth` builds an extra boot entry with a spinner and a themed passphrase screen (normal entry untouched).

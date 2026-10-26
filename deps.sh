@@ -63,8 +63,8 @@ echo "==> boot screens (GRUB theme + Plymouth passphrase entry)"
 # SKIP_BOOT_THEME=1 sudo bash deps.sh skips this. The normal boot entry is never replaced:
 # the GRUB theme only restyles the menu and Plymouth is built as an extra entry.
 if [ -z "${SKIP_BOOT_THEME:-}" ] && [ -f "$BOOT_DIR/boot-theme.sh" ]; then
-  bash "$BOOT_DIR/boot-theme.sh" grub || echo "   (GRUB theme step stopped, see above)"
   bash "$BOOT_DIR/boot-theme.sh" plymouth || echo "   (Plymouth step stopped, see above)"
+  bash "$BOOT_DIR/boot-theme.sh" grub || echo "   (GRUB theme step stopped, see above)"
 fi
 
 echo "==> login shell"
