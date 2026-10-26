@@ -385,6 +385,9 @@ preview() {
        "$P/label.png" -geometry +740+632 -composite "$P/entry.png" -geometry +740+674 -composite)
   local i; for i in 0 1 2 3 4 5 6 7 8; do cmd+=("$P/bullet.png" -geometry +$((740 + 34 + i*22))+$((674 + 21)) -composite); done
   "${cmd[@]}" "$out/plymouth-passphrase.png"
+  # raw assets for the live windows (boot-preview)
+  mkdir -p "$out/gt" "$out/ply"; cp "$WORK"/gt/* "$out/gt/"; cp "$WORK"/ply/*.png "$out/ply/"
+  cp "$WORK/card.png" "$WORK/pill.png" "$out/"; cp "$COLORS" "$out/colors.json"
   echo "wrote $out/grub-menu.png and $out/plymouth-passphrase.png (approximations: real GRUB/Plymouth rendering differs a little)"
 }
 

@@ -17,6 +17,7 @@ Singleton {
     property bool requestPortForward: false
     property var regions: []
     property bool available: true
+    property bool autoConnect: true          // connect once per login (vpn-autoconnect, started by niri)
 
     // from /opt/piavpn/etc/settings.json (world-readable)
     property string transport: "udp"
@@ -133,6 +134,16 @@ Singleton {
                 if (j.method) root.method = j.method;
             } catch (e) {}
         }
+    }
+    function setAutoConnect(on) {
+        autoConnect = on;
+        run(["~/.local/bin/vpn-autoconnect".replace("~", Quickshell.env("HOME")), on ? "on" : "off"]);
+    }
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/rice/vpn.json"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: { try { root.autoConnect = JSON.parse(text()).autoConnect !== false; } catch (e) {} }
     }
     Component.onCompleted: loadRegions()
 }

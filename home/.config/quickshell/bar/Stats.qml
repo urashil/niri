@@ -46,15 +46,6 @@ Island {
         Label { text: root.mem + "%" }
     }
     Row {
-        TapHandler { onTapped: UiState.openMonitor("net") }
-        HoverHandler { cursorShape: Qt.PointingHandCursor }
-        spacing: 4
-        Glyph { text: "\uf063"; color: Theme.cyan; font.pixelSize: 11 }
-        Label { text: NetStats.fmt(NetStats.down); font.pixelSize: 12; width: 38 }
-        Glyph { text: "\uf062"; color: Theme.magenta; font.pixelSize: 11 }
-        Label { text: NetStats.fmt(NetStats.up); font.pixelSize: 12; width: 38 }
-    }
-    Row {
         TapHandler { onTapped: UiState.openMonitor("cpu") }
         HoverHandler { cursorShape: Qt.PointingHandCursor }
         visible: root.temp > 0

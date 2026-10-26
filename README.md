@@ -33,6 +33,9 @@ Agent utilities (for scripts and AI agents):
 Timer and todo: `Mod+Alt+T`, the chips next to the clock, the launcher (`t 25`, `todo buy milk`), or
 `quickshell -c bar ipc call focus timer 25` / `focus todo "text"`.
 
+`boot-preview` opens two windows that imitate the GRUB menu and the Plymouth passphrase screen (no root).
+`vpn-autoconnect on|off|status` (or quick settings > VPN > "Connect at startup") controls the VPN connecting once per login.
+
 Boot: `sudo bash deps.sh` also applies the GRUB theme and builds the extra Plymouth entry (`SKIP_BOOT_THEME=1` skips). This machine boots GRUB 2.16, which starts the unified kernel images (UKIs) in /boot/EFI/Linux.
 `boot/switch-to-grub.sh` (called by deps.sh) reads the running loader from the LoaderInfo firmware variable and
 does nothing when it already says GRUB; on systemd-boot it installs GRUB beside it and only makes it first after checks.

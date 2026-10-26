@@ -716,6 +716,7 @@ PanelWindow {
                     Layout.fillWidth: true; spacing: 8
                     Controls.Chip { label: "Allow LAN"; on: Vpn.allowLan; onClicked: Vpn.setAllowLan(!Vpn.allowLan) }
                     Controls.Chip { label: "Port forwarding"; on: Vpn.requestPortForward; onClicked: Vpn.setPortForward(!Vpn.requestPortForward) }
+                    Controls.Chip { label: "Connect at startup"; on: Vpn.autoConnect; onClicked: Vpn.setAutoConnect(!Vpn.autoConnect) }
                 }
 
                 Text { text: "Killswitch"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
