@@ -8,7 +8,7 @@ ShellRoot {
     id: root
     readonly property string dir: Quickshell.env("BOOTPREVIEW")
     readonly property string font: "JetBrainsMono Nerd Font"
-    property var c: ({ primary: "#ffb3b3", primaryContainer: "#733335", fgContainer: "#ffdad9", text: "#f0dede", textDim: "#d7c1c1" })
+    property var c: ({ primary: "#ffb3b3", fgPrimary: "#561d20", primaryContainer: "#733335", fgContainer: "#ffdad9", text: "#f0dede", textDim: "#d7c1c1" })
 
     FileView {
         path: root.dir + "/colors.json"
@@ -36,7 +36,7 @@ ShellRoot {
             property int secs: 5
             property bool counting: true
             property bool booting: false
-            readonly property var entries: ["Arch Linux", "Arch Linux  (Plymouth)", "Advanced", "UEFI Firmware Settings", "Restart", "Shut down"]
+            readonly property var entries: ["Arch Linux", "Arch Linux  (no splash)", "Advanced", "UEFI Firmware Settings", "Restart", "Shut down"]
 
             Keys.onPressed: event => {
                 counting = false;
@@ -52,7 +52,7 @@ ShellRoot {
             Text { x: 0; y: 24 * 10.8; width: 1920; horizontalAlignment: Text.AlignHCenter; text: "choose what to start"; font.family: root.font; font.pixelSize: 16; color: root.c.textDim }
 
             BorderImage {
-                x: 720; y: 346; width: 480; height: 380
+                x: 680; y: 335; width: 560; height: 420
                 source: "file://" + root.dir + "/card.png"
                 border { left: 26; right: 26; top: 26; bottom: 26 }
             }
@@ -61,17 +61,17 @@ ShellRoot {
                 delegate: Item {
                     required property int index
                     required property string modelData
-                    x: 746; y: 372 + index * 50; width: 428; height: 44
+                    x: 706; y: 361 + index * 58; width: 508; height: 52
                     BorderImage {
                         anchors.fill: parent
                         visible: index === grub.sel
                         source: "file://" + root.dir + "/pill.png"
-                        border { left: 22; right: 22; top: 22; bottom: 22 }
+                        border { left: 26; right: 26; top: 26; bottom: 26 }
                     }
                     Text {
-                        x: 18; anchors.verticalCenter: parent.verticalCenter
-                        text: modelData; font.family: root.font; font.pixelSize: 20
-                        color: index === grub.sel ? root.c.fgContainer : root.c.text
+                        x: 22; anchors.verticalCenter: parent.verticalCenter
+                        text: modelData; font.family: root.font; font.pixelSize: 22; font.bold: index === grub.sel
+                        color: index === grub.sel ? root.c.fgPrimary : root.c.textDim
                     }
                 }
             }

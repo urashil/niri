@@ -32,7 +32,7 @@ need() { command -v "$1" >/dev/null || { echo "missing: $1" >&2; exit 1; }; }
 # ---- palette ----
 [ -r "$COLORS" ] || { echo "no $COLORS (run: wallpaper restore)" >&2; exit 1; }
 col() { python3 -I -c "import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]].lstrip('#'))" "$COLORS" "$1"; }
-TEXTDIM=$(col textDim); FGCONTAINER=$(col fgContainer); SURFACE=$(col surface); PRIMARY=$(col primary); CONTAINER=$(col primaryContainer); TEXT=$(col text); HIGH=$(col surfaceHigh)
+TEXTDIM=$(col textDim); FGPRIMARY=$(col fgPrimary); OUTLINEV=$(col outlineVariant); FGCONTAINER=$(col fgContainer); SURFACE=$(col surface); PRIMARY=$(col primary); CONTAINER=$(col primaryContainer); TEXT=$(col text); HIGH=$(col surfaceHigh)
 rgb() { printf '%d %d %d' "0x${1:0:2}" "0x${1:2:2}" "0x${1:4:2}"; }
 
 # ---- what boots this machine ----
@@ -217,10 +217,10 @@ make_grub_art() {   # $1 = output dir
   ffmpeg -loglevel error -y -i "$WALL" -vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,gblur=sigma=34,eq=brightness=-0.26:saturation=1.05" "$o/background.png"
   # 9-slice boxes: menu card (r26) and selection pill (r22)
   cat > "$WORK/card.svg" <<SVG
-<svg xmlns="http://www.w3.org/2000/svg" width="104" height="104"><rect x="1" y="1" width="102" height="102" rx="26" fill="#$SURFACE" fill-opacity="0.80" stroke="#$HIGH" stroke-width="1.5"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="104" height="104"><rect x="1" y="1" width="102" height="102" rx="26" fill="#$SURFACE" fill-opacity="0.86" stroke="#$OUTLINEV" stroke-width="1.5"/></svg>
 SVG
   cat > "$WORK/pill.svg" <<SVG
-<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" rx="22" fill="#$CONTAINER"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="104" height="104"><rect width="104" height="104" rx="26" fill="#$PRIMARY"/></svg>
 SVG
   rsvg-convert -o "$WORK/card.png" "$WORK/card.svg"
   rsvg-convert -o "$WORK/pill.png" "$WORK/pill.svg"
@@ -237,10 +237,12 @@ SVG
     magick "$src" -crop ${r}x${r}+${far}+${far} +repage "$o/${p}_se.png"
   }
   slice "$WORK/card.png" menu 26 104
-  slice "$WORK/pill.png" select 22 100
+  slice "$WORK/pill.png" select 26 104
   local FONT; FONT=$(fc-match -f '%{file}' "JetBrainsMono Nerd Font")
   [ -f "$FONT" ] || { echo "JetBrainsMono Nerd Font not found" >&2; exit 1; }
-  local sz; for sz in 16 20 36; do grub-mkfont -s $sz -o "$o/font$sz.pf2" "$FONT" 2>/dev/null; done
+  local BOLD; BOLD=$(fc-match -f '%{file}' "JetBrainsMono Nerd Font:bold")
+  local sz; for sz in 16 22 36; do grub-mkfont -s $sz -o "$o/font$sz.pf2" "$FONT" 2>/dev/null; done
+  grub-mkfont -s 22 -o "$o/font22b.pf2" "${BOLD:-$FONT}" 2>/dev/null
   # the theme must use the exact name stored inside the .pf2 (its NAME section)
   pf2name() { python3 -I - "$1" <<'PY'
 import sys
@@ -254,8 +256,8 @@ while i + 8 <= len(d):
     if tag == b"DATA": break
 PY
   }
-  F16=$(pf2name "$o/font16.pf2"); F20=$(pf2name "$o/font20.pf2"); F36=$(pf2name "$o/font36.pf2")
-  [ -n "$F16" ] && [ -n "$F20" ] && [ -n "$F36" ] || { echo "could not read the font names from the generated .pf2 files" >&2; exit 1; }
+  F16=$(pf2name "$o/font16.pf2"); F20=$(pf2name "$o/font22.pf2"); F20B=$(pf2name "$o/font22b.pf2"); F36=$(pf2name "$o/font36.pf2")
+  [ -n "$F16" ] && [ -n "$F20" ] && [ -n "$F20B" ] && [ -n "$F36" ] || { echo "could not read the font names from the generated .pf2 files" >&2; exit 1; }
   local HOST; HOST=$(cat /etc/hostname 2>/dev/null || echo arch)
   cat > "$o/theme.txt" <<THEME
 desktop-image: "background.png"
@@ -283,18 +285,18 @@ terminal-font: "$F16"
   color = "#$TEXTDIM"
 }
 + boot_menu {
-  left = 50%-240
-  width = 480
-  top = 32%
-  height = 380
+  left = 50%-280
+  width = 560
+  top = 31%
+  height = 420
   menu_pixmap_style = "menu_*"
   selected_item_pixmap_style = "select_*"
   item_font = "$F20"
-  selected_item_font = "$F20"
-  item_color = "#$TEXT"
-  selected_item_color = "#$FGCONTAINER"
-  item_height = 44
-  item_padding = 18
+  selected_item_font = "$F20B"
+  item_color = "#$TEXTDIM"
+  selected_item_color = "#$FGPRIMARY"
+  item_height = 52
+  item_padding = 22
   item_spacing = 6
   icon_width = 0
   item_icon_space = 0
@@ -315,14 +317,14 @@ THEME
 
 # ---- GRUB menu entries: clean list instead of the stock generators ----
 GRUB_ENTRIES_SCRIPT='#!/bin/sh
-# written by boot-theme.sh: one tidy entry per unified kernel image, the rest under "Advanced".
+# written by boot-theme.sh: one tidy entry per unified kernel image (Plymouth one first = default), the rest under "Advanced".
 UKI_DIR="${RICE_UKI_DIR:-/boot/EFI/Linux}"
 ESP_UUID="${RICE_ESP_UUID:-$(grub-probe -t fs_uuid /boot 2>/dev/null)}"
 [ -n "$ESP_UUID" ] || exit 0
 title() {
   case "$1" in
-    arch-linux-hardened.efi) echo "Arch Linux" ;;
-    arch-linux-hardened-splash.efi) echo "Arch Linux  (Plymouth)" ;;
+    arch-linux-hardened.efi) if [ -e "$UKI_DIR/arch-linux-hardened-splash.efi" ]; then echo "Arch Linux  (no splash)"; else echo "Arch Linux"; fi ;;
+    arch-linux-hardened-splash.efi) echo "Arch Linux" ;;
     *) echo "$1" | sed "s/\.efi\$//" ;;
   esac
 }
@@ -346,8 +348,8 @@ for f in "$UKI_DIR"/*.efi; do
     *) adv="$adv $b" ;;
   esac
 done
-# the plain image first (it is the default), then the Plymouth one
-for want in arch-linux-hardened.efi arch-linux-hardened-splash.efi; do
+# the Plymouth image first (it is the default), the plain one right after as the fallback
+for want in arch-linux-hardened-splash.efi arch-linux-hardened.efi; do
   for b in $main; do [ "$b" = "$want" ] && entry "$b" "$(title "$b")" ""; done
 done
 if [ -n "$adv" ]; then
@@ -372,12 +374,12 @@ preview() {
   local HOST; HOST=$(cat /etc/hostname 2>/dev/null || echo arch)
   # GRUB: card 480x380 at (720,346); pill at the first row
   magick "$WORK/gt/background.png" \
-    \( "$WORK/card.png" -resize 480x380! \) -geometry +720+346 -composite \
-    \( "$WORK/pill.png" -resize 432x44! \) -geometry +744+370 -composite \
+    \( "$WORK/card.png" -resize 560x420! \) -geometry +680+335 -composite \
+    \( "$WORK/pill.png" -resize 508x52! \) -geometry +706+361 -composite \
     -font "$FONT" -fill "#$PRIMARY" -pointsize 36 -gravity North -annotate +0+184 "$HOST" \
     -fill "#$TEXTDIM" -pointsize 16 -annotate +0+260 "choose what to start" \
-    -pointsize 20 -fill "#$FGCONTAINER" -annotate +0+376 "Arch Linux" \
-    -fill "#$TEXT" -annotate +0+426 "Arch Linux  (Plymouth)" -annotate +0+476 "Advanced" -annotate +0+526 "UEFI Firmware Settings" -annotate +0+576 "Restart" -annotate +0+626 "Shut down" \
+    -pointsize 22 -fill "#$FGPRIMARY" -annotate +0+372 "Arch Linux" \
+    -fill "#$TEXTDIM" -annotate +0+430 "Arch Linux  (no splash)" -annotate +0+488 "Advanced" -annotate +0+546 "UEFI Firmware Settings" -annotate +0+604 "Restart" -annotate +0+662 "Shut down" \
     -fill "#$TEXTDIM" -pointsize 16 -annotate +0+908 "starting in 5 s, press any key to stay" "$out/grub-menu.png"
   # Plymouth: passphrase screen with 9 typed characters
   local P="$WORK/ply" cmd
@@ -464,8 +466,8 @@ PLY
 
 done. Next:
   1. sudo bash boot-theme.sh grub     (rebuilds the menu so the entry shows up with a proper name)
-  2. reboot and pick "Arch Linux  (Plymouth)"; type your disk passphrase and check you reach the login screen.
-  3. if anything is wrong, boot the plain "Arch Linux" entry; nothing else was changed.
+  2. reboot: the Plymouth image is now the first (default) entry, "Arch Linux"; type your disk passphrase and check you reach the login screen.
+  3. if anything is wrong, boot "Arch Linux  (no splash)"; nothing else was changed.
      remove the extra image with:  sudo rm $UKI_DIR/arch-linux-hardened-splash.efi
 MSG
 }
