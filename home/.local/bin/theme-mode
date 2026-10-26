@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# theme-mode [dark|light|toggle]: regenerate every colour scheme in the other mode.
+# theme-mode [dark|light|toggle] [--no-restore]: regenerate every colour scheme in the other mode.
+# --no-restore only switches the mode and the GTK theme (wallpaper does the colours itself).
 set -u
 STATE="$HOME/.cache/rice"; mkdir -p "$STATE"
 cur=$(cat "$STATE/mode" 2>/dev/null); [ "$cur" = light ] || cur=dark
@@ -16,4 +17,5 @@ gsettings set org.gnome.desktop.interface gtk-theme "$theme" 2>/dev/null
 for f in "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"; do
   [ -f "$f" ] && sed -i "s/^gtk-theme-name=.*/gtk-theme-name=$theme/; s/^gtk-application-prefer-dark-theme=.*/gtk-application-prefer-dark-theme=$pd/" "$f"
 done
+[ "${2:-}" = --no-restore ] && exit 0
 exec "$HOME/.local/bin/wallpaper" restore

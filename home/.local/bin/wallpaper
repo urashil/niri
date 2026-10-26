@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wallpaper [next|prev|random|restore|set <file>]
+# wallpaper [next|prev|random|restore|set <file>|mode <file> [light|dark|auto]]
 # Sets the wallpaper with awww, then regenerates the whole color scheme from it
 # with matugen (kitty, niri, fuzzel, quickshell bar, swaylock, GTK accent).
 set -u
@@ -8,7 +8,27 @@ DIR="${WALLPAPER_DIR:-$HOME/Pictures/Wallpapers}"
 STATE="$HOME/.cache/rice"
 CUR="$STATE/current"
 SCHEME="${WALLPAPER_SCHEME:-scheme-tonal-spot}"
+MODES="$HOME/.config/rice/wallpaper-modes.json"   # { "<file name>": "light" | "dark" }, missing = keep the current mode
 mkdir -p "$STATE"
+
+# the light/dark mode saved for a wallpaper ("" if none)
+mode_of() {
+  [ -f "$MODES" ] || return 0
+  python3 -I -c 'import json,sys,os; print(json.load(open(sys.argv[1])).get(os.path.basename(sys.argv[2]),""))' "$MODES" "$1" 2>/dev/null
+}
+# wallpaper mode <file> light|dark|auto : remember the choice (applies at once if it is the wallpaper in use)
+set_mode_of() {
+  mkdir -p "$(dirname "$MODES")"
+  python3 -I - "$MODES" "$1" "$2" <<'PY'
+import json, os, sys
+path, name, val = sys.argv[1], os.path.basename(sys.argv[2]), sys.argv[3]
+try: d = json.load(open(path))
+except Exception: d = {}
+if val in ("light", "dark"): d[name] = val
+else: d.pop(name, None)
+json.dump(d, open(path, "w"), indent=1)
+PY
+}
 
 list() { find -L "$DIR" -maxdepth 2 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' \) | sort; }
 
@@ -49,6 +69,14 @@ apply() {
   ln -sf "$img" "$STATE/lock.png"
 
   local mode; mode=$(cat "$STATE/mode" 2>/dev/null); [ "$mode" = light ] || mode=dark
+  # this wallpaper's own light/dark choice (not when restoring, so a manual toggle sticks)
+  if [ -z "${WALLPAPER_KEEP_MODE:-}" ]; then
+    local want; want=$(mode_of "$img")
+    if [ -n "$want" ] && [ "$want" != "$mode" ]; then
+      WALLPAPER_KEEP_MODE=1 "$HOME/.local/bin/theme-mode" "$want" --no-restore
+      mode=$want
+    fi
+  fi
   matugen image "$img" --mode "$mode" --type "$SCHEME" --prefer saturation --quiet >/dev/null 2>&1 \
     || echo "matugen failed" >&2
   # libadwaita/GTK4: Nordic-darker underneath in dark mode only (light mode uses stock Adwaita)
@@ -75,6 +103,13 @@ case "${1:-next}" in
   restore)
     f=$(cat "$CUR" 2>/dev/null)
     [ -f "$f" ] || f=$(pick random)
-    apply "$f" ;;
+    WALLPAPER_KEEP_MODE=1 apply "$f" ;;
+  mode)
+    [ -n "${2:-}" ] || { echo "usage: wallpaper mode <file> [light|dark|auto]" >&2; exit 1; }
+    if [ -z "${3:-}" ]; then echo "$(mode_of "$2")"; exit 0; fi
+    case "$3" in light|dark|auto) ;; *) echo "mode must be light, dark or auto" >&2; exit 1 ;; esac
+    set_mode_of "$2" "$3"
+    # the wallpaper on screen: switch now
+    if [ "$3" != auto ] && [ "$(realpath "$2")" = "$(cat "$CUR" 2>/dev/null)" ]; then exec "$HOME/.local/bin/theme-mode" "$3"; fi ;;
   *) echo "usage: wallpaper [next|prev|random|restore|set <file>]" >&2; exit 1 ;;
 esac

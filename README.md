@@ -14,6 +14,8 @@ Keybinds worth knowing: `Ctrl+\`` next wallpaper, `Mod+Shift+W` picker, `Mod+Spa
 `Mod+X` power menu, `Mod+Y` clipboard, `Mod+Shift+S` screenshot+annotate, ``Mod+` `` scratch terminal,
 `Mod+Shift+D` do not disturb, `Mod+Shift+B` caffeine, `Mod+Shift+T` light/dark, `Super+Alt+L` lock.
 
+Each wallpaper can switch the theme to light or dark when applied: press `m` (or click the badge) on its thumbnail in the picker, or `wallpaper mode <file> light|dark|auto`.
+
 Lock screen: `~/.local/bin/lock` runs the quickshell lock (`~/.config/quickshell/lock`) and falls back to
 swaylock if it does not engage within 4 s. `LOCK_TEST=1 lock` auto-unlocks after 6 s for testing,
 `LOCK_PREVIEW=1 quickshell -c lock` shows the UI in a normal window.

@@ -4,6 +4,7 @@ import Quickshell.Wayland
 import QtQuick
 
 // Mod+Shift+W: thumbnail grid. Arrows move, Enter applies, Esc closes, click applies.
+// Each thumbnail has a mode badge (auto / light / dark, key M or click): applying that wallpaper switches to that mode.
 PanelWindow {
     id: win
     visible: UiState.wallpaper
@@ -40,6 +41,24 @@ PanelWindow {
     }
     Process { id: apply }
 
+    property var modes: ({})
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/rice/wallpaper-modes.json"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: { try { win.modes = JSON.parse(text()); } catch (e) { win.modes = {}; } }
+    }
+    Process { id: setMode }
+    function modeOf(path) { return modes[path.split("/").pop()] || "auto"; }
+    function cycleMode(path) {
+        const next = { auto: "light", light: "dark", dark: "auto" }[modeOf(path)];
+        const m = Object.assign({}, modes);
+        if (next === "auto") delete m[path.split("/").pop()]; else m[path.split("/").pop()] = next;
+        modes = m;                       // show it at once; the file watcher confirms
+        setMode.command = [Quickshell.env("HOME") + "/.local/bin/wallpaper", "mode", path, next];
+        setMode.running = true;
+    }
+
     function choose(path) {
         UiState.wallpaper = false;
         apply.command = [Quickshell.env("HOME") + "/.local/bin/wallpaper", "set", path];
@@ -69,7 +88,7 @@ PanelWindow {
         }
         Text {
             anchors { verticalCenter: title.verticalCenter; right: parent.right; rightMargin: 22 }
-            text: "↵ apply   esc close"
+            text: "↵ apply   m light/dark   esc close"
             font.family: Theme.font; font.pixelSize: 11; color: Theme.outline
         }
 
@@ -86,6 +105,7 @@ PanelWindow {
             Keys.onEscapePressed: UiState.wallpaper = false
             Keys.onReturnPressed: if (currentIndex >= 0 && win.files[currentIndex]) win.choose(win.files[currentIndex])
             Keys.onEnterPressed: Keys.onReturnPressed
+            Keys.onPressed: event => { if (event.key === Qt.Key_M && currentIndex >= 0 && win.files[currentIndex]) { win.cycleMode(win.files[currentIndex]); event.accepted = true; } }
 
             delegate: Item {
                 id: cell
@@ -126,6 +146,26 @@ PanelWindow {
                             anchors.centerIn: parent
                             text: cell.modelData.split("/").pop().replace(/\.[^.]+$/, "")
                             font.family: Theme.font; font.pixelSize: 11; color: Theme.text
+                        }
+                    }
+                    // light / dark mode this wallpaper switches to when applied
+                    Rectangle {
+                        id: badge
+                        readonly property string m: win.modeOf(cell.modelData)
+                        anchors { right: parent.right; bottom: parent.bottom; margins: 10 }
+                        z: 2
+                        width: 26; height: 22; radius: 11
+                        color: m === "auto" ? Qt.alpha(Theme.surface, 0.85) : m === "light" ? Theme.yellow : Theme.primaryContainer
+                        Text {
+                            anchors.centerIn: parent
+                            text: badge.m === "light" ? "\uf185" : badge.m === "dark" ? "\uf186" : "\uf042"
+                            font.family: Theme.font; font.pixelSize: 12
+                            color: badge.m === "light" ? "#1a1a1a" : badge.m === "dark" ? Theme.fgContainer : Theme.outline
+                        }
+                        MouseArea {
+                            anchors.fill: parent; anchors.margins: -3
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: win.cycleMode(cell.modelData)
                         }
                     }
                     MouseArea {
