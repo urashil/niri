@@ -98,7 +98,7 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             if (root.active && UiState.islandKind === "media") UiState.media = true;
-            else UiState.calendar = !UiState.calendar;
+            else UiState.openFocus("todo");
         }
     }
 }

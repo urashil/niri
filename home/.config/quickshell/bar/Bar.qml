@@ -35,6 +35,17 @@ Variants {
         Process { id: launcher; command: ["fuzzel"] }
 
         Item {
+            id: content
+            // false when the weather chip would run into the island (it steps aside instead of overlapping)
+            property bool weatherOk: true
+            function fitWeather() {
+                const mine = weatherChip.visible ? weatherChip.width + rightRow.spacing : 0;
+                weatherOk = (content.width - (rightRow.width - mine) - weatherChip.width - rightRow.spacing) > (content.width + island.width) / 2 + 14;
+            }
+            onWidthChanged: fitWeather()
+            Component.onCompleted: fitWeather()
+            Connections { target: rightRow; function onWidthChanged() { content.fitWeather(); } }
+            Connections { target: island; function onWidthChanged() { content.fitWeather(); } }
             anchors.fill: parent
             anchors.topMargin: 8
             anchors.leftMargin: 12
@@ -68,6 +79,7 @@ Variants {
 
             // ---- center ----
             DynamicIsland {
+                id: island
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.top
                 anchors.verticalCenterOffset: Theme.islandHeight / 2
@@ -75,6 +87,7 @@ Variants {
 
             // ---- right ----
             Row {
+                id: rightRow
                 anchors.right: parent.right
                 spacing: 8
 
@@ -105,7 +118,9 @@ Variants {
                 }
 
                 Island {
-                    visible: Weather.configured && Weather.loaded
+                    id: weatherChip
+                    // off by choice (weather page, "In bar"), and hidden when it would touch the island
+                    visible: Weather.configured && Weather.loaded && Weather.showInBar && content.weatherOk
                     spacing: 6
                     Glyph { text: Weather.icon; color: Weather.color; font.pixelSize: 16 }
                     Label { text: Weather.tempText }

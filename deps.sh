@@ -49,6 +49,16 @@ else
   echo "   (silent theme not found, skipping)"
 fi
 
+echo "==> boot loader"
+# Does nothing if the machine already boots with GRUB (it reads the loader's own LoaderInfo variable).
+# If it boots something else (systemd-boot) it installs GRUB next to it and only makes it first once checked.
+# SKIP_GRUB=1 sudo bash deps.sh skips this step.
+BOOT_DIR="$UHOME/dotfiles/boot"
+[ -d "$BOOT_DIR" ] || BOOT_DIR="$HERE/boot"
+if [ -f "$BOOT_DIR/switch-to-grub.sh" ]; then
+  bash "$BOOT_DIR/switch-to-grub.sh" || echo "   (the GRUB step stopped; the boot setup is unchanged, see the message above)"
+fi
+
 echo "==> login shell"
 if [ "$(getent passwd "$USER_NAME" | cut -d: -f7)" != /usr/bin/zsh ]; then
   chsh -s /usr/bin/zsh "$USER_NAME" && echo "   login shell -> zsh (next login)"

@@ -5,7 +5,6 @@ import QtQuick
 
 ShellRoot {
     Bar {}
-    Calendar {}
     QuickSettings {}
     History {}
     MediaPopup {}
@@ -20,7 +19,6 @@ ShellRoot {
 
     // qs -c bar ipc call <target> toggle
     IpcHandler { target: "power";     function toggle(): void { UiState.power = !UiState.power; } }
-    IpcHandler { target: "calendar";  function toggle(): void { UiState.calendar = !UiState.calendar; } }
     IpcHandler { target: "wallpaper"; function toggle(): void { UiState.wallpaper = !UiState.wallpaper; } }
     IpcHandler {
         target: "quick"

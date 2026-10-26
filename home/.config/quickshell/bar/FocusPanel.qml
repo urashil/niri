@@ -22,16 +22,6 @@ PanelWindow {
     MouseArea { anchors.fill: parent; onClicked: UiState.focusOpen = false }
     Item { focus: win.visible; Keys.onEscapePressed: UiState.focusOpen = false }
 
-    component Tab: Rectangle {
-        id: t
-        property string key
-        property string label
-        height: 30; radius: 15; width: tl.implicitWidth + 28
-        color: win.tab === key ? Theme.primaryContainer : Theme.surfaceHigh
-        Behavior on color { ColorAnimation { duration: 150 } }
-        Text { id: tl; anchors.centerIn: parent; text: t.label; font.family: Theme.font; font.pixelSize: 11; color: win.tab === t.key ? Theme.fgContainer : Theme.text }
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: UiState.focusTab = t.key }
-    }
     component Btn: Rectangle {
         id: b
         property string label
@@ -60,12 +50,6 @@ PanelWindow {
             id: body
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
             spacing: 12
-
-            RowLayout {
-                spacing: 8
-                Tab { key: "timer"; label: "  Timer" }
-                Tab { key: "todo"; label: "  Todo" + (Focus.openCount > 0 ? "  " + Focus.openCount : "") }
-            }
 
             // ============ timer ============
             ColumnLayout {
@@ -143,6 +127,13 @@ PanelWindow {
                         Btn { label: "  Stopwatch"; onClicked: Focus.startStopwatch() }
                     }
                 }
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignLeft
+                    height: 28; radius: 14; width: bt1.implicitWidth + 26; color: Theme.surfaceHigh
+                    Text { id: bt1; anchors.centerIn: parent; text: "\uf053  Tasks"; font.family: Theme.font; font.pixelSize: 11; color: Theme.textDim }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: UiState.focusTab = "todo" }
+                }
             }
 
             // ============ todo ============
@@ -202,6 +193,13 @@ PanelWindow {
                     Layout.fillWidth: true
                     Text { Layout.fillWidth: true; text: Focus.openCount + " open · " + (Focus.todos.length - Focus.openCount) + " done"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
                     Btn { visible: Focus.todos.length - Focus.openCount > 0; label: "Clear done"; onClicked: Focus.clearDone() }
+                }
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignRight
+                    height: 28; radius: 14; width: bt2.implicitWidth + 26; color: Theme.surfaceHigh
+                    Text { id: bt2; anchors.centerIn: parent; text: "\uf252  Timer / Stopwatch" + (Focus.active ? "  ·  " + Focus.clockText : "") + "  \uf054"; font.family: Theme.font; font.pixelSize: 11; color: Focus.active ? Theme.primary : Theme.textDim }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: UiState.focusTab = "timer" }
                 }
             }
         }

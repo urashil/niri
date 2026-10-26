@@ -14,6 +14,7 @@ Singleton {
     property real lon: 0
     property string unit: "f"
     property bool loaded: false
+    property bool showInBar: true
     property real temp: 0
     property real feels: 0
     property int code: 0
@@ -58,10 +59,14 @@ Singleton {
     }
     property string geoQuery: ""
     function choose(r) {
-        const j = JSON.stringify({ name: r.name + (r.admin1 ? ", " + r.admin1 : ""), lat: r.latitude, lon: r.longitude, unit: unit });
+        const j = JSON.stringify({ name: r.name + (r.admin1 ? ", " + r.admin1 : ""), lat: r.latitude, lon: r.longitude, unit: unit, bar: showInBar });
         save.command = ["sh", "-c", "mkdir -p \"$(dirname \"$1\")\" && printf '%s' \"$2\" > \"$1\"", "_", cfg, j];
         save.running = true;
         results = [];
+    }
+    function setShowInBar(v) {
+        showInBar = v;
+        if (configured) choose({ name: name, latitude: lat, longitude: lon, admin1: "" });
     }
     function setUnit(u) {
         unit = u;
@@ -78,7 +83,7 @@ Singleton {
         onLoaded: {
             try {
                 const j = JSON.parse(text());
-                root.name = j.name; root.lat = j.lat; root.lon = j.lon; root.unit = j.unit || "f";
+                root.name = j.name; root.lat = j.lat; root.lon = j.lon; root.unit = j.unit || "f"; root.showInBar = j.bar !== false;
                 root.configured = true;
                 root.refresh();
             } catch (e) { root.configured = false; }

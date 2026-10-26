@@ -769,6 +769,7 @@ PanelWindow {
                     Layout.fillWidth: true
                     Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
                     Text { text: "Weather"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
+                    Controls.Chip { label: "In bar"; on: Weather.showInBar; onClicked: Weather.setShowInBar(!Weather.showInBar) }
                     Controls.Chip { label: "°F"; on: Weather.unit === "f"; onClicked: Weather.setUnit("f") }
                     Controls.Chip { label: "°C"; on: Weather.unit === "c"; onClicked: Weather.setUnit("c") }
                 }

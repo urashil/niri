@@ -7,7 +7,6 @@ Singleton {
     id: root
 
     // overlays
-    property bool calendar: false
     property bool power: false
     property bool wallpaper: false
     property bool quick: false

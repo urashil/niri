@@ -9,7 +9,8 @@ niri + quickshell bar, matugen colours from the wallpaper, kitty/zsh/p10k, Silen
 
 Keybinds worth knowing: `Ctrl+\`` next wallpaper, `Mod+Shift+W` picker, `Mod+Space` launcher
 (`w ` windows, `c ` clipboard, `> ` run, `s ` web, maths inline), `Alt+Tab` window switcher,
-`Mod+A` quick settings (Wi-Fi, Bluetooth, VPN, privacy, weather), `Mod+N` notifications,
+`Mod+A` quick settings (Wi-Fi, Bluetooth, VPN, privacy, weather), `Mod+N` notifications,\
+`Super+Shift+Up/Down` and `Super+Shift+1..9` move the window between workspaces, click the island for tasks,
 `Mod+X` power menu, `Mod+Y` clipboard, `Mod+Shift+S` screenshot+annotate, ``Mod+` `` scratch terminal,
 `Mod+Shift+D` do not disturb, `Mod+Shift+B` caffeine, `Mod+Shift+T` light/dark, `Super+Alt+L` lock.
 
@@ -30,5 +31,8 @@ Agent utilities (for scripts and AI agents):
 Timer and todo: `Mod+Alt+T`, the chips next to the clock, the launcher (`t 25`, `todo buy milk`), or
 `quickshell -c bar ipc call focus timer 25` / `focus todo "text"`.
 
-Boot look: `sudo bash boot/boot-theme.sh status` first. This machine boots systemd-boot + UKIs, so `splash`
-(picture in the kernel image) and `plymouth` (extra boot entry, normal entry untouched) apply; `grub` only if GRUB is real.
+Boot: this machine boots GRUB 2.16, which starts the unified kernel images (UKIs) in /boot/EFI/Linux.
+`boot/switch-to-grub.sh` (called by deps.sh) reads the running loader from the LoaderInfo firmware variable and
+does nothing when it already says GRUB; on systemd-boot it installs GRUB beside it and only makes it first after checks.
+`sudo bash boot/boot-theme.sh status` first; `grub` themes the menu, `splash` puts a matching picture in the kernel
+image, `plymouth` builds an extra boot entry with an animated passphrase screen (normal entry untouched).
