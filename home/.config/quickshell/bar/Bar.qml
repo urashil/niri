@@ -35,16 +35,12 @@ Variants {
 
         Item {
             id: content
-            // false when the weather chip would run into the island (it steps aside instead of overlapping)
-            property bool weatherOk: true
-            function fitWeather() {
-                const mine = weatherChip.visible ? weatherChip.width + leftRow.spacing : 0;
-                weatherOk = (leftRow.width - mine + weatherChip.width + leftRow.spacing) < (content.width - island.width) / 2 - 14;
-            }
-            onWidthChanged: fitWeather()
-            Component.onCompleted: fitWeather()
-            Connections { target: leftRow; function onWidthChanged() { content.fitWeather(); } }
-            Connections { target: island; function onWidthChanged() { content.fitWeather(); } }
+            // room for the left row before it would touch the island; the window title shrinks first, the weather chip steps aside last
+            readonly property real leftRoom: (content.width - island.width) / 2 - 14
+            readonly property real leftFixed: launcherIsland.width + wsPill.width + 2 * leftRow.spacing
+            readonly property bool weatherShown: Weather.configured && Weather.loaded && Weather.showInBar
+                && (leftRoom - leftFixed - weatherChip.width - leftRow.spacing) > 110
+            readonly property real titleRoom: leftRoom - leftFixed - leftRow.spacing - (weatherShown ? weatherChip.width + leftRow.spacing : 0) - 28
             anchors.fill: parent
             anchors.topMargin: 8
             anchors.leftMargin: 12
@@ -57,6 +53,7 @@ Variants {
                 spacing: 8
 
                 Island {
+                    id: launcherIsland
                     pad: 12
                     Glyph { text: ""; color: Theme.primary; font.pixelSize: 17 }
                     overlay: MouseArea {
@@ -65,20 +62,11 @@ Variants {
                         onClicked: launcher.running = true
                     }
                 }
-                Workspaces { screenName: win.modelData.name }
-                Island {
-                    visible: Niri.title !== ""
-                    Label {
-                        text: Niri.title
-                        elide: Text.ElideRight
-                        width: Math.min(implicitWidth, 340)
-                        color: Theme.textDim
-                    }
-                }
+                Workspaces { id: wsPill; screenName: win.modelData.name }
                 Island {
                     id: weatherChip
-                    // off by choice (weather page, "In bar"), and hidden when it would touch the island
-                    visible: Weather.configured && Weather.loaded && Weather.showInBar && content.weatherOk
+                    // off by choice (weather page, "In bar"), and hidden when there is no room before the island
+                    visible: content.weatherShown
                     spacing: 6
                     Glyph { text: Weather.icon; color: Weather.color; font.pixelSize: 16 }
                     Label { text: Weather.tempText }
@@ -86,6 +74,15 @@ Variants {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: UiState.openQuick("weather")
+                    }
+                }
+                Island {
+                    visible: Niri.title !== "" && content.titleRoom > 50
+                    Label {
+                        text: Niri.title
+                        elide: Text.ElideRight
+                        width: Math.min(implicitWidth, 340, content.titleRoom)
+                        color: Theme.textDim
                     }
                 }
             }
