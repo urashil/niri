@@ -131,7 +131,7 @@ ShellRoot {
                 if (event.key === Qt.Key_Escape) Qt.quit();
                 else if (event.key === Qt.Key_Backspace) ply.count = Math.max(0, ply.count - 1);
                 else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { if (ply.count > 1) { ply.shake = 14; ply.shakeT = 0; } ply.count = 0; }
-                else if (event.text !== "") ply.count = Math.min(40, ply.count + 1);
+                else if (event.text !== "") ply.count = Math.min(96, ply.count + 1);
             }
 
             Image { anchors.fill: parent; source: "file://" + root.dir + "/ply/bg.png"; fillMode: Image.Stretch }
@@ -146,10 +146,13 @@ ShellRoot {
             Image { x: ply.cx - 220 + ply.off; y: ply.cy + 92; source: "file://" + root.dir + "/ply/label.png"; opacity: ply.promptAlpha }
             Image { x: ply.cx - 220 + ply.off; y: ply.cy + 134; source: "file://" + root.dir + "/ply/entry.png"; opacity: ply.promptAlpha }
             Repeater {
-                model: 17
+                model: 96
                 delegate: Image {
                     required property int index
-                    x: ply.cx - 220 + ply.off + 34 + index * 22; y: ply.cy + 134 + 28 - 7
+                    readonly property real step: Math.min(22, 372 / Math.max(1, ply.count))
+                    readonly property real d: Math.max(4, Math.min(14, Math.floor(step * 0.64)))
+                    width: d; height: d; sourceSize: Qt.size(28, 28)
+                    x: ply.cx - 220 + ply.off + 34 + index * step; y: ply.cy + 134 + 28 - d / 2
                     source: "file://" + root.dir + "/ply/bullet.png"
                     opacity: index < ply.count ? ply.promptAlpha : 0
                 }

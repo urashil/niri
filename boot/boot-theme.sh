@@ -137,7 +137,9 @@ ex = cx - entry_img.GetWidth() / 2;
 ey = cy + 134;
 lx = cx - label_img.GetWidth() / 2;
 ly = cy + 92;
-max_bullets = 17;
+max_bullets = 96;
+inner_w = 372;      # room for the dots inside the entry
+cur_d = 0;
 
 label = Sprite(label_img);
 entry = Sprite(entry_img);
@@ -148,6 +150,8 @@ for (i = 0; i < max_bullets; i = i + 1) {
   bullets[i].SetOpacity(0);
 }
 
+dot_step = 22;
+dot_d = 14;
 angle = 0;
 tick = 0;
 prompt_target = 0;
@@ -158,34 +162,46 @@ shake = 0;
 shake_t = 0;
 
 fun refresh_callback() {
-  tick = tick + 1;
-  angle = angle + 0.085;
+  global.tick = tick + 1;
+  global.angle = angle + 0.085;
   rot = arc_img.Rotate(angle);
   arc.SetImage(rot);
   arc.SetPosition(cx - rot.GetWidth() / 2, cy - rot.GetHeight() / 2, 2);
   dot.SetOpacity(0.7 + 0.3 * Math.Sin(tick * 0.06));
 
-  prompt_alpha = prompt_alpha + (prompt_target - prompt_alpha) * 0.18;
+  global.prompt_alpha = prompt_alpha + (prompt_target - prompt_alpha) * 0.18;
 
   off = 0;
   if (shake > 0.5) {
     off = Math.Sin(shake_t * 1.2) * shake;
-    shake = shake * 0.9;
-    shake_t = shake_t + 1;
+    global.shake = shake * 0.9;
+    global.shake_t = shake_t + 1;
   } else {
-    shake = 0;
+    global.shake = 0;
   }
 
   label.SetPosition(lx + off, ly, 10);
   label.SetOpacity(prompt_alpha);
   entry.SetPosition(ex + off, ey, 10);
   entry.SetOpacity(prompt_alpha);
-  for (i = 0; i < max_bullets; i = i + 1) {
-    bullets[i].SetPosition(ex + off + 34 + i * 22, ey + entry_img.GetHeight() / 2 - bullet_img.GetHeight() / 2, 11);
-    if (i < bullet_count) {
-      bullets[i].SetOpacity(prompt_alpha);
-    } else {
-      bullets[i].SetOpacity(0);
+  for (i = 0; i < bullet_count; i = i + 1) {
+    bullets[i].SetPosition(ex + off + 34 + i * dot_step, ey + entry_img.GetHeight() / 2 - dot_d / 2, 11);
+    bullets[i].SetOpacity(prompt_alpha);
+  }
+}
+
+# every typed character is one dot; a long passphrase squeezes the dots (and shrinks them) so all of it stays inside the entry
+fun layout_dots(count) {
+  global.dot_step = inner_w / count;
+  if (dot_step > 22) { global.dot_step = 22; }
+  global.dot_d = Math.Int(dot_step * 0.64);
+  if (dot_d > 14) { global.dot_d = 14; }
+  if (dot_d < 4) { global.dot_d = 4; }
+  if (dot_d != cur_d) {
+    global.cur_d = dot_d;
+    small = bullet_img.Scale(dot_d, dot_d);
+    for (i = 0; i < max_bullets; i = i + 1) {
+      bullets[i].SetImage(small);
     }
   }
 }
@@ -194,19 +210,27 @@ Plymouth.SetRefreshFunction(refresh_callback);
 fun display_password_callback(prompt, count) {
   # the box empties right after a submit: a wrong passphrase shakes it
   if (prev_bullets > 1 && count == 0) {
-    shake = 14;
-    shake_t = 0;
+    global.shake = 14;
+    global.shake_t = 0;
   }
-  prev_bullets = count;
-  bullet_count = count;
-  prompt_target = 1;
+  if (count > max_bullets) { count = max_bullets; }
+  if (count > 0) { layout_dots(count); }
+  for (i = count; i < max_bullets; i = i + 1) {
+    bullets[i].SetOpacity(0);
+  }
+  global.prev_bullets = count;
+  global.bullet_count = count;
+  global.prompt_target = 1;
 }
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
 
 fun display_normal_callback() {
-  prompt_target = 0;
-  prev_bullets = -1;
-  bullet_count = 0;
+  global.prompt_target = 0;
+  global.prev_bullets = -1;
+  global.bullet_count = 0;
+  for (i = 0; i < max_bullets; i = i + 1) {
+    bullets[i].SetOpacity(0);
+  }
 }
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
 PLYSCRIPT
