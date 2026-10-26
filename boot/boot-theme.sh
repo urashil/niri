@@ -201,7 +201,8 @@ terminal-font: "$F16"
 THEME
   run install -m644 "$WORK/theme.txt" "$D/theme.txt"
   backup /etc/default/grub
-  run sed -i -e '/^GRUB_THEME=/d' /etc/default/grub
+  run sed -i -e '/^GRUB_THEME=/d' -e '/^#\?GRUB_DISABLE_OS_PROBER=/d' /etc/default/grub
+  if [ "$DRY" = 1 ]; then echo "+ echo GRUB_DISABLE_OS_PROBER=true >> /etc/default/grub"; else echo 'GRUB_DISABLE_OS_PROBER=true' >> /etc/default/grub; fi
   if [ "$DRY" = 1 ]; then echo "+ echo GRUB_THEME=$D/theme.txt >> /etc/default/grub"; else echo "GRUB_THEME=\"$D/theme.txt\"" >> /etc/default/grub; fi
   run grub-mkconfig -o /boot/grub/grub.cfg
   echo "done. Reboot to see the theme. To undo: restore /etc/default/grub.bak and run grub-mkconfig again."
