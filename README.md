@@ -21,3 +21,14 @@ PIA: everything goes through `piactl`; the TCP/443 transport has to be pinned on
 settings VPN page, which asks for a password) because `piactl` has no port setting.
 
 Neovim: `lua/palette.lua` is rewritten by matugen and re-applied live in every running Neovim.
+
+Agent utilities (for scripts and AI agents):
+- `notify-me "message" [-t title] [-p priority] [-g tags]` sends an ntfy push using `~/.config/rice/.env`
+  (`NTFY_URL`, `NTFY_PASSWORD`, optional `NTFY_USER`). `--dry-run` shows what would be sent.
+- `caffeine-off [--lock]` switches caffeine / super caffeine off and turns the screen off at the same time.
+
+Timer and todo: `Mod+Alt+T`, the chips next to the clock, the launcher (`t 25`, `todo buy milk`), or
+`quickshell -c bar ipc call focus timer 25` / `focus todo "text"`.
+
+Boot look: `sudo bash boot/boot-theme.sh status` first. This machine boots systemd-boot + UKIs, so `splash`
+(picture in the kernel image) and `plymouth` (extra boot entry, normal entry untouched) apply; `grub` only if GRUB is real.

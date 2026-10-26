@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# caffeine-off [--lock]
+# For scripts and AI agents to run when they finish: switches caffeine / super caffeine off and turns the
+# screen off at the same time. --lock also locks the session first. Safe to run when caffeine is already off.
+lock=0; [ "${1:-}" = "--lock" ] && lock=1
+[ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] && { sed -n '2,4p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+
+quickshell -c bar ipc call caffeine off >/dev/null 2>&1
+[ "$lock" = 1 ] && { "$HOME/.local/bin/lock"; }
+sleep 0.4
+niri msg action power-off-monitors >/dev/null 2>&1
+echo "caffeine off, screen off"

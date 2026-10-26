@@ -72,6 +72,22 @@ PanelWindow {
             }
             return out;
         }
+        if (q === "t" || q.startsWith("t ")) {
+            const n = parseInt(q.slice(2).trim());
+            if (n > 0) out.push({ title: "Start a " + n + " minute timer", sub: "timer", icon: iconFor("alarm-clock"), go: () => Focus.start(n) });
+            out.push({ title: "Pomodoro  " + Focus.workMin + " / " + Focus.breakMin, sub: "timer", icon: iconFor("alarm-clock"), go: () => Focus.startPomodoro() });
+            out.push({ title: "Stopwatch", sub: "timer", icon: iconFor("chronometer"), go: () => Focus.startStopwatch() });
+            if (Focus.active) {
+                out.push({ title: Focus.paused ? "Resume the timer" : "Pause the timer", sub: Focus.clockText, icon: iconFor("media-playback-pause"), go: () => Focus.toggle() });
+                out.push({ title: "Stop the timer", sub: Focus.clockText, icon: iconFor("media-playback-stop"), go: () => Focus.stop() });
+            }
+            return out;
+        }
+        if (q.startsWith("todo ") || q.startsWith("td ")) {
+            const t = q.replace(/^(todo|td)\s+/, "").trim();
+            if (t) out.push({ title: "Add todo:  " + t, sub: Focus.openCount + " open", icon: iconFor("task-new"), go: () => Focus.addTodo(t) });
+            return out;
+        }
         if (q.startsWith(">")) {
             const c = q.slice(1).trim();
             if (c) out.push({ title: "Run  " + c, sub: "shell", icon: iconFor("utilities-terminal"), go: () => run(["sh", "-c", c]) });
@@ -141,7 +157,7 @@ PanelWindow {
             anchors { left: parent.left; leftMargin: 24; top: parent.top; topMargin: 66 }
             spacing: 14
             Repeater {
-                model: [["w", "windows"], ["c", "clipboard"], [">", "run"], ["s", "web"], ["1+2", "calc"]]
+                model: [["w", "windows"], ["c", "clipboard"], [">", "run"], ["s", "web"], ["t", "timer"], ["todo", "add task"], ["1+2", "calc"]]
                 delegate: Text {
                     required property var modelData
                     text: modelData[0] + "  " + modelData[1]

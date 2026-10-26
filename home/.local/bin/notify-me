@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# notify-me "message" [-t title] [-p 1-5|min|low|default|high|urgent] [-g tag,tag] [--dry-run]
+# Sends a push notification through ntfy. Credentials come from ~/.config/rice/.env
+# (NTFY_URL, NTFY_PASSWORD, optional NTFY_USER). Meant for scripts and AI agents: no prompts, exit code
+# 0 on success. Never prints the credentials.
+set -u
+ENV="${NOTIFY_ENV:-$HOME/.config/rice/.env}"
+usage() { sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-1}"; }
+
+title=""; prio=""; tags=""; dry=0; msg=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -t|--title)    title="${2:-}"; shift 2 ;;
+    -p|--priority) prio="${2:-}"; shift 2 ;;
+    -g|--tags)     tags="${2:-}"; shift 2 ;;
+    --dry-run)     dry=1; shift ;;
+    -h|--help)     usage 0 ;;
+    --)            shift; msg="${msg:+$msg }$*"; break ;;
+    *)             msg="${msg:+$msg }$1"; shift ;;
+  esac
+done
+[ -n "$msg" ] || { echo "notify-me: no message given" >&2; usage 1; }
+
+[ -r "$ENV" ] || { echo "notify-me: $ENV is missing or unreadable" >&2; exit 2; }
+# read KEY=VALUE lines without executing anything in the file
+get() { grep -m1 -E "^[[:space:]]*$1=" "$ENV" | sed -E "s/^[[:space:]]*$1=//; s/^\"(.*)\"$/\1/; s/^'(.*)'$/\1/"; }
+url=$(get NTFY_URL); pass=$(get NTFY_PASSWORD); user=$(get NTFY_USER)
+[ -n "$url" ]  || { echo "notify-me: NTFY_URL is not set in $ENV" >&2; exit 2; }
+[ -n "$pass" ] || { echo "notify-me: NTFY_PASSWORD is not set in $ENV" >&2; exit 2; }
+
+args=(-sS --fail-with-body --max-time 15 -X POST)
+case "$pass" in
+  tk_*) args+=(-H "Authorization: Bearer $pass") ;;
+  *)    args+=(-u "${user}:${pass}") ;;
+esac
+[ -n "$title" ] && args+=(-H "Title: $title")
+[ -n "$prio" ]  && args+=(-H "Priority: $prio")
+[ -n "$tags" ]  && args+=(-H "Tags: $tags")
+args+=(--data-raw "$msg" "$url")
+
+if [ "$dry" = 1 ]; then
+  echo "would POST to: $url"
+  echo "title=[$title] priority=[$prio] tags=[$tags] auth=$([ "${pass#tk_}" != "$pass" ] && echo token || echo "basic(user=${user:-<empty>})")"
+  echo "message: $msg"
+  exit 0
+fi
+out=$(curl "${args[@]}" 2>&1) || { echo "notify-me: failed: $(printf '%s' "$out" | tr -d '\r' | head -c 300)" >&2; exit 1; }
+echo "sent"

@@ -120,6 +120,7 @@ PanelWindow {
                           : win.page === "vpn" ? vpnPage.implicitHeight
                           : win.page === "weather" ? weatherPage.implicitHeight
                           : win.page === "caffeine" ? caffeinePage.implicitHeight
+                          : win.page === "power" ? powerPage.implicitHeight
                           : privPage.implicitHeight
 
             // ================= main =================
@@ -187,6 +188,8 @@ PanelWindow {
                         title: "Power profile"
                         subtitle: PowerProfiles.profile === PowerProfile.PowerSaver ? "Power saver" : PowerProfiles.profile === PowerProfile.Performance ? "Performance" : "Balanced"
                         on: PowerProfiles.profile !== PowerProfile.Balanced
+                        chevron: true
+                        onOpened: UiState.quickPage = "power"
                         onToggled: PowerProfiles.profile = PowerProfiles.profile === PowerProfile.Balanced ? PowerProfile.Performance
                                   : PowerProfiles.profile === PowerProfile.Performance ? PowerProfile.PowerSaver : PowerProfile.Balanced
                     }
@@ -585,6 +588,57 @@ PanelWindow {
                     Layout.fillWidth: true; wrapMode: Text.Wrap
                     text: "Block manual suspend: the power menu's suspend does nothing while super caffeine is on."
                     font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
+                }
+            }
+
+            // ================= power profile =================
+            ColumnLayout {
+                id: powerPage
+                visible: win.page === "power"
+                width: parent.width
+                spacing: 10
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
+                    Text { text: "Power profile"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
+                    Controls.Switch { on: Power.auto; onToggled: Power.set("auto", !Power.auto) }
+                }
+                Text { text: "Right now"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "Power saver"; on: PowerProfiles.profile === PowerProfile.PowerSaver; onClicked: PowerProfiles.profile = PowerProfile.PowerSaver }
+                    Controls.Chip { label: "Balanced"; on: PowerProfiles.profile === PowerProfile.Balanced; onClicked: PowerProfiles.profile = PowerProfile.Balanced }
+                    Controls.Chip { label: "Performance"; on: PowerProfiles.profile === PowerProfile.Performance; onClicked: PowerProfiles.profile = PowerProfile.Performance }
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: Power.auto ? "Automation is on: the profile changes when you plug in, unplug, or the battery gets low. A profile you pick by hand sticks until the next change." : "Automation is off: the profile only changes when you change it."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
+                }
+                Text { text: "Power saver when the battery is at or below"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Repeater {
+                        model: [[0, "Never"],[50, "50%"],[40, "40%"],[30, "30%"],[20, "20%"]]
+                        delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Power.lowAt === modelData[0]; onClicked: Power.set("lowAt", modelData[0]) }
+                    }
+                }
+                Text { text: "When plugged in"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Repeater {
+                        model: [["keep", "Keep"],["balanced", "Balanced"],["performance", "Performance"]]
+                        delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Power.onCharger === modelData[0]; onClicked: Power.set("onCharger", modelData[0]) }
+                    }
+                }
+                Text { text: "When unplugged"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Repeater {
+                        model: [["keep", "Keep"],["balanced", "Balanced"],["power-saver", "Power saver"]]
+                        delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Power.onBattery === modelData[0]; onClicked: Power.set("onBattery", modelData[0]) }
+                    }
                 }
             }
 

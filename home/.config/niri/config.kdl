@@ -503,6 +503,7 @@ binds {
     Ctrl+Shift+Escape hotkey-overlay-title="Task Monitor" { spawn "quickshell" "-c" "bar" "ipc" "call" "monitor" "open" "cpu"; }
     Mod+Alt+R hotkey-overlay-title="Record Screen (toggle)" { spawn "/home/nyx/.local/bin/rec" "toggle"; }
     Mod+Alt+Shift+R hotkey-overlay-title="Record Region" { spawn "/home/nyx/.local/bin/rec" "region"; }
+    Mod+Alt+T hotkey-overlay-title="Timer / Todo" { spawn "quickshell" "-c" "bar" "ipc" "call" "focus" "open" "timer"; }
     Mod+Y hotkey-overlay-title="Clipboard History" { spawn "/home/nyx/.local/bin/clip"; }
     Mod+Shift+S hotkey-overlay-title="Screenshot + Annotate" { spawn "/home/nyx/.local/bin/shot" "region"; }
     Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "/home/nyx/.local/bin/scratch"; }

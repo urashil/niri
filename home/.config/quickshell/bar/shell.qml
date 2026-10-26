@@ -11,6 +11,7 @@ ShellRoot {
     MediaPopup {}
     Launcher {}
     Monitor {}
+    FocusPanel {}
     Switcher {}
     PowerMenu {}
     WallpaperPicker {}
@@ -33,6 +34,16 @@ ShellRoot {
         function toggle(): void { UiState.monitor = !UiState.monitor; }
         function open(tab: string): void { UiState.monitorTab = tab; UiState.monitor = true; }
     }
+    IpcHandler {
+        target: "focus"
+        function toggle(): void { UiState.focusOpen = !UiState.focusOpen; }
+        function open(tab: string): void { UiState.focusTab = tab; UiState.focusOpen = true; }
+        function timer(minutes: int): void { Focus.start(minutes); }
+        function pomodoro(): void { Focus.startPomodoro(); }
+        function stopwatch(): void { Focus.startStopwatch(); }
+        function stop(): void { Focus.stop(); }
+        function todo(text: string): void { Focus.addTodo(text); }
+    }
     IpcHandler { target: "launcher";  function toggle(): void { UiState.launcher = !UiState.launcher; } }
     IpcHandler {
         target: "switcher"
@@ -44,6 +55,7 @@ ShellRoot {
         target: "caffeine"
         function toggle(): void { UiState.caffeine = !UiState.caffeine; }
         function cycle(): void { UiState.cycleCaffeine(); }
+        function off(): void { UiState.superCaffeine = false; UiState.caffeine = false; }
         function superMode(): void { UiState.superCaffeine = !UiState.superCaffeine; }
     }
 }

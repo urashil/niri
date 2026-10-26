@@ -101,7 +101,7 @@ Scope {
     }
 
     // per-network rules apply as soon as Wi-Fi connects
-    Component.onCompleted: { Automation.rules; Caffeine.lid; }
+    Component.onCompleted: { Automation.rules; Caffeine.lid; Power.auto; Focus.mode; }
 
     // ---- vpn ----
     property string lastVpn: ""

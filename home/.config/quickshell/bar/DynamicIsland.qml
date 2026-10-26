@@ -23,6 +23,7 @@ Rectangle {
     // idle: clock
     Row {
         id: clockRow
+        z: 3
         anchors.centerIn: parent
         spacing: 10
         opacity: root.active ? 0 : 1
@@ -30,6 +31,33 @@ Rectangle {
         Glyph { text: ""; color: Theme.primary; font.pixelSize: 14 }
         Label { text: Qt.formatDateTime(clock.date, "ddd d MMM"); color: Theme.textDim }
         Label { text: Qt.formatDateTime(clock.date, "HH:mm:ss"); font.weight: Font.Bold }
+
+        // timer chip (running timer: remaining time, red in the last minute)
+        Item {
+            visible: Focus.active
+            width: tRow.implicitWidth; height: Theme.islandHeight
+            Row {
+                id: tRow
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                Glyph { text: "\uf252"; font.pixelSize: 13; color: Focus.paused ? Theme.outline : Focus.urgent ? Theme.red : Theme.primary; height: Theme.islandHeight }
+                Label { text: Focus.clockText; font.weight: Font.Bold; color: Focus.paused ? Theme.textDim : Focus.urgent ? Theme.red : Theme.text }
+            }
+            MouseArea { anchors.fill: parent; anchors.margins: -4; z: 5; cursorShape: Qt.PointingHandCursor; onClicked: UiState.openFocus("timer") }
+        }
+        // todo chip (open tasks)
+        Item {
+            visible: Focus.openCount > 0
+            width: dRow.implicitWidth; height: Theme.islandHeight
+            Row {
+                id: dRow
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                Glyph { text: "\uf046"; font.pixelSize: 13; color: Theme.green; height: Theme.islandHeight }
+                Label { text: Focus.openCount; color: Theme.textDim }
+            }
+            MouseArea { anchors.fill: parent; anchors.margins: -4; z: 5; cursorShape: Qt.PointingHandCursor; onClicked: UiState.openFocus("todo") }
+        }
     }
 
     // active: event
