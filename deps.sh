@@ -59,6 +59,14 @@ if [ -f "$BOOT_DIR/switch-to-grub.sh" ]; then
   bash "$BOOT_DIR/switch-to-grub.sh" || echo "   (the GRUB step stopped; the boot setup is unchanged, see the message above)"
 fi
 
+echo "==> boot screens (GRUB theme + Plymouth passphrase entry)"
+# SKIP_BOOT_THEME=1 sudo bash deps.sh skips this. The normal boot entry is never replaced:
+# the GRUB theme only restyles the menu and Plymouth is built as an extra entry.
+if [ -z "${SKIP_BOOT_THEME:-}" ] && [ -f "$BOOT_DIR/boot-theme.sh" ]; then
+  bash "$BOOT_DIR/boot-theme.sh" grub || echo "   (GRUB theme step stopped, see above)"
+  bash "$BOOT_DIR/boot-theme.sh" plymouth || echo "   (Plymouth step stopped, see above)"
+fi
+
 echo "==> login shell"
 if [ "$(getent passwd "$USER_NAME" | cut -d: -f7)" != /usr/bin/zsh ]; then
   chsh -s /usr/bin/zsh "$USER_NAME" && echo "   login shell -> zsh (next login)"

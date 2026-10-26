@@ -21,6 +21,8 @@ swaylock if it does not engage within 4 s. `LOCK_TEST=1 lock` auto-unlocks after
 PIA: everything goes through `piactl`; the TCP/443 transport has to be pinned once (PIA app, or the quick
 settings VPN page, no password prompt once deps.sh has installed the polkit rule) because `piactl` has no port setting.
 
+Clipboard history keeps only the last 60 minutes (`clip-prune --daemon`, started by niri; `CLIP_MAX_MIN` changes it, `clip-prune --wipe` clears it).
+
 Neovim: `lua/palette.lua` is rewritten by matugen and re-applied live in every running Neovim.
 
 Agent utilities (for scripts and AI agents):
@@ -31,7 +33,7 @@ Agent utilities (for scripts and AI agents):
 Timer and todo: `Mod+Alt+T`, the chips next to the clock, the launcher (`t 25`, `todo buy milk`), or
 `quickshell -c bar ipc call focus timer 25` / `focus todo "text"`.
 
-Boot: this machine boots GRUB 2.16, which starts the unified kernel images (UKIs) in /boot/EFI/Linux.
+Boot: `sudo bash deps.sh` also applies the GRUB theme and builds the extra Plymouth entry (`SKIP_BOOT_THEME=1` skips). This machine boots GRUB 2.16, which starts the unified kernel images (UKIs) in /boot/EFI/Linux.
 `boot/switch-to-grub.sh` (called by deps.sh) reads the running loader from the LoaderInfo firmware variable and
 does nothing when it already says GRUB; on systemd-boot it installs GRUB beside it and only makes it first after checks.
 `sudo bash boot/boot-theme.sh status` first; `grub` themes the menu, `splash` puts a matching picture in the kernel

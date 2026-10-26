@@ -277,6 +277,7 @@ spawn-at-startup "quickshell" "-c" "bar"
 spawn-at-startup "xwayland-satellite"
 spawn-sh-at-startup "wl-paste --type text --watch cliphist store"
 spawn-sh-at-startup "wl-paste --type image --watch cliphist store"
+spawn-at-startup "/home/nyx/.local/bin/clip-prune" "--daemon"
 // Lock before suspend (lid close -> logind suspend), lock after 5 min idle, screens off after 10.
 spawn-sh-at-startup "swayidle -w before-sleep '/home/nyx/.local/bin/lock' lock '/home/nyx/.local/bin/lock' timeout 300 '/home/nyx/.local/bin/lock' timeout 600 'niri msg action power-off-monitors'"
 spawn-at-startup "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
