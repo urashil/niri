@@ -49,7 +49,8 @@ else
   alias ll='ls -lah'
   alias la='ls -A'
 fi
-(( $+commands[bat] )) && { alias cat='bat --paging=never --theme=ansi'; export MANPAGER="sh -c 'col -bx | bat -l man -p --theme=ansi'"; }
+# coloured man pages only; plain `cat` stays plain so copying works
+(( $+commands[bat] )) && export MANPAGER="sh -c 'col -bx | bat -l man -p --theme=ansi'"
 (( $+commands[btop] )) && alias top=btop
 alias grep='grep --color=auto'
 alias ..='cd ..'

@@ -27,3 +27,4 @@ Switcher 1.0 Switcher.qml
 TrayMenu 1.0 TrayMenu.qml
 Monitor 1.0 Monitor.qml
 singleton Automation 1.0 Automation.qml
+singleton Caffeine 1.0 Caffeine.qml

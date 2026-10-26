@@ -101,7 +101,7 @@ Scope {
     }
 
     // per-network rules apply as soon as Wi-Fi connects
-    Component.onCompleted: Automation.rules
+    Component.onCompleted: { Automation.rules; Caffeine.lid; }
 
     // ---- vpn ----
     property string lastVpn: ""
@@ -197,8 +197,17 @@ Scope {
     Process {
         id: superLock
         running: UiState.superCaffeine
-        command: ["systemd-inhibit", "--what=handle-lid-switch:sleep:idle", "--who=rice", "--why=Super caffeine", "--mode=block", "sleep", "infinity"]
+        command: ["systemd-inhibit", "--what=" + (Caffeine.blockSuspend ? "handle-lid-switch:sleep:idle" : "handle-lid-switch:idle"), "--who=rice", "--why=Super caffeine", "--mode=block", "sleep", "infinity"]
     }
+    Connections {
+        target: Caffeine
+        function onBlockSuspendChanged() {
+            if (!UiState.superCaffeine) return;
+            superLock.running = false;
+            relaunch.restart();
+        }
+    }
+    Timer { id: relaunch; interval: 300; onTriggered: superLock.running = Qt.binding(() => UiState.superCaffeine) }
     Process { id: superFlag }
     Process {
         id: superRestore

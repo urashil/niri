@@ -119,6 +119,7 @@ PanelWindow {
                           : win.page === "audio" ? audioPage.implicitHeight
                           : win.page === "vpn" ? vpnPage.implicitHeight
                           : win.page === "weather" ? weatherPage.implicitHeight
+                          : win.page === "caffeine" ? caffeinePage.implicitHeight
                           : privPage.implicitHeight
 
             // ================= main =================
@@ -174,9 +175,11 @@ PanelWindow {
                         Layout.fillWidth: true
                         icon: UiState.superCaffeine ? "\uf023" : "\uf0f4"
                         title: UiState.superCaffeine ? "Super caffeine" : "Caffeine"
-                        subtitle: UiState.superCaffeine ? "" : UiState.caffeine ? "Screen stays on · tap for super" : "Idle lock on"
+                        subtitle: UiState.caffeine ? ((UiState.superCaffeine ? "" : "Screen stays on") + (Caffeine.remaining !== "" ? (UiState.superCaffeine ? "" : " · ") + Caffeine.remaining : "")) : "Idle lock on"
                         on: UiState.caffeine
-                        onToggled: UiState.cycleCaffeine()
+                        chevron: true
+                        onToggled: UiState.quickPage = "caffeine"
+                        onOpened: UiState.quickPage = "caffeine"
                     }
                     Controls.Tile {
                         Layout.fillWidth: true
@@ -504,6 +507,85 @@ PanelWindow {
                     }
                 }
                 Text { visible: mixer.count === 0; text: "Nothing is playing"; font.family: Theme.font; font.pixelSize: 11; color: Theme.outline }
+            }
+
+            // ================= caffeine =================
+            ColumnLayout {
+                id: caffeinePage
+                visible: win.page === "caffeine"
+                width: parent.width
+                spacing: 10
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
+                    Text { text: "Caffeine"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
+                    Text { visible: Caffeine.remaining !== ""; text: Caffeine.remaining; font.family: Theme.font; font.pixelSize: 11; color: Theme.yellow }
+                }
+
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "Off"; on: !UiState.caffeine; onClicked: { UiState.superCaffeine = false; UiState.caffeine = false; } }
+                    Controls.Chip { label: "Caffeine"; accent: Theme.yellow; on: UiState.caffeine && !UiState.superCaffeine; onClicked: { UiState.superCaffeine = false; UiState.caffeine = true; } }
+                    Controls.Chip { label: "Super"; accent: Theme.red; on: UiState.superCaffeine; onClicked: UiState.superCaffeine = true }
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: "Caffeine keeps the screen on and stops the idle lock. Super also stops the machine suspending, and the options below decide what still happens."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
+                }
+
+                Text { text: "Stop automatically after"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Repeater {
+                        model: [[0, "Never"],[30, "30 min"],[60, "1 hour"],[120, "2 hours"],[240, "4 hours"]]
+                        delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Caffeine.stopAfter === modelData[0]; onClicked: Caffeine.set("stopAfter", modelData[0]) }
+                    }
+                }
+                Text { text: "Stop when the battery drops below"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Repeater {
+                        model: [[0, "Never"],[30, "30%"],[20, "20%"],[10, "10%"]]
+                        delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Caffeine.cutoff === modelData[0]; onClicked: Caffeine.set("cutoff", modelData[0]) }
+                    }
+                }
+
+                Text { text: "SUPER CAFFEINE"; font.family: Theme.font; font.pixelSize: 10; font.bold: true; color: Theme.red; Layout.topMargin: 4 }
+                Text { text: "When the lid closes"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Repeater {
+                        model: [["lockoff", "Lock + screen off"],["lock", "Lock only"],["none", "Do nothing"]]
+                        delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Caffeine.lid === modelData[0]; onClicked: Caffeine.set("lid", modelData[0]) }
+                    }
+                }
+                Text { text: "Lock when idle for"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Repeater {
+                        model: [[0, "Never"],[5, "5 min"],[15, "15 min"],[30, "30 min"]]
+                        delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Caffeine.idleLock === modelData[0]; onClicked: Caffeine.set("idleLock", modelData[0]) }
+                    }
+                }
+                Text { text: "Screen off when idle for"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Repeater {
+                        model: [[0, "Never"],[5, "5 min"],[15, "15 min"],[30, "30 min"]]
+                        delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Caffeine.screenOff === modelData[0]; onClicked: Caffeine.set("screenOff", modelData[0]) }
+                    }
+                }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "Block manual suspend"; on: Caffeine.blockSuspend; onClicked: Caffeine.set("blockSuspend", !Caffeine.blockSuspend) }
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: "Block manual suspend: the power menu's suspend does nothing while super caffeine is on."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
+                }
             }
 
             // ================= vpn (PIA) =================

@@ -5,10 +5,16 @@
 STATE="$HOME/.cache/rice"
 # Super caffeine: stay running (logind is blocked from suspending) but lock and turn the screen off
 if [ -f "$STATE/super" ]; then
-  "$HOME/.local/bin/lock" &
-  sleep 1
-  niri msg action power-off-monitors
-  exit 0
+  # what to do is chosen in the caffeine menu (written to super-lid): lockoff (default) | lock | none
+  case "$(cat "$STATE/super-lid" 2>/dev/null)" in
+    none) exit 0 ;;
+    lock) exec "$HOME/.local/bin/lock" ;;
+    *)
+      "$HOME/.local/bin/lock" &
+      sleep 1
+      niri msg action power-off-monitors
+      exit 0 ;;
+  esac
 fi
 
 "$HOME/.local/bin/lock" &

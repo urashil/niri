@@ -196,7 +196,12 @@ Variants {
                         visible: UiState.caffeine
                         text: UiState.superCaffeine ? "\uf023" : "\uf0f4"
                         color: UiState.superCaffeine ? Theme.red : Theme.yellow
-                        MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: UiState.cycleCaffeine() }
+                        MouseArea {
+                            anchors.fill: parent; anchors.margins: -4
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                            onClicked: mouse => { if (mouse.button === Qt.MiddleButton) { UiState.superCaffeine = false; UiState.caffeine = false; } else UiState.openQuick("caffeine"); }
+                        }
                     }
 
                     // vpn (PIA): left = page, middle = connect/disconnect
