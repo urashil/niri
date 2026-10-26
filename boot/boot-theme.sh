@@ -39,13 +39,17 @@ rgb() { printf '%d %d %d' "0x${1:0:2}" "0x${1:2:2}" "0x${1:4:2}"; }
 detect() {
   # the running loader announces itself in the LoaderInfo firmware variable (entry names in the firmware menu can be stale)
   LOADER="unknown"
-  info=$(tail -c +5 /sys/firmware/efi/efivars/LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')
+  info=$(tail -c +5 /sys/firmware/efi/efivars/LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0' || true)
   case "$info" in
     GRUB*) LOADER="grub" ;;
     systemd-boot*) LOADER="systemd-boot" ;;
   esac
+  # our own menu entries start the image directly, so GRUB no longer sets LoaderInfo: recognise it by its menu instead
+  if [ "$LOADER" = unknown ] && [ -z "$info" ] && { [ -e /etc/grub.d/15_rice ] || [ -f /boot/grub/grub.cfg ]; }; then
+    LOADER="grub"; info="GRUB (LoaderInfo not set; the rice menu entries start the image)"
+  fi
   LOADER_INFO="$info"
-  UKI=0; grep -q '^default_uki=' /etc/mkinitcpio.d/linux-hardened.preset 2>/dev/null && UKI=1
+  UKI=0; grep -q '^default_uki=' /etc/mkinitcpio.d/linux-hardened.preset 2>/dev/null && UKI=1 || true
 }
 
 # ---- artwork: the lock screen look (blurred, darkened wallpaper + an accent ring) ----

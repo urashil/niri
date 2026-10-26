@@ -33,7 +33,9 @@ if [ "$DRY" = 0 ] && [ "$(id -u)" -ne 0 ]; then echo "run with sudo (or add --dr
 
 # ---------- which loader is running now? ----------
 [ -d /sys/firmware/efi ] || skip "not a UEFI boot, nothing to do"
-INFO=$(tail -c +5 /sys/firmware/efi/efivars/LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')
+INFO=$(tail -c +5 /sys/firmware/efi/efivars/LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0' || true)
+# the rice menu entries start the image directly, so GRUB no longer sets LoaderInfo; its own menu marks it
+[ -z "$INFO" ] && { [ -e /etc/grub.d/15_rice ] || [ -f /boot/grub/grub.cfg ]; } && INFO="GRUB (rice menu)"
 say "boot loader check"
 echo "running loader: ${INFO:-unknown}"
 case "$INFO" in
