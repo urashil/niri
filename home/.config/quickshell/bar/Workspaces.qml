@@ -28,7 +28,7 @@ Island {
             anchors.verticalCenter: parent ? parent.verticalCenter : undefined
             height: 24
             radius: 12
-            width: wins.length === 0 ? (active ? 28 : 10) : shown * 20 + 10 + (wins.length > 3 ? 14 : 0)
+            width: wins.length === 0 ? (active ? 24 : 10) : shown * 20 + 10 + (wins.length > 3 ? 14 : 0)
             color: active ? Theme.primaryContainer : wins.length > 0 ? Theme.surfaceHigh : "transparent"
             border.width: active ? 1 : 0
             border.color: Theme.primary
@@ -40,9 +40,8 @@ Island {
             Rectangle {
                 visible: pill.wins.length === 0
                 anchors.centerIn: parent
-                width: pill.active ? 28 : 10; height: 10; radius: 5
+                width: 10; height: 10; radius: 5
                 color: pill.active ? Theme.primary : Qt.alpha(Theme.outline, 0.55)
-                Behavior on width { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
             }
 
             Row {
