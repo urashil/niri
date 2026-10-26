@@ -18,7 +18,7 @@ swaylock if it does not engage within 4 s. `LOCK_TEST=1 lock` auto-unlocks after
 `LOCK_PREVIEW=1 quickshell -c lock` shows the UI in a normal window.
 
 PIA: everything goes through `piactl`; the TCP/443 transport has to be pinned once (PIA app, or the quick
-settings VPN page, which asks for a password) because `piactl` has no port setting.
+settings VPN page, no password prompt once deps.sh has installed the polkit rule) because `piactl` has no port setting.
 
 Neovim: `lua/palette.lua` is rewritten by matugen and re-applied live in every running Neovim.
 
