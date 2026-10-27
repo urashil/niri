@@ -22,7 +22,7 @@ pacman -S --needed --noconfirm \
 
 # the base desktop and the tools the boot / lock / bar scripts call; installed one by one so one missing name cannot abort the rest
 echo "==> desktop packages"
-for pkg in niri quickshell kitty fuzzel sddm librewolf iwd bluez bluez-utils upower power-profiles-daemon polkit-gnome \
+for pkg in niri quickshell kitty fuzzel sddm librewolf iwd bluez bluez-utils upower power-profiles-daemon \
            ffmpeg librsvg imagemagick python grub efibootmgr plymouth mkinitcpio \
            ttf-jetbrains-mono-nerd ttf-nerd-fonts-symbols noto-fonts-emoji \
            qt6-svg qt6-virtualkeyboard qt6-multimedia-ffmpeg qt6-imageformats zip jq; do

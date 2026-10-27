@@ -281,7 +281,6 @@ spawn-at-startup "@HOME@/.local/bin/clip-prune" "--daemon"
 spawn-at-startup "@HOME@/.local/bin/vpn-autoconnect"
 // Lock before suspend (lid close -> logind suspend), lock after 5 min idle, screens off after 10.
 spawn-sh-at-startup "swayidle -w before-sleep '@HOME@/.local/bin/lock' lock '@HOME@/.local/bin/lock' timeout 300 '@HOME@/.local/bin/lock' timeout 600 'niri msg action power-off-monitors'"
-spawn-at-startup "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
 // spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"

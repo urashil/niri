@@ -22,6 +22,7 @@ FILES=(
   .config/quickshell/bootpreview
   .config/rice/wallpaper-modes.json
   .local/share/rice/librewolf-ext
+  .local/share/rice/emoji.tsv
   .librewolf/native-messaging-hosts/rice_theme.json
 )
 for f in "${FILES[@]}"; do

@@ -32,3 +32,42 @@
     --in-content-text-color: var(--rice-fg) !important;
   }
 }
+
+/* error pages (offline, certificate, blocked) */
+@-moz-document url-prefix(about:neterror), url-prefix(about:certerror), url-prefix(about:blocked), url-prefix(about:httpsonlyerror) {
+  :root {
+    --background-color-canvas: var(--rice-bg) !important;
+    --background-color-box: var(--rice-bg-low) !important;
+    --text-color: var(--rice-fg) !important;
+    --link-color: var(--rice-accent) !important;
+    --in-content-page-background: var(--rice-bg) !important;
+    --in-content-page-color: var(--rice-fg) !important;
+    --in-content-primary-button-background: var(--rice-accent) !important;
+    --in-content-primary-button-text-color: var(--rice-accent-fg) !important;
+    --in-content-button-background: var(--rice-bg-mid) !important;
+  }
+  body { background-color: var(--rice-bg) !important; color: var(--rice-fg) !important; }
+}
+
+/* built-in PDF viewer and reader view */
+@-moz-document url-prefix(resource://pdf.js/web/viewer.html), url-prefix(about:reader) {
+  :root {
+    --body-bg-color: var(--rice-bg) !important;
+    --toolbar-bg-color: var(--rice-bg-low) !important;
+    --toolbar-icon-bg-color: var(--rice-fg) !important;
+    --main-color: var(--rice-fg) !important;
+    --sidebar-toolbar-bg-color: var(--rice-bg-low) !important;
+    --field-bg-color: var(--rice-bg-mid) !important;
+    --field-color: var(--rice-fg) !important;
+    --field-border-color: var(--rice-outline) !important;
+    --doorhanger-bg-color: var(--rice-bg-mid) !important;
+    --doorhanger-border-color: var(--rice-outline) !important;
+    --toolbar-border-color: var(--rice-outline) !important;
+  }
+}
+
+/* plain-text files, view-source and the JSON viewer */
+@-moz-document url-prefix(view-source:), url-prefix(resource://devtools/), url-prefix(about:rights), url-prefix(about:license) {
+  body { background-color: var(--rice-bg) !important; color: var(--rice-fg) !important; }
+  a { color: var(--rice-accent) !important; }
+}

@@ -15,6 +15,7 @@ ShellRoot {
     PowerMenu {}
     WallpaperPicker {}
     Notifications {}
+    AuthPrompt {}
     Events {}
 
     // qs -c bar ipc call <target> toggle
