@@ -325,7 +325,7 @@ PanelWindow {
                         id: row
                         required property var modelData
                         width: ListView.view.width
-                        height: win.askSsid === modelData.ssid ? 96 : win.detailSsid === modelData.ssid ? 160 : 46
+                        height: win.askSsid === modelData.ssid ? 96 : win.detailSsid === modelData.ssid ? 200 : 46
                         radius: 12
                         color: modelData.connected ? Theme.primaryContainer : Theme.surfaceContainer
                         Behavior on height { NumberAnimation { duration: 160 } }
@@ -388,6 +388,11 @@ PanelWindow {
                             Controls.Chip { label: "TCP 443"; accent: Theme.yellow; on: Automation.rule(row.modelData.ssid).vpn === "443"; onClicked: Automation.set(row.modelData.ssid, "vpn", Automation.rule(row.modelData.ssid).vpn === "443" ? "" : "443") }
                             Controls.Chip { label: "VPN off"; on: Automation.rule(row.modelData.ssid).vpn === "off"; onClicked: Automation.set(row.modelData.ssid, "vpn", Automation.rule(row.modelData.ssid).vpn === "off" ? "" : "off") }
                             Controls.Chip { label: "Quiet"; on: Automation.rule(row.modelData.ssid).dnd; onClicked: Automation.set(row.modelData.ssid, "dnd", !Automation.rule(row.modelData.ssid).dnd) }
+                            Controls.Chip { label: "Sign in first"; accent: Theme.yellow; on: Automation.rule(row.modelData.ssid).login; onClicked: Automation.set(row.modelData.ssid, "login", !Automation.rule(row.modelData.ssid).login) }
+                            Text { height: 30; verticalAlignment: Text.AlignVCenter; text: "kill switch:"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                            Controls.Chip { label: "On"; on: Automation.rule(row.modelData.ssid).ks === "on"; onClicked: Automation.set(row.modelData.ssid, "ks", Automation.rule(row.modelData.ssid).ks === "on" ? "" : "on") }
+                            Controls.Chip { label: "Auto"; on: Automation.rule(row.modelData.ssid).ks === "auto"; onClicked: Automation.set(row.modelData.ssid, "ks", Automation.rule(row.modelData.ssid).ks === "auto" ? "" : "auto") }
+                            Controls.Chip { label: "Off"; on: Automation.rule(row.modelData.ssid).ks === "off"; onClicked: Automation.set(row.modelData.ssid, "ks", Automation.rule(row.modelData.ssid).ks === "off" ? "" : "off") }
                         }
 
                         // password prompt

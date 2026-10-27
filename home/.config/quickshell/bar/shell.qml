@@ -43,6 +43,12 @@ ShellRoot {
         function stop(): void { Focus.stop(); }
         function todo(text: string): void { Focus.addTodo(text); }
     }
+    IpcHandler {
+        target: "vpn"
+        function wg(): void { Vpn.useWireguard(); }
+        function school(): void { Vpn.useSchool(); }
+        function auto(): void { Vpn.useOpenvpnAuto(); }
+    }
     IpcHandler { target: "launcher";  function toggle(): void { UiState.launcher = !UiState.launcher; } }
     IpcHandler {
         target: "switcher"
