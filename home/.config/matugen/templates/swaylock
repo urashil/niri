@@ -1,4 +1,4 @@
-image=/home/nyx/.cache/rice/lock.png
+image=@HOME@/.cache/rice/lock.png
 scaling=fill
 indicator-radius=90
 indicator-thickness=8

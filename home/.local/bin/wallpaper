@@ -69,10 +69,11 @@ apply() {
   ln -sf "$img" "$STATE/lock.png"
 
   local mode; mode=$(cat "$STATE/mode" 2>/dev/null); [ "$mode" = light ] || mode=dark
-  # this wallpaper's own light/dark choice (not when restoring, so a manual toggle sticks)
+  # this wallpaper's own light/dark choice; a manual toggle (theme-mode) on this very wallpaper wins over it
   if [ -z "${WALLPAPER_KEEP_MODE:-}" ]; then
-    local want; want=$(mode_of "$img")
-    if [ -n "$want" ] && [ "$want" != "$mode" ]; then
+    local want manual
+    want=$(mode_of "$img"); manual=$(cat "$STATE/mode-manual" 2>/dev/null)
+    if [ -n "$want" ] && [ "$want" != "$mode" ] && [ "$manual" != "$img" ]; then
       WALLPAPER_KEEP_MODE=1 "$HOME/.local/bin/theme-mode" "$want" --no-restore
       mode=$want
     fi
@@ -103,7 +104,7 @@ case "${1:-next}" in
   restore)
     f=$(cat "$CUR" 2>/dev/null)
     [ -f "$f" ] || f=$(pick random)
-    WALLPAPER_KEEP_MODE=1 apply "$f" ;;
+    apply "$f" ;;
   mode)
     [ -n "${2:-}" ] || { echo "usage: wallpaper mode <file> [light|dark|auto]" >&2; exit 1; }
     if [ -z "${3:-}" ]; then echo "$(mode_of "$2")"; exit 0; fi

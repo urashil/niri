@@ -10,6 +10,8 @@ case "${1:-toggle}" in
   *) echo "usage: theme-mode [dark|light|toggle]" >&2; exit 1 ;;
 esac
 echo "$mode" > "$STATE/mode"
+# a mode chosen by hand sticks for this wallpaper (also across restarts); wallpaper uses --no-restore and leaves it alone
+[ "${2:-}" = --no-restore ] || cat "$STATE/current" > "$STATE/mode-manual" 2>/dev/null
 
 if [ "$mode" = dark ]; then theme=Nordic-darker; scheme=prefer-dark; pd=1; else theme=Adwaita; scheme=prefer-light; pd=0; fi
 gsettings set org.gnome.desktop.interface color-scheme "$scheme" 2>/dev/null

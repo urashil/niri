@@ -272,15 +272,15 @@ layout {
 // This line starts waybar, a commonly used bar for Wayland compositors.
 spawn-at-startup "awww-daemon"
 spawn-at-startup "awww-daemon" "--namespace" "backdrop"
-spawn-sh-at-startup "sleep 0.5 && /home/nyx/.local/bin/wallpaper restore"
+spawn-sh-at-startup "sleep 0.5 && @HOME@/.local/bin/wallpaper restore"
 spawn-at-startup "quickshell" "-c" "bar"
 spawn-at-startup "xwayland-satellite"
 spawn-sh-at-startup "wl-paste --type text --watch cliphist store"
 spawn-sh-at-startup "wl-paste --type image --watch cliphist store"
-spawn-at-startup "/home/nyx/.local/bin/clip-prune" "--daemon"
-spawn-at-startup "/home/nyx/.local/bin/vpn-autoconnect"
+spawn-at-startup "@HOME@/.local/bin/clip-prune" "--daemon"
+spawn-at-startup "@HOME@/.local/bin/vpn-autoconnect"
 // Lock before suspend (lid close -> logind suspend), lock after 5 min idle, screens off after 10.
-spawn-sh-at-startup "swayidle -w before-sleep '/home/nyx/.local/bin/lock' lock '/home/nyx/.local/bin/lock' timeout 300 '/home/nyx/.local/bin/lock' timeout 600 'niri msg action power-off-monitors'"
+spawn-sh-at-startup "swayidle -w before-sleep '@HOME@/.local/bin/lock' lock '@HOME@/.local/bin/lock' timeout 300 '@HOME@/.local/bin/lock' timeout 600 'niri msg action power-off-monitors'"
 spawn-at-startup "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
@@ -346,7 +346,7 @@ cursor {
 }
 
 environment {
-    PATH "/home/nyx/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin"
+    PATH "@HOME@/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin"
     DISPLAY ":0"
     QT_QPA_PLATFORM "wayland;xcb"
     QT_QPA_PLATFORMTHEME "gtk3"
@@ -466,7 +466,7 @@ layer-rule {
 
 // Lid close: lock, then make sure it sleeps (logind skips lid events for 30 s after a resume). Super caffeine ignores it.
 switch-events {
-    lid-close { spawn "/home/nyx/.local/bin/lid-close"; }
+    lid-close { spawn "@HOME@/.local/bin/lid-close"; }
 }
 
 binds {
@@ -491,7 +491,7 @@ binds {
     Mod+Shift+Space hotkey-overlay-title="Fallback launcher: fuzzel" { spawn "fuzzel"; }
     Alt+Tab repeat=false hotkey-overlay-title="Window Switcher" { spawn "quickshell" "-c" "bar" "ipc" "call" "switcher" "next"; }
     Alt+Shift+Tab repeat=false hotkey-overlay-title=null { spawn "quickshell" "-c" "bar" "ipc" "call" "switcher" "prev"; }
-    Mod+Shift+T hotkey-overlay-title="Light / Dark" { spawn "/home/nyx/.local/bin/theme-mode" "toggle"; }
+    Mod+Shift+T hotkey-overlay-title="Light / Dark" { spawn "@HOME@/.local/bin/theme-mode" "toggle"; }
 
     // Wallpaper: next random wallpaper (colors follow it via matugen).
     Mod+X hotkey-overlay-title="Power Menu" { spawn "quickshell" "-c" "bar" "ipc" "call" "power" "toggle"; }
@@ -502,15 +502,15 @@ binds {
     Mod+Shift+D hotkey-overlay-title="Do Not Disturb" { spawn "quickshell" "-c" "bar" "ipc" "call" "dnd" "toggle"; }
     Mod+Shift+B hotkey-overlay-title="Caffeine / Super caffeine" { spawn "quickshell" "-c" "bar" "ipc" "call" "caffeine" "cycle"; }
     Ctrl+Shift+Escape hotkey-overlay-title="Task Monitor" { spawn "quickshell" "-c" "bar" "ipc" "call" "monitor" "open" "cpu"; }
-    Mod+Alt+R hotkey-overlay-title="Record Screen (toggle)" { spawn "/home/nyx/.local/bin/rec" "toggle"; }
-    Mod+Alt+Shift+R hotkey-overlay-title="Record Region" { spawn "/home/nyx/.local/bin/rec" "region"; }
+    Mod+Alt+R hotkey-overlay-title="Record Screen (toggle)" { spawn "@HOME@/.local/bin/rec" "toggle"; }
+    Mod+Alt+Shift+R hotkey-overlay-title="Record Region" { spawn "@HOME@/.local/bin/rec" "region"; }
     Mod+Alt+T hotkey-overlay-title="Timer / Todo" { spawn "quickshell" "-c" "bar" "ipc" "call" "focus" "open" "timer"; }
-    Mod+Y hotkey-overlay-title="Clipboard History" { spawn "/home/nyx/.local/bin/clip"; }
-    Mod+Shift+S hotkey-overlay-title="Screenshot + Annotate" { spawn "/home/nyx/.local/bin/shot" "region"; }
-    Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "/home/nyx/.local/bin/scratch"; }
-    Ctrl+Grave hotkey-overlay-title="Next Wallpaper" { spawn "/home/nyx/.local/bin/wallpaper" "next"; }
-    Ctrl+Shift+Grave hotkey-overlay-title=null { spawn "/home/nyx/.local/bin/wallpaper" "prev"; }
-    Super+Alt+L hotkey-overlay-title="Lock the Screen" { spawn "/home/nyx/.local/bin/lock"; }
+    Mod+Y hotkey-overlay-title="Clipboard History" { spawn "@HOME@/.local/bin/clip"; }
+    Mod+Shift+S hotkey-overlay-title="Screenshot + Annotate" { spawn "@HOME@/.local/bin/shot" "region"; }
+    Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "@HOME@/.local/bin/scratch"; }
+    Ctrl+Grave hotkey-overlay-title="Next Wallpaper" { spawn "@HOME@/.local/bin/wallpaper" "next"; }
+    Ctrl+Shift+Grave hotkey-overlay-title=null { spawn "@HOME@/.local/bin/wallpaper" "prev"; }
+    Super+Alt+L hotkey-overlay-title="Lock the Screen" { spawn "@HOME@/.local/bin/lock"; }
 
     // Use spawn-sh to run a shell command. Do this if you need pipes, multiple commands, etc.
     // Note: the entire command goes as a single argument. It's passed verbatim to `sh -c`.

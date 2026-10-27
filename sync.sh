@@ -30,6 +30,8 @@ for f in "${FILES[@]}"; do
   cp -a "$HOME/$f" "home/$f"
 done
 rm -f home/.config/quickshell/bar/colors.json
+# absolute home paths become a placeholder that install.sh fills in for whoever installs it
+grep -rIl "$HOME" home 2>/dev/null | xargs -r sed -i "s|$HOME|@HOME@|g"
 cp -a ~/deps.sh deps.sh
 # wallpapers (generated placeholders named *.ai are left out), the GTK theme archive, the display manager config
 rm -rf wallpapers && mkdir -p wallpapers

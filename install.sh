@@ -44,13 +44,11 @@ while read -r f; do
   cp -a "home/$f" "$HOME/$f"
 done < <(cd home && find . -type f)
 [ "$made_bak" = 1 ] && echo "   replaced files were saved in $bak"
-# the repo was made under /home/nyx: point every absolute path at this user's home
-if [ "$HOME" != /home/nyx ]; then
-  while read -r f; do
-    case "$f" in ./.config/librewolf/*) continue ;; esac
-    grep -Iq '/home/nyx' "$HOME/$f" 2>/dev/null && sed -i "s|/home/nyx|$HOME|g" "$HOME/$f"
-  done < <(cd home && find . -type f)
-fi
+# absolute paths in the repo are stored as @HOME@ (older commits used /home/nyx): fill in this user's home
+while read -r f; do
+  case "$f" in ./.config/librewolf/*) continue ;; esac
+  grep -Iq -e '@HOME@' -e '/home/nyx' "$HOME/$f" 2>/dev/null && sed -i -e "s|@HOME@|$HOME|g" -e "s|/home/nyx|$HOME|g" "$HOME/$f"
+done < <(cd home && find . -type f)
 chmod +x "$HOME"/.local/bin/* 2>/dev/null || true
 mkdir -p "$HOME/Pictures/Screenshots" "$HOME/.cache/rice" "$HOME/.config/rice"
 # ntfy credentials for `notify-me` (never tracked by git)
