@@ -21,6 +21,7 @@ FILES=(
   .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login
   .config/quickshell/bootpreview
   .config/rice/wallpaper-modes.json
+  .config/rice/network-login.sh
   .local/share/rice/librewolf-ext
   .local/share/rice/emoji.tsv
   .librewolf/native-messaging-hosts/rice_theme.json
