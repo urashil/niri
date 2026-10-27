@@ -23,12 +23,21 @@ for _ in 1 2 3 4 5 6 7 8; do
   sleep 1
 done
 
+# the portal script's own "am I online" check can be wrong (slow portal, a stale 204), so judge by a real connectivity test
+online() {
+  [ "$(curl -s -m 5 --interface "$iface" -o /dev/null -w '%{http_code}' http://connectivitycheck.gstatic.com/generate_204)" = 204 ] && return 0
+  [ "$(curl -s -m 5 --interface "$iface" http://detectportal.firefox.com/success.txt | tr -d '[:space:]')" = success ]
+}
+wait_online() { for _ in 1 2 3 4 5 6; do online && return 0; sleep 2; done; return 1; }
+
 ok=0
 cd "$(dirname "$log")" || exit 2
 for try in 1 2 3 4; do
   say "login attempt $try"
-  if IFACE="$iface" sh "$script" >>"$log" 2>&1; then ok=1; break; fi
-  sleep 4
+  if IFACE="$iface" sh "$script" >>"$log" 2>&1; then rc=0; else rc=$?; fi
+  if wait_online; then say "online (script exit $rc)"; ok=1; break; fi
+  say "not online after attempt $try (script exit $rc)"
+  sleep 3
 done
 [ "$ok" = 1 ] || { say "login failed"; exit 3; }
 
