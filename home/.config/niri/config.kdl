@@ -274,7 +274,6 @@ spawn-at-startup "awww-daemon"
 spawn-at-startup "awww-daemon" "--namespace" "backdrop"
 spawn-sh-at-startup "sleep 0.5 && @HOME@/.local/bin/wallpaper restore"
 spawn-at-startup "quickshell" "-c" "bar"
-spawn-at-startup "xwayland-satellite"
 spawn-sh-at-startup "wl-paste --type text --watch cliphist store"
 spawn-sh-at-startup "wl-paste --type image --watch cliphist store"
 spawn-at-startup "@HOME@/.local/bin/clip-prune" "--daemon"
@@ -346,7 +345,6 @@ cursor {
 
 environment {
     PATH "@HOME@/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin"
-    DISPLAY ":0"
     QT_QPA_PLATFORM "wayland;xcb"
     QT_QPA_PLATFORMTHEME "gtk3"
     XDG_CURRENT_DESKTOP "niri"
