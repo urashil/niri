@@ -43,7 +43,7 @@ Singleton {
         return id.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
     }
 
-    function connect()    { run(["sh", "-c", "piactl background enable; piactl connect"]); }
+    function connect()    { run(["sh", "-c", "piactl background enable; timeout 20 piactl connect"]); }
     function disconnect() { run(["piactl", "disconnect"]); }
     function toggle()     { if (connected || busy) disconnect(); else connect(); }
     function setRegion(r) { run(["sh", "-c", "piactl set region '" + r + "'" + (connected ? " && piactl connect" : "")]); }
@@ -53,22 +53,22 @@ Singleton {
     // WireGuard: one piactl call, no password.
     function useWireguard() {
         pick("wireguard");
-        run(["sh", "-c", "piactl set protocol wireguard && piactl background enable; piactl connect"]);
+        run(["sh", "-c", "piactl set protocol wireguard && piactl background enable; timeout 20 piactl connect"]);
     }
     // OpenVPN over TCP 443 (the only thing a locked-down school network lets through).
     // The very first time, the transport has to be pinned in the daemon settings, which needs root once.
     function useSchool() {
         pick("school");
         if (schoolConfigured) {
-            run(["sh", "-c", "piactl set protocol openvpn && piactl background enable; piactl connect"]);
+            run(["sh", "-c", "piactl set protocol openvpn && piactl background enable; timeout 20 piactl connect"]);
         } else {
             // first time only: pin TCP/443 in the daemon settings (helper restarts the daemon), then connect
-            run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia school && piactl set protocol openvpn && piactl background enable; piactl connect"]);
+            run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia school && piactl set protocol openvpn && piactl background enable; timeout 20 piactl connect"]);
         }
     }
     function useOpenvpnAuto() {
         pick("auto");
-        run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia auto; piactl set protocol openvpn && piactl background enable; piactl connect"]);
+        run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia auto; piactl set protocol openvpn && piactl background enable; timeout 20 piactl connect"]);
     }
 
     // killswitch: always (blocks everything while the VPN is down) / auto (only while it should be up) / off
@@ -97,10 +97,19 @@ Singleton {
         id: mon
         required property string what
         property var apply
-        command: ["piactl", "monitor", what]
+        property int fails: 0
+        property real startedAt: 0
+        // pdeathsig: the monitors die with the shell instead of being left behind
+        command: ["setpriv", "--pdeathsig", "SIGTERM", "piactl", "monitor", what]
         running: true
         stdout: SplitParser { onRead: line => apply(line.trim()) }
-        onExited: restart.start()
+        onStarted: startedAt = Date.now()
+        // while the daemon is down (restarting, no network) piactl exits at once: back off instead of respawning every 3 s forever
+        onExited: {
+            fails = Date.now() - startedAt < 4000 ? Math.min(fails + 1, 5) : 0;
+            restart.interval = 3000 * Math.pow(2, fails);
+            restart.start();
+        }
         property Timer restart: Timer { interval: 3000; onTriggered: mon.running = true }
     }
     Mon { what: "connectionstate"; apply: v => { root.state = v; } }

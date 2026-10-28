@@ -12,6 +12,7 @@ Singleton {
     property var rules: ({})
     property bool prevDnd: false
     property string appliedFor: ""
+    property var lastApplied: ({})          // ssid -> ms of the last time its rule ran
 
     function rule(ssid) { return rules[ssid] || { vpn: "", dnd: false, login: false, ks: "" }; }
     function set(ssid, key, value) {
@@ -50,11 +51,15 @@ Singleton {
 
     function apply(ssid) {
         const r = rule(ssid);
+        // a flapping link must not re-run the rule over and over (each run talks to the PIA daemon): once a minute per network at most,
+        // and never while the previous run, or a VPN connect, is still going
+        if (Date.now() - (lastApplied[ssid] || 0) < 60000 || signin.running || Vpn.busy) return;
+        lastApplied[ssid] = Date.now();
         let did = [];
         if (r.dnd) { if (appliedFor === "") prevDnd = UiState.dnd; UiState.dnd = true; did.push("quiet"); }
         if (r.login || r.ks) startSignin(ssid, r);
-        else if (r.vpn === "wg") { Vpn.useWireguard(); did.push("WireGuard"); }
-        else if (r.vpn === "443") { Vpn.useSchool(); did.push("OpenVPN 443"); }
+        else if (r.vpn === "wg") { if (!(Vpn.connected && Vpn.choice === "wireguard")) Vpn.useWireguard(); did.push("WireGuard"); }
+        else if (r.vpn === "443") { if (!(Vpn.connected && Vpn.choice === "school")) Vpn.useSchool(); did.push("OpenVPN 443"); }
         else if (r.vpn === "off") { Vpn.disconnect(); did.push("VPN off"); }
         appliedFor = ssid;
         if (did.length) UiState.pulse("auto", "", ssid + " · " + did.join(" · "), -1, Theme.primary, 3500);

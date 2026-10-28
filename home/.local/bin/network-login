@@ -14,10 +14,10 @@ if [ "$login" = 1 ]; then
 [ -r "$script" ] || { say "missing $script"; exit 2; }
 
 say "vpn off, kill switch off"
-piactl disconnect >/dev/null 2>&1
+timeout 10 piactl disconnect >/dev/null 2>&1
 pia-killswitch off >>"$log" 2>&1
 for _ in 1 2 3 4 5 6 7 8; do
-  [ "$(piactl get connectionstate 2>/dev/null)" = Disconnected ] && break
+  [ "$(timeout 5 piactl get connectionstate 2>/dev/null)" = Disconnected ] && break
   sleep 1
 done
 

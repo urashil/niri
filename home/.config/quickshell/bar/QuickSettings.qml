@@ -433,36 +433,133 @@ PanelWindow {
                 visible: win.page === "bluetooth"
                 width: parent.width
                 spacing: 10
+                // connected first, then paired, then (while scanning) what is nearby
+                readonly property var devs: {
+                    const all = Bluetooth.devices ? Bluetooth.devices.values.slice() : [];
+                    const scanning = win.bt && win.bt.discovering;
+                    return all.filter(d => d.connected || d.paired || d.bonded || (scanning && (d.name || "").length > 0))
+                              .sort((x, y) => (y.connected - x.connected) || ((y.paired || y.bonded) - (x.paired || x.bonded)) || (x.name || "").localeCompare(y.name || ""));
+                }
+                // BlueZ needs a pairing agent to accept a pairing; the menu has none, so one runs only while scanning
+                // (an always-on agent would accept pairing requests from anyone nearby)
+                Process {
+                    running: win.bt && win.bt.enabled && win.bt.discovering
+                    command: ["bluetoothctl", "--agent", "NoInputNoOutput"]
+                    stdinEnabled: true
+                    stdout: SplitParser { onRead: line => {} }
+                    onStarted: write("default-agent\n")
+                }
+                // BlueZ only takes a reconnect that the headset starts itself from a trusted device, and pairing through the
+                // menu does not trust it, so trust everything that is paired
+                Timer {
+                    running: btPage.visible
+                    interval: 600
+                    onTriggered: { for (const d of btPage.devs) if ((d.paired || d.bonded) && !d.trusted) d.trusted = true; }
+                }
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { text: ""; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
+                    Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
                     Text { text: "Bluetooth"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
-                    Controls.Chip { visible: win.bt && win.bt.enabled; label: win.bt && win.bt.discovering ? "Stop scan" : "Scan"; onClicked: if (win.bt) win.bt.discovering = !win.bt.discovering }
+                    Controls.Chip { visible: win.bt && win.bt.enabled; on: win.bt && win.bt.discovering; label: win.bt && win.bt.discovering ? "Scanning…" : "Scan"; onClicked: if (win.bt) win.bt.discovering = !win.bt.discovering }
                     Controls.Switch { on: win.bt ? win.bt.enabled : false; onToggled: if (win.bt) win.bt.enabled = !win.bt.enabled }
                 }
                 Text { visible: !win.bt; text: "No Bluetooth adapter"; font.family: Theme.font; font.pixelSize: 12; color: Theme.textDim }
+                Text {
+                    visible: win.bt && win.bt.enabled && win.bt.discovering
+                    text: "Put the device in pairing mode, then tap it here."
+                    font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim
+                }
+                Text {
+                    visible: win.bt && win.bt.enabled && !win.bt.discovering && btPage.devs.length === 0
+                    text: "No paired devices. Scan to find some."
+                    font.family: Theme.font; font.pixelSize: 11; color: Theme.outline
+                }
                 ListView {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 300)
+                    Layout.preferredHeight: Math.min(contentHeight, 340)
                     clip: true; spacing: 6
-                    model: win.bt && win.bt.enabled ? Bluetooth.devices : null
+                    model: win.bt && win.bt.enabled ? btPage.devs : null
                     delegate: Rectangle {
+                        id: row
                         required property var modelData
-                        width: ListView.view.width; height: 44; radius: 12
+                        property bool open: false
+                        property bool failed: false
+                        readonly property bool known: modelData.paired || modelData.bonded
+                        readonly property bool connecting: modelData.state === BluetoothDeviceState.Connecting || modelData.pairing
+                        width: ListView.view.width
+                        height: 48 + (open ? 44 : 0)
+                        radius: 12
                         color: modelData.connected ? Theme.primaryContainer : Theme.surfaceContainer
-                        Text {
-                            anchors { left: parent.left; leftMargin: 14; right: st.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                            text: modelData.name || modelData.address
-                            elide: Text.ElideRight
-                            font.family: Theme.font; font.pixelSize: 12; color: modelData.connected ? Theme.fgContainer : Theme.text
+                        clip: true
+                        Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+
+                        function act() {
+                            const d = row.modelData;
+                            if (d.connected) { d.disconnect(); return; }
+                            failed = false;
+                            if (!row.known) d.pair();
+                            else { d.trusted = true; d.connect(); }
+                            giveUp.restart();
                         }
-                        Text {
-                            id: st
-                            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                            text: modelData.connected ? "Connected" : modelData.paired ? "Paired" : ""
-                            font.family: Theme.font; font.pixelSize: 10; color: modelData.connected ? Theme.fgContainer : Theme.textDim
+                        // a connect that neither succeeds nor fails by itself: say so and offer the fixes
+                        Timer { id: giveUp; interval: 15000; onTriggered: if (!row.modelData.connected) { row.failed = true; row.open = true; } }
+                        Connections {
+                            target: row.modelData
+                            ignoreUnknownSignals: true
+                            function onConnectedChanged() { if (row.modelData.connected) { row.failed = false; giveUp.stop(); } }
+                            function onPairedChanged() { if (row.modelData.paired) { row.modelData.trusted = true; row.modelData.connect(); } }
                         }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (modelData.connected) modelData.disconnect(); else modelData.connect(); } }
+
+                        Item {
+                            id: head
+                            width: parent.width; height: 48
+                            Text {
+                                id: ic
+                                anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                                text: { const i = row.modelData.icon || ""; return /headset|headphone/.test(i) ? "\uf025" : /mouse/.test(i) ? "\uf8cc" : /keyboard/.test(i) ? "\uf11c" : /phone/.test(i) ? "\uf10b" : /speaker|audio/.test(i) ? "\uf028" : "\uf293"; }
+                                font.family: Theme.font; font.pixelSize: 15
+                                color: row.modelData.connected ? Theme.fgContainer : Theme.textDim
+                            }
+                            Column {
+                                anchors { left: ic.right; leftMargin: 12; right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                                spacing: 1
+                                Text {
+                                    width: parent.width
+                                    text: row.modelData.name || row.modelData.address
+                                    elide: Text.ElideRight
+                                    font.family: Theme.font; font.pixelSize: 12; font.bold: row.modelData.connected
+                                    color: row.modelData.connected ? Theme.fgContainer : Theme.text
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: (row.connecting ? (row.modelData.pairing ? "Pairing…" : "Connecting…") : row.modelData.connected ? "Connected" : row.failed ? "Couldn't connect" : row.known ? "Paired" : "Nearby")
+                                          + (row.modelData.connected && row.modelData.batteryAvailable ? "  ·  " + Math.round(row.modelData.battery * 100) + "%" : "")
+                                    font.family: Theme.font; font.pixelSize: 10
+                                    color: row.failed && !row.modelData.connected ? Theme.error : row.modelData.connected ? Qt.alpha(Theme.fgContainer, 0.75) : Theme.textDim
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onClicked: m => { if (m.button === Qt.RightButton) { if (row.known) row.open = !row.open; } else row.act(); }
+                            }
+                        }
+                        // right-click, or after a failed connect: retry, trust, forget / re-pair
+                        Flow {
+                            visible: row.open
+                            anchors { left: parent.left; right: parent.right; top: head.bottom; leftMargin: 12; rightMargin: 12 }
+                            spacing: 6
+                            Controls.Chip { label: row.modelData.connected ? "Disconnect" : "Retry"; onClicked: row.act() }
+                            Controls.Chip { label: "Trusted"; on: row.modelData.trusted; onClicked: row.modelData.trusted = !row.modelData.trusted }
+                            Controls.Chip {
+                                label: "Re-pair"
+                                accent: Theme.yellow
+                                // forget the stale pairing and scan, so the device (in pairing mode) can be paired fresh
+                                onClicked: { row.modelData.forget(); row.failed = false; row.open = false; if (win.bt) win.bt.discovering = true; }
+                            }
+                            Controls.Chip { label: "Forget"; accent: Theme.error; onClicked: row.modelData.forget() }
+                        }
                     }
                 }
             }

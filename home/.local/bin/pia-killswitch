@@ -16,21 +16,21 @@ pkexec /usr/local/lib/rice/net-helper pia-killswitch "$mode" >>"$log" 2>&1 || { 
 
 up=0
 for _ in $(seq 60); do
-  if piactl get connectionstate >/dev/null 2>&1; then up=1; break; fi
+  if timeout 5 piactl get connectionstate >/dev/null 2>&1; then up=1; break; fi
   sleep 0.5
 done
 [ "$up" = 1 ] || { say "daemon did not come back"; exit 2; }
-say "daemon is up: $(piactl get connectionstate)"
-piactl background enable >>"$log" 2>&1
+say "daemon is up: $(timeout 5 piactl get connectionstate)"
+timeout 10 piactl background enable >>"$log" 2>&1
 
 [ -n "$reconnect" ] || exit 0
 for try in 1 2 3 4; do
-  st=$(piactl get connectionstate 2>/dev/null)
+  st=$(timeout 5 piactl get connectionstate 2>/dev/null)
   case "$st" in Connected|Connecting|Reconnecting) say "state $st"; exit 0 ;; esac
   say "connect attempt $try (state ${st:-?})"
-  piactl connect >>"$log" 2>&1
+  timeout 20 piactl connect >>"$log" 2>&1
   sleep 3
 done
-st=$(piactl get connectionstate 2>/dev/null)
+st=$(timeout 5 piactl get connectionstate 2>/dev/null)
 say "final state $st"
 [ "$st" = Connected ] || [ "$st" = Connecting ]
