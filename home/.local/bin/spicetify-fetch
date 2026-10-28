@@ -1,0 +1,18 @@
+#!/bin/sh
+# Install spicetify (Spotify theming) into ~/.local/share/rice/spicetify from the official GitHub release, checked against the
+# sha256 GitHub records for that asset, and point it at the spotify-launcher install. Then `spotify` applies the "rice" theme.
+set -e
+dir="$HOME/.local/share/rice/spicetify"
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+rel=$(curl -sfL -m 30 https://api.github.com/repos/spicetify/cli/releases/latest)
+read -r url digest < <(printf '%s' "$rel" | python3 -c "
+import json,sys
+for a in json.load(sys.stdin)['assets']:
+    if a['name'].endswith('linux-amd64.tar.gz'): print(a['browser_download_url'], (a.get('digest') or '').removeprefix('sha256:'))")
+[ -n "$url" ] && [ -n "$digest" ] || { echo "no release asset with a checksum found" >&2; exit 1; }
+curl -sfL -m 180 -o "$tmp/s.tgz" "$url"
+[ "$(sha256sum "$tmp/s.tgz" | cut -d' ' -f1)" = "$digest" ] || { echo "checksum mismatch" >&2; exit 1; }
+mkdir -p "$dir" && tar -xzf "$tmp/s.tgz" -C "$dir"
+ln -sf "$dir/spicetify" "$HOME/.local/bin/spicetify"
+spicetify config spotify_path "$HOME/.local/share/spotify-launcher/install/usr/share/spotify" prefs_path "$HOME/.config/spotify/prefs" current_theme rice color_scheme dark inject_css 1 replace_colors 1 >/dev/null
+echo "spicetify ready; start Spotify with: spotify"

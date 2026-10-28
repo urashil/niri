@@ -1,0 +1,11 @@
+/* rice: Spotify follows the wallpaper colours (color.ini) and takes the shell's rounded look */
+:root { --rice-radius: 14px; }
+.main-view-container, .Root__main-view, .main-yourLibraryX-libraryContainer, .Root__nav-bar, .Root__right-sidebar, .main-nowPlayingBar-nowPlayingBar {
+  border-radius: var(--rice-radius) !important;
+}
+.main-card-card, .main-entityHeader-image, .main-coverSlotExpanded-container, .main-image-image { border-radius: 12px !important; }
+.main-trackList-trackListRow { border-radius: 10px !important; }
+.x-searchInput-searchInputInput, .main-topBar-searchBar input { border-radius: 999px !important; }
+.main-playButton-PlayButton, .main-playPauseButton-button { box-shadow: none !important; }
+/* the same font as the rest of the shell, for the UI text (icons are SVG, so they are untouched) */
+body, .encore-text, [class*="encore-"] { font-family: "JetBrainsMono Nerd Font", "Noto Sans CJK JP", sans-serif !important; }

@@ -119,6 +119,8 @@ fi
 say "audio services, Neovim plugins"
 # the island's song player: mirror the film from song.tylerium.pro (needs node + chromium + ffmpeg)
 "$HOME/.local/bin/still-fetch" || warn "could not fetch still@server (run ~/.local/bin/still-fetch with network)"
+# Spotify theme: spicetify from the official release (checksum-verified); start Spotify with `spotify` afterwards
+"$HOME/.local/bin/spicetify-fetch" || warn "could not install spicetify (run ~/.local/bin/spicetify-fetch with network)"
 systemctl --user enable --now pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || warn "could not enable pipewire for this session (do it after logging in)"
 if command -v nvim >/dev/null; then
   timeout 300 nvim --headless "+Lazy! sync" +qa >/dev/null 2>&1 || warn "Neovim plugin install did not finish (open nvim once with network)"

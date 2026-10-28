@@ -102,35 +102,11 @@ Variants {
                 spacing: 8
 
                 Island {
-                    // music playing: the island is the player, so this slot is just the time; otherwise a chip for a paused player
-                    visible: Song.nowPlaying || (win.player !== null && !win.player.isPlaying) || (Song.started && !Song.playing)
+                    // only while the island shows the player in place of the clock: then this slot is just the time
+                    visible: Song.shown
                     spacing: 8
-                    Glyph { visible: Song.nowPlaying; text: ""; color: Theme.primary; font.pixelSize: 13 }
-                    Label { visible: Song.nowPlaying; text: Qt.formatDateTime(clock.date, "HH:mm"); font.weight: Font.Bold }
-                    Glyph {
-                        visible: !Song.nowPlaying
-                        text: win.player && win.player.isPlaying ? "" : ""
-                        color: Theme.tertiary
-                        font.pixelSize: 12
-                    }
-                    Label {
-                        visible: !Song.nowPlaying
-                        text: win.player ? (win.player.trackArtist ? win.player.trackArtist + " – " : "") + win.player.trackTitle : (Song.started ? Song.name : "")
-                        elide: Text.ElideRight
-                        width: Math.min(implicitWidth, 240)
-                    }
-                    overlay: MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Song.nowPlaying ? Qt.ArrowCursor : Qt.PointingHandCursor
-                        enabled: !Song.nowPlaying
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-                        onClicked: mouse => {
-                            if (!win.player) { if (Song.started) UiState.songOpen = true; return; }
-                            if (mouse.button === Qt.RightButton) win.player.next();
-                            else if (mouse.button === Qt.MiddleButton) win.player.togglePlaying();
-                            else UiState.media = !UiState.media;
-                        }
-                    }
+                    Glyph { text: "\uf017"; color: Theme.primary; font.pixelSize: 13 }
+                    Label { text: Qt.formatDateTime(clock.date, "HH:mm"); font.weight: Font.Bold }
                 }
 
                 Stats {

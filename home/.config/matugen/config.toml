@@ -52,3 +52,7 @@ output_path = "~/.config/librewolf/librewolf/6yv4qbnb.default-release/chrome/col
 [templates.nvim]
 input_path = "~/.config/matugen/templates/nvim-palette.lua"
 output_path = "~/.config/nvim/lua/palette.lua"
+
+[templates.spicetify]
+input_path = "~/.config/matugen/templates/spicetify-color.ini"
+output_path = "~/.config/spicetify/Themes/rice/color.ini"

@@ -5,7 +5,7 @@ Rectangle {
     id: root
     readonly property bool active: UiState.islandActive
     readonly property real idleW: clockRow.implicitWidth + 32
-    readonly property bool songShown: Song.nowPlaying
+    readonly property bool songShown: Song.shown
     readonly property real eventW: Math.max(idleW, evRow.implicitWidth + 36)
 
     width: active ? eventW : idleW
@@ -50,7 +50,7 @@ Rectangle {
                 width: 22; height: 22; radius: 7; clip: true; color: Theme.surfaceHigh
                 Image { anchors.fill: parent; source: Song.artUrl; fillMode: Image.PreserveAspectCrop; asynchronous: true }
             }
-            Equalizer { anchors.verticalCenter: parent.verticalCenter; active: Song.nowPlaying; barColor: Song.playing ? Theme.primary : Theme.tertiary }
+            Equalizer { anchors.verticalCenter: parent.verticalCenter; active: Song.anyPlaying; barColor: Song.playing ? Theme.primary : Theme.tertiary }
             Label { text: Song.nowText; elide: Text.ElideRight; width: Math.min(implicitWidth, 260); font.weight: Font.Bold }
         }
 
@@ -120,8 +120,7 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             if (root.active && UiState.islandKind === "media") { if (Song.started) UiState.songOpen = true; else UiState.media = true; }
-            else if (!root.active && Song.playing) UiState.songOpen = true;
-            else if (!root.active && root.songShown) UiState.media = true;
+            else if (!root.active && root.songShown) { if (Song.started && Song.shownMpris === null) UiState.songOpen = true; else UiState.media = true; }
             else UiState.openFocus("todo");
         }
     }

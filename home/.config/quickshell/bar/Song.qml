@@ -119,11 +119,26 @@ Singleton {
         for (let i = 0; i < l.length; i++) if (l[i].isPlaying) return l[i];
         return null;
     }
-    readonly property string artUrl: !playing && mprisPlayer && mprisPlayer.trackArtUrl ? mprisPlayer.trackArtUrl : ""
-    readonly property bool nowPlaying: playing || mprisPlayer !== null
+    // the island keeps showing a player for a bit after it is paused, then goes back to the clock
+    property bool hold: false
+    property var lastMpris: null
+    readonly property bool anyPlaying: playing || mprisPlayer !== null
+    onAnyPlayingChanged: { if (anyPlaying) { hold = true; holdTimer.stop(); } else if (hold) holdTimer.restart(); }
+    onMprisPlayerChanged: if (mprisPlayer) lastMpris = mprisPlayer
+    Timer { id: holdTimer; interval: 120000; onTriggered: root.hold = false }
+    readonly property var shownMpris: {
+        if (mprisPlayer) return mprisPlayer;
+        if (!hold || !lastMpris) return null;
+        const l = Mpris.players.values;
+        for (let i = 0; i < l.length; i++) if (l[i] === lastMpris) return lastMpris;
+        return null;
+    }
+    readonly property bool shown: anyPlaying || (hold && (started || shownMpris !== null))
+    readonly property bool nowPlaying: anyPlaying
+    readonly property string artUrl: !playing && shownMpris && shownMpris.trackArtUrl ? shownMpris.trackArtUrl : ""
     // what the island says: the song and the scene it is in, or "artist – title" for another player
     readonly property string nowText: playing ? name + (chapterTitle ? " · " + chapterTitle : "")
-        : mprisPlayer ? (mprisPlayer.trackArtist ? mprisPlayer.trackArtist + " – " : "") + mprisPlayer.trackTitle : ""
+        : shownMpris ? (shownMpris.trackArtist ? shownMpris.trackArtist + " – " : "") + shownMpris.trackTitle : (started ? name : "")
 
     // media keys: this song when it is the one loaded, otherwise whatever playerctl controls
     function key(what) {

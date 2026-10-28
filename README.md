@@ -64,3 +64,10 @@ player; for the `still@server` film (song.tylerium.pro) it shows the animation i
 `qs -c bar ipc call song open`, or the media keys (they control the film when it is loaded, otherwise `playerctl`).
 `~/.local/bin/still-fetch` mirrors the song and the film's code into `~/.local/share/rice/still-at-server`
 (not part of this repo); `still-film` renders it with a headless Chromium only while the island is expanded.
+
+## Spotify
+
+`spotify` (also what the launcher entry runs) starts spotify-launcher natively on Wayland and re-applies the spicetify theme
+`rice` first when the wallpaper colours / light-dark mode changed (colours come from the matugen template `spicetify-color.ini`).
+`spicetify-fetch` installs spicetify itself. A spotify-launcher update replaces the patched client; `spotify` re-applies the
+theme on the next start (if you use SpotX, run it again before that).
