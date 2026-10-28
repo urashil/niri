@@ -1,0 +1,10 @@
+#!/bin/sh
+# song [open|toggle|expand|stop|next|previous|state]   play / control the still@server song in the island (default: open)
+case "${1:-open}" in
+  open|play)     exec qs -c bar ipc call song open ;;
+  toggle|pause)  exec qs -c bar ipc call song toggle ;;
+  expand|show)   exec qs -c bar ipc call song expand ;;
+  stop|next|previous) exec qs -c bar ipc call song key "$1" ;;
+  state)         exec qs -c bar ipc call song state ;;
+  *) echo "usage: song [open|toggle|expand|stop|next|previous|state]" >&2; exit 1 ;;
+esac
