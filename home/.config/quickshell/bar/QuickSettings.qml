@@ -433,12 +433,17 @@ PanelWindow {
                 visible: win.page === "bluetooth"
                 width: parent.width
                 spacing: 10
-                // connected first, then paired, then (while scanning) what is nearby
+                // headphones first, then whatever is connected, then paired, then (while scanning) what is nearby.
+                // Unnamed devices (BlueZ shows their address) are noise
                 readonly property var devs: {
                     const all = Bluetooth.devices ? Bluetooth.devices.values.slice() : [];
                     const scanning = win.bt && win.bt.discovering;
-                    return all.filter(d => d.connected || d.paired || d.bonded || (scanning && (d.name || "").length > 0))
-                              .sort((x, y) => (y.connected - x.connected) || ((y.paired || y.bonded) - (x.paired || x.bonded)) || (x.name || "").localeCompare(y.name || ""));
+                    const named = d => (d.name || "").length > 0 && !/^([0-9a-f]{2}[-:]){5}[0-9a-f]{2}$/i.test(d.name);
+                    const phones = d => /headset|headphone/.test(d.icon || "") ? 1 : 0;
+                    const audio = d => /speaker|audio/.test(d.icon || "") ? 1 : 0;
+                    return all.filter(d => d.connected || d.paired || d.bonded || (scanning && named(d)))
+                              .sort((x, y) => (phones(y) - phones(x)) || (y.connected - x.connected) || ((y.paired || y.bonded) - (x.paired || x.bonded))
+                                              || (audio(y) - audio(x)) || (x.name || "").localeCompare(y.name || ""));
                 }
                 // BlueZ needs a pairing agent to accept a pairing; the menu has none, so one runs only while scanning
                 // (an always-on agent would accept pairing requests from anyone nearby)
@@ -460,7 +465,33 @@ PanelWindow {
                     Layout.fillWidth: true
                     Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
                     Text { text: "Bluetooth"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
-                    Controls.Chip { visible: win.bt && win.bt.enabled; on: win.bt && win.bt.discovering; label: win.bt && win.bt.discovering ? "Scanning…" : "Scan"; onClicked: if (win.bt) win.bt.discovering = !win.bt.discovering }
+                    Rectangle {
+                        id: scanPill
+                        visible: win.bt && win.bt.enabled
+                        readonly property bool scanning: win.bt && win.bt.discovering
+                        Layout.preferredWidth: 100; Layout.preferredHeight: 30
+                        radius: 15
+                        color: scanning ? Theme.primaryContainer : Theme.surfaceHigh
+                        border.width: scanning ? 1 : 0; border.color: Theme.primary
+                        Behavior on color { ColorAnimation { duration: 160 } }
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 7
+                            Rectangle {
+                                id: dot
+                                visible: scanPill.scanning
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 7; height: 7; radius: 4; color: Theme.primary
+                                SequentialAnimation on opacity {
+                                    running: dot.visible; loops: Animation.Infinite
+                                    NumberAnimation { to: 0.2; duration: 550; easing.type: Easing.InOutSine }
+                                    NumberAnimation { to: 1; duration: 550; easing.type: Easing.InOutSine }
+                                }
+                            }
+                            Text { text: scanPill.scanning ? "Scanning" : "Scan"; font.family: Theme.font; font.pixelSize: 11; color: scanPill.scanning ? Theme.fgContainer : Theme.text }
+                        }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (win.bt) win.bt.discovering = !win.bt.discovering }
+                    }
                     Controls.Switch { on: win.bt ? win.bt.enabled : false; onToggled: if (win.bt) win.bt.enabled = !win.bt.enabled }
                 }
                 Text { visible: !win.bt; text: "No Bluetooth adapter"; font.family: Theme.font; font.pixelSize: 12; color: Theme.textDim }
@@ -478,7 +509,7 @@ PanelWindow {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.min(contentHeight, 340)
                     clip: true; spacing: 6
-                    model: win.bt && win.bt.enabled ? btPage.devs : null
+                    model: ScriptModel { values: win.bt && win.bt.enabled ? btPage.devs : [] }
                     delegate: Rectangle {
                         id: row
                         required property var modelData
@@ -507,7 +538,7 @@ PanelWindow {
                             target: row.modelData
                             ignoreUnknownSignals: true
                             function onConnectedChanged() { if (row.modelData.connected) { row.failed = false; giveUp.stop(); } }
-                            function onPairedChanged() { if (row.modelData.paired) { row.modelData.trusted = true; row.modelData.connect(); } }
+                            function onPairedChanged() { if (row.modelData.paired) { row.modelData.trusted = true; if (!row.modelData.connected) row.modelData.connect(); } }
                         }
 
                         Item {
