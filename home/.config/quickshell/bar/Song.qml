@@ -62,6 +62,9 @@ Singleton {
     }
 
     // the player reports its position a few times a second; in between we extrapolate so the film does not stutter
+    // the renderer died while the island is open (it can when Chromium is slow to start): start it again
+    Timer { id: retry; interval: 2000; onTriggered: if (root.filmWanted) film.running = true }
+
     property real anchorPos: 0
     property real anchorStamp: 0
     function livePosition() {
@@ -99,7 +102,7 @@ Singleton {
             }
         }
         stderr: SplitParser { onRead: line => console.warn("still-film:", line) }
-        onExited: { root.filmReady = false; root.frameCount = 0; }
+        onExited: { root.filmReady = false; root.frameCount = 0; if (root.filmWanted) retry.restart(); }
     }
     // the film keeps time by itself; this just re-aligns it now and then, and on seek / play / pause
     function sendClock() {
@@ -116,6 +119,7 @@ Singleton {
         for (let i = 0; i < l.length; i++) if (l[i].isPlaying) return l[i];
         return null;
     }
+    readonly property string artUrl: !playing && mprisPlayer && mprisPlayer.trackArtUrl ? mprisPlayer.trackArtUrl : ""
     readonly property bool nowPlaying: playing || mprisPlayer !== null
     // what the island says: the song and the scene it is in, or "artist – title" for another player
     readonly property string nowText: playing ? name + (chapterTitle ? " · " + chapterTitle : "")

@@ -25,6 +25,7 @@ if (process.argv[2] === '--chapters') {
   fs.writeFileSync(path.join(ROOT, 'chapters.json'), JSON.stringify(chapters.map(c => ({ title: c.title, start: c.start }))));
   process.exit(0);
 }
+process.on('unhandledRejection', e => process.stderr.write(`[still-film] unhandled: ${e?.message || e}\n`));
 const log = m => process.stderr.write(`[still-film] ${m}\n`);
 
 // ---- loudness envelope: the site drives the film's pulse from a live spectrum; here it comes from the file (30 values/s)
@@ -124,7 +125,7 @@ ws.onmessage = e => {
 };
 const cdp = (method, params = {}) => new Promise((res, rej) => {
   const n = ++id;
-  const timer = setTimeout(() => { pending.delete(n); rej(new Error(method + ' timed out')); }, 8000);
+  const timer = setTimeout(() => { pending.delete(n); rej(new Error(method + ' timed out')); }, 20000);
   pending.set(n, m => { clearTimeout(timer); m.error ? rej(new Error(m.error.message)) : res(m.result); });
   ws.send(JSON.stringify({ id: n, method, params }));
 });
@@ -141,7 +142,10 @@ for (let i = 0; i < 100; i++) {
   await new Promise(r => setTimeout(r, 200));
 }
 // ---- the page draws on its own clock and posts its frames to the server above
-await cdp('Runtime.evaluate', { expression: `window.setEnv(${JSON.stringify(envelope.map(v => +v.toFixed(3)))})` });
+for (let i = 0; i < 3; i++) {
+  try { await cdp('Runtime.evaluate', { expression: `window.setEnv(${JSON.stringify(envelope.map(v => +v.toFixed(3)))})` }); break; }
+  catch (e) { log('setEnv: ' + e.message); }
+}
 if (process.env.STILL_DEBUG) {
   const r = await cdp('Runtime.evaluate', { expression: `(()=>{const g=document.createElement('canvas').getContext('webgl2');const x=g.getExtension('WEBGL_debug_renderer_info');return g.getParameter(x.UNMASKED_RENDERER_WEBGL)})()`, returnByValue: true });
   log('webgl renderer: ' + r.result.value);

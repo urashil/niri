@@ -44,6 +44,12 @@ Rectangle {
         Row {
             visible: root.songShown
             spacing: 10
+            Rectangle {
+                visible: Song.artUrl !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                width: 22; height: 22; radius: 7; clip: true; color: Theme.surfaceHigh
+                Image { anchors.fill: parent; source: Song.artUrl; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+            }
             Equalizer { anchors.verticalCenter: parent.verticalCenter; active: Song.nowPlaying; barColor: Song.playing ? Theme.primary : Theme.tertiary }
             Label { text: Song.nowText; elide: Text.ElideRight; width: Math.min(implicitWidth, 260); font.weight: Font.Bold }
         }

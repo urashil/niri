@@ -102,25 +102,30 @@ Variants {
                 spacing: 8
 
                 Island {
-                    // the island shows what is playing; this chip is for a paused player
-                    visible: (win.player !== null && !win.player.isPlaying) || (Song.started && !Song.playing)
+                    // music playing: the island is the player, so this slot is just the time; otherwise a chip for a paused player
+                    visible: Song.nowPlaying || (win.player !== null && !win.player.isPlaying) || (Song.started && !Song.playing)
                     spacing: 8
+                    Glyph { visible: Song.nowPlaying; text: ""; color: Theme.primary; font.pixelSize: 13 }
+                    Label { visible: Song.nowPlaying; text: Qt.formatDateTime(clock.date, "HH:mm"); font.weight: Font.Bold }
                     Glyph {
-                        text: win.player && win.player.isPlaying ? "" : ""
+                        visible: !Song.nowPlaying
+                        text: win.player && win.player.isPlaying ? "" : ""
                         color: Theme.tertiary
                         font.pixelSize: 12
                     }
                     Label {
-                        text: win.player ? (win.player.trackArtist ? win.player.trackArtist + " – " : "") + win.player.trackTitle : ""
+                        visible: !Song.nowPlaying
+                        text: win.player ? (win.player.trackArtist ? win.player.trackArtist + " – " : "") + win.player.trackTitle : (Song.started ? Song.name : "")
                         elide: Text.ElideRight
                         width: Math.min(implicitWidth, 240)
                     }
                     overlay: MouseArea {
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
+                        cursorShape: Song.nowPlaying ? Qt.ArrowCursor : Qt.PointingHandCursor
+                        enabled: !Song.nowPlaying
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         onClicked: mouse => {
-                            if (!win.player) return;
+                            if (!win.player) { if (Song.started) UiState.songOpen = true; return; }
                             if (mouse.button === Qt.RightButton) win.player.next();
                             else if (mouse.button === Qt.MiddleButton) win.player.togglePlaying();
                             else UiState.media = !UiState.media;
@@ -128,7 +133,14 @@ Variants {
                     }
                 }
 
-                Stats {}
+                Stats {
+                    id: stats
+                    // the media card opens right under this chip
+                    function publish() { UiState.statsCenter = stats.mapToItem(null, stats.width / 2, 0).x; }
+                    onXChanged: publish()
+                    onWidthChanged: publish()
+                    Component.onCompleted: publish()
+                }
 
                 Island {
                     visible: SystemTray.items.values.length > 0

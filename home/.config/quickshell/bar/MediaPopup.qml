@@ -4,7 +4,7 @@ import Quickshell.Services.Mpris
 import QtQuick
 import QtQuick.Layouts
 
-// Now-playing card (click the media pill or a track-change island).
+// Now-playing card (click the island while a player is going): opens under the CPU/RAM chip.
 PanelWindow {
     id: win
     visible: UiState.media
@@ -16,7 +16,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: UiState.media ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     BackgroundEffect.blurRegion: Region { item: card; radius: Theme.radius + 4 }
-    readonly property var p: Mpris.players.values.length > 0 ? Mpris.players.values[0] : null
+    readonly property var p: Song.mprisPlayer || (Mpris.players.values.length > 0 ? Mpris.players.values[0] : null)
 
     MouseArea { anchors.fill: parent; onClicked: UiState.media = false }
     Item { focus: win.visible; Keys.onEscapePressed: UiState.media = false }
@@ -26,7 +26,8 @@ PanelWindow {
 
     Rectangle {
         id: card
-        anchors { top: parent.top; right: parent.right; topMargin: 56; rightMargin: 260 }
+        x: Math.max(8, Math.min(win.width - width - 8, UiState.statsCenter - width / 2))
+        y: 56
         width: 340
         height: col.implicitHeight + 32
         radius: Theme.radius + 4
