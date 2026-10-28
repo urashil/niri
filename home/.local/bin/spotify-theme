@@ -1,0 +1,16 @@
+#!/bin/sh
+# spotify-theme [--regen]
+# Puts the wallpaper palette where Spotify's "rice-live" spicetify extension picks it up (it re-reads the file every couple of
+# seconds, so colours and light/dark follow the wallpaper without restarting Spotify). matugen writes ~/.cache/rice/spotify-colors.css
+# on every wallpaper / mode change (the `wallpaper` script then calls this); --regen builds it for the current wallpaper and mode.
+cache="$HOME/.cache/rice/spotify-colors.css"
+xpui="$HOME/.local/share/spotify-launcher/install/usr/share/spotify/Apps/xpui"
+if [ "$1" = --regen ] || [ ! -s "$cache" ]; then
+  cur=$(cat "$HOME/.cache/rice/current" 2>/dev/null); mode=$(cat "$HOME/.cache/rice/mode" 2>/dev/null); [ "$mode" = light ] || mode=dark
+  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+  printf '[config]\nversion_check = false\n\n[templates.s]\ninput_path = "%s/.config/matugen/templates/spotify-live.css"\noutput_path = "%s"\n' "$HOME" "$cache" > "$tmp/c.toml"
+  matugen -c "$tmp/c.toml" image "$cur" --mode "$mode" --type "${WALLPAPER_SCHEME:-scheme-tonal-spot}" --prefer saturation --quiet >/dev/null 2>&1 || exit 1
+fi
+# only into a spicetify-patched client: an xpui folder without the app inside would stop Spotify from starting
+[ -f "$xpui/index.html" ] || exit 0
+cmp -s "$cache" "$xpui/rice-colors.css" 2>/dev/null || { cp "$cache" "$xpui/rice-colors.css.new" && mv "$xpui/rice-colors.css.new" "$xpui/rice-colors.css"; }

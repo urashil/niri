@@ -56,3 +56,7 @@ output_path = "~/.config/nvim/lua/palette.lua"
 [templates.spicetify]
 input_path = "~/.config/matugen/templates/spicetify-color.ini"
 output_path = "~/.config/spicetify/Themes/rice/color.ini"
+
+[templates.spotify_live]
+input_path = "~/.config/matugen/templates/spotify-live.css"
+output_path = "~/.cache/rice/spotify-colors.css"

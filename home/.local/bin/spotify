@@ -1,14 +1,15 @@
 #!/bin/sh
-# Launch Spotify with the wallpaper theme: when the colours or the light/dark mode changed since the last time (or spotify-launcher
-# replaced the install with a fresh one), re-apply the spicetify theme first, then start spotify-launcher.
+# Launch Spotify with the wallpaper theme. The colours follow the wallpaper and light/dark live (spotify-theme + the "rice-live"
+# spicetify extension); this only (re)applies the spicetify patch when the theme files changed or spotify-launcher replaced the client.
 spot="$HOME/.local/share/spotify-launcher/install/usr/share/spotify"
 stamp="$HOME/.cache/rice/spicetify-stamp"
-mode=$(cat "$HOME/.cache/rice/mode" 2>/dev/null); [ "$mode" = light ] || mode=dark
-want="$mode $(cksum < "$HOME/.config/spicetify/Themes/rice/color.ini" 2>/dev/null | cut -d' ' -f1) $(ls -ld --time-style=+%s "$spot/Apps/xpui"* 2>/dev/null | head -1 | awk '{print $6}')"
-if ! pgrep -x spotify >/dev/null && [ "$want" != "$(cat "$stamp" 2>/dev/null)" ] && command -v spicetify >/dev/null; then
-  spicetify config current_theme rice color_scheme "$mode" >/dev/null 2>&1
-  spicetify backup apply >/dev/null 2>&1 || spicetify restore backup apply >/dev/null 2>&1
-  want="$mode $(cksum < "$HOME/.config/spicetify/Themes/rice/color.ini" 2>/dev/null | cut -d' ' -f1) $(ls -ld --time-style=+%s "$spot/Apps/xpui"* 2>/dev/null | head -1 | awk '{print $6}')"
-  echo "$want" > "$stamp"
+want="$(cksum < "$HOME/.config/spicetify/Themes/rice/user.css" 2>/dev/null | cut -d' ' -f1) $(cksum < "$HOME/.config/spicetify/Extensions/rice-live.js" 2>/dev/null | cut -d' ' -f1) $(ls -ld --time-style=+%s "$spot/Apps/xpui" 2>/dev/null | awk '{print $6}') $([ -f "$spot/Apps/xpui/index.html" ] && echo patched)"
+if ! pgrep -x spotify >/dev/null && command -v spicetify >/dev/null; then
+  if [ "$want" != "$(cat "$stamp" 2>/dev/null)" ] || [ ! -f "$spot/Apps/xpui/extensions/rice-live.js" ]; then
+    spicetify config current_theme rice extensions rice-live.js >/dev/null 2>&1
+    spicetify backup apply >/dev/null 2>&1 || spicetify restore backup apply >/dev/null 2>&1
+    echo "$want" > "$stamp"
+  fi
+  spotify-theme --regen >/dev/null 2>&1
 fi
 exec spotify-launcher "$@"

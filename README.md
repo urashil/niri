@@ -67,7 +67,10 @@ player; for the `still@server` film (song.tylerium.pro) it shows the animation i
 
 ## Spotify
 
-`spotify` (also what the launcher entry runs) starts spotify-launcher natively on Wayland and re-applies the spicetify theme
-`rice` first when the wallpaper colours / light-dark mode changed (colours come from the matugen template `spicetify-color.ini`).
-`spicetify-fetch` installs spicetify itself. A spotify-launcher update replaces the patched client; `spotify` re-applies the
-theme on the next start (if you use SpotX, run it again before that).
+`spotify` (also what the launcher entry runs) starts spotify-launcher natively on Wayland, after (re)applying the spicetify patch when
+the theme files changed or spotify-launcher replaced the client. The theme follows the wallpaper **live**, including light/dark:
+matugen writes `~/.cache/rice/spotify-colors.css` (template `spotify-live.css`), the `wallpaper` script runs `spotify-theme` to put
+it into Spotify's `xpui` folder, and the `rice-live` spicetify extension re-reads it every ~1.5 s. `user.css` of the `rice` theme
+overrides Spotify's encore colour sets and the fixed-colour spots (page header washes, browse tiles, lyrics card) with palette roles.
+`spicetify-fetch` installs spicetify itself (checksum-verified release). A spotify-launcher update replaces the patched client;
+the next `spotify` start re-applies it (if you use SpotX, run it again before that).

@@ -1,4 +1,6 @@
-/* rice: Spotify follows the wallpaper colours (color.ini) and takes the shell's rounded look */
+@import url("rice-colors.css");
+
+/* rice: Spotify follows the wallpaper palette live (colours: rice-colors.css, re-read by the rice-live extension) */
 :root { --rice-radius: 14px; }
 .main-view-container, .Root__main-view, .main-yourLibraryX-libraryContainer, .Root__nav-bar, .Root__right-sidebar, .main-nowPlayingBar-nowPlayingBar {
   border-radius: var(--rice-radius) !important;
@@ -9,3 +11,168 @@
 .main-playButton-PlayButton, .main-playPauseButton-button { box-shadow: none !important; }
 /* the same font as the rest of the shell, for the UI text (icons are SVG, so they are untouched) */
 body, .encore-text, [class*="encore-"] { font-family: "JetBrainsMono Nerd Font", "Noto Sans CJK JP", sans-serif !important; }
+
+/* ---- encore colour sets: Spotify's own light/dark logic replaced by the wallpaper palette (roles come from rice-colors.css) ---- */
+.encore-dark-theme, .encore-light-theme, .encore-dark-theme .encore-base-set, .encore-light-theme .encore-base-set {
+  --background-base: var(--r-panel); --background-highlight: var(--r-hover); --background-press: var(--r-press);
+  --background-elevated-base: var(--r-elev); --background-elevated-highlight: var(--r-hover); --background-elevated-press: var(--r-press);
+  --background-tinted-base: color-mix(in srgb, var(--r-text) 8%, transparent); --background-tinted-highlight: color-mix(in srgb, var(--r-text) 12%, transparent); --background-tinted-press: color-mix(in srgb, var(--r-text) 18%, transparent);
+  --text-base: var(--r-text); --text-subdued: var(--r-sub); --text-bright-accent: var(--r-accent); --text-negative: var(--r-error); --text-warning: var(--r-third); --text-positive: var(--r-accent); --text-announcement: var(--r-second);
+  --essential-base: var(--r-text); --essential-subdued: var(--r-sub); --essential-bright-accent: var(--r-accent); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-accent); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-text); --decorative-subdued: var(--r-line); --parents-essential-base: var(--r-text);
+}
+.encore-dark-theme .encore-app-frame-set, .encore-light-theme .encore-app-frame-set {
+  --background-base: var(--r-frame); --background-highlight: var(--r-hover); --background-press: var(--r-press);
+  --background-elevated-base: var(--r-elev); --background-elevated-highlight: var(--r-hover); --background-elevated-press: var(--r-press);
+  --background-tinted-base: color-mix(in srgb, var(--r-text) 8%, transparent); --background-tinted-highlight: color-mix(in srgb, var(--r-text) 12%, transparent); --background-tinted-press: color-mix(in srgb, var(--r-text) 18%, transparent);
+  --text-base: var(--r-text); --text-subdued: var(--r-sub); --text-bright-accent: var(--r-accent); --text-negative: var(--r-error); --text-warning: var(--r-third); --text-positive: var(--r-accent); --text-announcement: var(--r-second);
+  --essential-base: var(--r-text); --essential-subdued: var(--r-sub); --essential-bright-accent: var(--r-accent); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-accent); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-text); --decorative-subdued: var(--r-line); --parents-essential-base: var(--r-text);
+}
+.encore-dark-theme .encore-bright-accent-set, .encore-light-theme .encore-bright-accent-set {
+  --background-base: var(--r-accent); --background-highlight: color-mix(in srgb, var(--r-accent) 88%, var(--r-on-accent)); --background-press: color-mix(in srgb, var(--r-accent) 76%, var(--r-on-accent));
+  --background-elevated-base: color-mix(in srgb, var(--r-accent) 92%, var(--r-on-accent)); --background-elevated-highlight: color-mix(in srgb, var(--r-accent) 86%, var(--r-on-accent)); --background-elevated-press: color-mix(in srgb, var(--r-accent) 76%, var(--r-on-accent));
+  --background-tinted-base: var(--r-accent); --background-tinted-highlight: var(--r-accent); --background-tinted-press: var(--r-accent);
+  --text-base: var(--r-on-accent); --text-subdued: color-mix(in srgb, var(--r-on-accent) 75%, transparent); --text-bright-accent: var(--r-on-accent); --text-negative: var(--r-on-accent); --text-warning: var(--r-on-accent); --text-positive: var(--r-on-accent); --text-announcement: var(--r-on-accent);
+  --essential-base: var(--r-on-accent); --essential-subdued: color-mix(in srgb, var(--r-on-accent) 75%, transparent); --essential-bright-accent: var(--r-on-accent); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-accent); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-accent); --decorative-subdued: color-mix(in srgb, var(--r-accent) 70%, var(--r-on-accent)); --parents-essential-base: var(--r-on-accent);
+}
+.encore-dark-theme .encore-inverted-light-set, .encore-light-theme .encore-inverted-light-set {
+  --background-base: var(--r-accent); --background-highlight: color-mix(in srgb, var(--r-accent) 88%, var(--r-on-accent)); --background-press: color-mix(in srgb, var(--r-accent) 76%, var(--r-on-accent));
+  --background-elevated-base: color-mix(in srgb, var(--r-accent) 92%, var(--r-on-accent)); --background-elevated-highlight: color-mix(in srgb, var(--r-accent) 86%, var(--r-on-accent)); --background-elevated-press: color-mix(in srgb, var(--r-accent) 76%, var(--r-on-accent));
+  --background-tinted-base: var(--r-accent); --background-tinted-highlight: var(--r-accent); --background-tinted-press: var(--r-accent);
+  --text-base: var(--r-on-accent); --text-subdued: color-mix(in srgb, var(--r-on-accent) 75%, transparent); --text-bright-accent: var(--r-on-accent); --text-negative: var(--r-on-accent); --text-warning: var(--r-on-accent); --text-positive: var(--r-on-accent); --text-announcement: var(--r-on-accent);
+  --essential-base: var(--r-on-accent); --essential-subdued: color-mix(in srgb, var(--r-on-accent) 75%, transparent); --essential-bright-accent: var(--r-on-accent); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-accent); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-accent); --decorative-subdued: color-mix(in srgb, var(--r-accent) 70%, var(--r-on-accent)); --parents-essential-base: var(--r-on-accent);
+}
+.encore-dark-theme .encore-inverted-set, .encore-light-theme .encore-inverted-set {
+  --background-base: var(--r-accent); --background-highlight: color-mix(in srgb, var(--r-accent) 88%, var(--r-on-accent)); --background-press: color-mix(in srgb, var(--r-accent) 76%, var(--r-on-accent));
+  --background-elevated-base: color-mix(in srgb, var(--r-accent) 92%, var(--r-on-accent)); --background-elevated-highlight: color-mix(in srgb, var(--r-accent) 86%, var(--r-on-accent)); --background-elevated-press: color-mix(in srgb, var(--r-accent) 76%, var(--r-on-accent));
+  --background-tinted-base: var(--r-accent); --background-tinted-highlight: var(--r-accent); --background-tinted-press: var(--r-accent);
+  --text-base: var(--r-on-accent); --text-subdued: color-mix(in srgb, var(--r-on-accent) 75%, transparent); --text-bright-accent: var(--r-on-accent); --text-negative: var(--r-on-accent); --text-warning: var(--r-on-accent); --text-positive: var(--r-on-accent); --text-announcement: var(--r-on-accent);
+  --essential-base: var(--r-on-accent); --essential-subdued: color-mix(in srgb, var(--r-on-accent) 75%, transparent); --essential-bright-accent: var(--r-on-accent); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-accent); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-accent); --decorative-subdued: color-mix(in srgb, var(--r-accent) 70%, var(--r-on-accent)); --parents-essential-base: var(--r-on-accent);
+}
+.encore-dark-theme .encore-inverted-dark-set, .encore-light-theme .encore-inverted-dark-set {
+  --background-base: var(--r-accent-c); --background-highlight: color-mix(in srgb, var(--r-accent-c) 88%, var(--r-on-accent-c)); --background-press: color-mix(in srgb, var(--r-accent-c) 76%, var(--r-on-accent-c));
+  --background-elevated-base: color-mix(in srgb, var(--r-accent-c) 92%, var(--r-on-accent-c)); --background-elevated-highlight: color-mix(in srgb, var(--r-accent-c) 86%, var(--r-on-accent-c)); --background-elevated-press: color-mix(in srgb, var(--r-accent-c) 76%, var(--r-on-accent-c));
+  --background-tinted-base: var(--r-accent-c); --background-tinted-highlight: var(--r-accent-c); --background-tinted-press: var(--r-accent-c);
+  --text-base: var(--r-on-accent-c); --text-subdued: color-mix(in srgb, var(--r-on-accent-c) 75%, transparent); --text-bright-accent: var(--r-on-accent-c); --text-negative: var(--r-on-accent-c); --text-warning: var(--r-on-accent-c); --text-positive: var(--r-on-accent-c); --text-announcement: var(--r-on-accent-c);
+  --essential-base: var(--r-on-accent-c); --essential-subdued: color-mix(in srgb, var(--r-on-accent-c) 75%, transparent); --essential-bright-accent: var(--r-on-accent-c); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-accent-c); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-accent-c); --decorative-subdued: color-mix(in srgb, var(--r-accent-c) 70%, var(--r-on-accent-c)); --parents-essential-base: var(--r-on-accent-c);
+}
+.encore-dark-theme .encore-muted-accent-set, .encore-light-theme .encore-muted-accent-set {
+  --background-base: var(--r-second-c); --background-highlight: color-mix(in srgb, var(--r-second-c) 88%, var(--r-on-second-c)); --background-press: color-mix(in srgb, var(--r-second-c) 76%, var(--r-on-second-c));
+  --background-elevated-base: color-mix(in srgb, var(--r-second-c) 92%, var(--r-on-second-c)); --background-elevated-highlight: color-mix(in srgb, var(--r-second-c) 86%, var(--r-on-second-c)); --background-elevated-press: color-mix(in srgb, var(--r-second-c) 76%, var(--r-on-second-c));
+  --background-tinted-base: var(--r-second-c); --background-tinted-highlight: var(--r-second-c); --background-tinted-press: var(--r-second-c);
+  --text-base: var(--r-on-second-c); --text-subdued: color-mix(in srgb, var(--r-on-second-c) 75%, transparent); --text-bright-accent: var(--r-on-second-c); --text-negative: var(--r-on-second-c); --text-warning: var(--r-on-second-c); --text-positive: var(--r-on-second-c); --text-announcement: var(--r-on-second-c);
+  --essential-base: var(--r-on-second-c); --essential-subdued: color-mix(in srgb, var(--r-on-second-c) 75%, transparent); --essential-bright-accent: var(--r-on-second-c); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-second-c); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-second-c); --decorative-subdued: color-mix(in srgb, var(--r-second-c) 70%, var(--r-on-second-c)); --parents-essential-base: var(--r-on-second-c);
+}
+.encore-dark-theme .encore-positive-set, .encore-light-theme .encore-positive-set {
+  --background-base: var(--r-accent); --background-highlight: color-mix(in srgb, var(--r-accent) 88%, var(--r-on-accent)); --background-press: color-mix(in srgb, var(--r-accent) 76%, var(--r-on-accent));
+  --background-elevated-base: color-mix(in srgb, var(--r-accent) 92%, var(--r-on-accent)); --background-elevated-highlight: color-mix(in srgb, var(--r-accent) 86%, var(--r-on-accent)); --background-elevated-press: color-mix(in srgb, var(--r-accent) 76%, var(--r-on-accent));
+  --background-tinted-base: var(--r-accent); --background-tinted-highlight: var(--r-accent); --background-tinted-press: var(--r-accent);
+  --text-base: var(--r-on-accent); --text-subdued: color-mix(in srgb, var(--r-on-accent) 75%, transparent); --text-bright-accent: var(--r-on-accent); --text-negative: var(--r-on-accent); --text-warning: var(--r-on-accent); --text-positive: var(--r-on-accent); --text-announcement: var(--r-on-accent);
+  --essential-base: var(--r-on-accent); --essential-subdued: color-mix(in srgb, var(--r-on-accent) 75%, transparent); --essential-bright-accent: var(--r-on-accent); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-accent); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-accent); --decorative-subdued: color-mix(in srgb, var(--r-accent) 70%, var(--r-on-accent)); --parents-essential-base: var(--r-on-accent);
+}
+.encore-dark-theme .encore-positive-subdued-set, .encore-light-theme .encore-positive-subdued-set {
+  --background-base: var(--r-accent-c); --background-highlight: color-mix(in srgb, var(--r-accent-c) 88%, var(--r-on-accent-c)); --background-press: color-mix(in srgb, var(--r-accent-c) 76%, var(--r-on-accent-c));
+  --background-elevated-base: color-mix(in srgb, var(--r-accent-c) 92%, var(--r-on-accent-c)); --background-elevated-highlight: color-mix(in srgb, var(--r-accent-c) 86%, var(--r-on-accent-c)); --background-elevated-press: color-mix(in srgb, var(--r-accent-c) 76%, var(--r-on-accent-c));
+  --background-tinted-base: var(--r-accent-c); --background-tinted-highlight: var(--r-accent-c); --background-tinted-press: var(--r-accent-c);
+  --text-base: var(--r-on-accent-c); --text-subdued: color-mix(in srgb, var(--r-on-accent-c) 75%, transparent); --text-bright-accent: var(--r-on-accent-c); --text-negative: var(--r-on-accent-c); --text-warning: var(--r-on-accent-c); --text-positive: var(--r-on-accent-c); --text-announcement: var(--r-on-accent-c);
+  --essential-base: var(--r-on-accent-c); --essential-subdued: color-mix(in srgb, var(--r-on-accent-c) 75%, transparent); --essential-bright-accent: var(--r-on-accent-c); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-accent-c); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-accent-c); --decorative-subdued: color-mix(in srgb, var(--r-accent-c) 70%, var(--r-on-accent-c)); --parents-essential-base: var(--r-on-accent-c);
+}
+.encore-dark-theme .encore-warning-set, .encore-light-theme .encore-warning-set {
+  --background-base: var(--r-third); --background-highlight: color-mix(in srgb, var(--r-third) 88%, var(--r-on-third)); --background-press: color-mix(in srgb, var(--r-third) 76%, var(--r-on-third));
+  --background-elevated-base: color-mix(in srgb, var(--r-third) 92%, var(--r-on-third)); --background-elevated-highlight: color-mix(in srgb, var(--r-third) 86%, var(--r-on-third)); --background-elevated-press: color-mix(in srgb, var(--r-third) 76%, var(--r-on-third));
+  --background-tinted-base: var(--r-third); --background-tinted-highlight: var(--r-third); --background-tinted-press: var(--r-third);
+  --text-base: var(--r-on-third); --text-subdued: color-mix(in srgb, var(--r-on-third) 75%, transparent); --text-bright-accent: var(--r-on-third); --text-negative: var(--r-on-third); --text-warning: var(--r-on-third); --text-positive: var(--r-on-third); --text-announcement: var(--r-on-third);
+  --essential-base: var(--r-on-third); --essential-subdued: color-mix(in srgb, var(--r-on-third) 75%, transparent); --essential-bright-accent: var(--r-on-third); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-third); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-third); --decorative-subdued: color-mix(in srgb, var(--r-third) 70%, var(--r-on-third)); --parents-essential-base: var(--r-on-third);
+}
+.encore-dark-theme .encore-warning-subdued-set, .encore-light-theme .encore-warning-subdued-set {
+  --background-base: var(--r-third-c); --background-highlight: color-mix(in srgb, var(--r-third-c) 88%, var(--r-on-third-c)); --background-press: color-mix(in srgb, var(--r-third-c) 76%, var(--r-on-third-c));
+  --background-elevated-base: color-mix(in srgb, var(--r-third-c) 92%, var(--r-on-third-c)); --background-elevated-highlight: color-mix(in srgb, var(--r-third-c) 86%, var(--r-on-third-c)); --background-elevated-press: color-mix(in srgb, var(--r-third-c) 76%, var(--r-on-third-c));
+  --background-tinted-base: var(--r-third-c); --background-tinted-highlight: var(--r-third-c); --background-tinted-press: var(--r-third-c);
+  --text-base: var(--r-on-third-c); --text-subdued: color-mix(in srgb, var(--r-on-third-c) 75%, transparent); --text-bright-accent: var(--r-on-third-c); --text-negative: var(--r-on-third-c); --text-warning: var(--r-on-third-c); --text-positive: var(--r-on-third-c); --text-announcement: var(--r-on-third-c);
+  --essential-base: var(--r-on-third-c); --essential-subdued: color-mix(in srgb, var(--r-on-third-c) 75%, transparent); --essential-bright-accent: var(--r-on-third-c); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-third-c); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-third-c); --decorative-subdued: color-mix(in srgb, var(--r-third-c) 70%, var(--r-on-third-c)); --parents-essential-base: var(--r-on-third-c);
+}
+.encore-dark-theme .encore-negative-set, .encore-light-theme .encore-negative-set {
+  --background-base: var(--r-error); --background-highlight: color-mix(in srgb, var(--r-error) 88%, var(--r-on-error)); --background-press: color-mix(in srgb, var(--r-error) 76%, var(--r-on-error));
+  --background-elevated-base: color-mix(in srgb, var(--r-error) 92%, var(--r-on-error)); --background-elevated-highlight: color-mix(in srgb, var(--r-error) 86%, var(--r-on-error)); --background-elevated-press: color-mix(in srgb, var(--r-error) 76%, var(--r-on-error));
+  --background-tinted-base: var(--r-error); --background-tinted-highlight: var(--r-error); --background-tinted-press: var(--r-error);
+  --text-base: var(--r-on-error); --text-subdued: color-mix(in srgb, var(--r-on-error) 75%, transparent); --text-bright-accent: var(--r-on-error); --text-negative: var(--r-on-error); --text-warning: var(--r-on-error); --text-positive: var(--r-on-error); --text-announcement: var(--r-on-error);
+  --essential-base: var(--r-on-error); --essential-subdued: color-mix(in srgb, var(--r-on-error) 75%, transparent); --essential-bright-accent: var(--r-on-error); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-error); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-error); --decorative-subdued: color-mix(in srgb, var(--r-error) 70%, var(--r-on-error)); --parents-essential-base: var(--r-on-error);
+}
+.encore-dark-theme .encore-negative-subdued-set, .encore-light-theme .encore-negative-subdued-set {
+  --background-base: var(--r-error-c); --background-highlight: color-mix(in srgb, var(--r-error-c) 88%, var(--r-on-error-c)); --background-press: color-mix(in srgb, var(--r-error-c) 76%, var(--r-on-error-c));
+  --background-elevated-base: color-mix(in srgb, var(--r-error-c) 92%, var(--r-on-error-c)); --background-elevated-highlight: color-mix(in srgb, var(--r-error-c) 86%, var(--r-on-error-c)); --background-elevated-press: color-mix(in srgb, var(--r-error-c) 76%, var(--r-on-error-c));
+  --background-tinted-base: var(--r-error-c); --background-tinted-highlight: var(--r-error-c); --background-tinted-press: var(--r-error-c);
+  --text-base: var(--r-on-error-c); --text-subdued: color-mix(in srgb, var(--r-on-error-c) 75%, transparent); --text-bright-accent: var(--r-on-error-c); --text-negative: var(--r-on-error-c); --text-warning: var(--r-on-error-c); --text-positive: var(--r-on-error-c); --text-announcement: var(--r-on-error-c);
+  --essential-base: var(--r-on-error-c); --essential-subdued: color-mix(in srgb, var(--r-on-error-c) 75%, transparent); --essential-bright-accent: var(--r-on-error-c); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-error-c); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-error-c); --decorative-subdued: color-mix(in srgb, var(--r-error-c) 70%, var(--r-on-error-c)); --parents-essential-base: var(--r-on-error-c);
+}
+.encore-dark-theme .encore-announcement-set, .encore-light-theme .encore-announcement-set {
+  --background-base: var(--r-second); --background-highlight: color-mix(in srgb, var(--r-second) 88%, var(--r-on-second)); --background-press: color-mix(in srgb, var(--r-second) 76%, var(--r-on-second));
+  --background-elevated-base: color-mix(in srgb, var(--r-second) 92%, var(--r-on-second)); --background-elevated-highlight: color-mix(in srgb, var(--r-second) 86%, var(--r-on-second)); --background-elevated-press: color-mix(in srgb, var(--r-second) 76%, var(--r-on-second));
+  --background-tinted-base: var(--r-second); --background-tinted-highlight: var(--r-second); --background-tinted-press: var(--r-second);
+  --text-base: var(--r-on-second); --text-subdued: color-mix(in srgb, var(--r-on-second) 75%, transparent); --text-bright-accent: var(--r-on-second); --text-negative: var(--r-on-second); --text-warning: var(--r-on-second); --text-positive: var(--r-on-second); --text-announcement: var(--r-on-second);
+  --essential-base: var(--r-on-second); --essential-subdued: color-mix(in srgb, var(--r-on-second) 75%, transparent); --essential-bright-accent: var(--r-on-second); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-second); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-second); --decorative-subdued: color-mix(in srgb, var(--r-second) 70%, var(--r-on-second)); --parents-essential-base: var(--r-on-second);
+}
+.encore-dark-theme .encore-announcement-subdued-set, .encore-light-theme .encore-announcement-subdued-set {
+  --background-base: var(--r-second-c); --background-highlight: color-mix(in srgb, var(--r-second-c) 88%, var(--r-on-second-c)); --background-press: color-mix(in srgb, var(--r-second-c) 76%, var(--r-on-second-c));
+  --background-elevated-base: color-mix(in srgb, var(--r-second-c) 92%, var(--r-on-second-c)); --background-elevated-highlight: color-mix(in srgb, var(--r-second-c) 86%, var(--r-on-second-c)); --background-elevated-press: color-mix(in srgb, var(--r-second-c) 76%, var(--r-on-second-c));
+  --background-tinted-base: var(--r-second-c); --background-tinted-highlight: var(--r-second-c); --background-tinted-press: var(--r-second-c);
+  --text-base: var(--r-on-second-c); --text-subdued: color-mix(in srgb, var(--r-on-second-c) 75%, transparent); --text-bright-accent: var(--r-on-second-c); --text-negative: var(--r-on-second-c); --text-warning: var(--r-on-second-c); --text-positive: var(--r-on-second-c); --text-announcement: var(--r-on-second-c);
+  --essential-base: var(--r-on-second-c); --essential-subdued: color-mix(in srgb, var(--r-on-second-c) 75%, transparent); --essential-bright-accent: var(--r-on-second-c); --essential-negative: var(--r-error); --essential-warning: var(--r-third); --essential-positive: var(--r-on-second-c); --essential-announcement: var(--r-second);
+  --decorative-base: var(--r-on-second-c); --decorative-subdued: color-mix(in srgb, var(--r-second-c) 70%, var(--r-on-second-c)); --parents-essential-base: var(--r-on-second-c);
+}
+
+/* ---- the cover-art tinted wash behind page headers, and the sticky top bar that fades it in, follow the palette ---- */
+.main-view-container main > div > div[style*="background-color"] {
+  background-color: transparent !important;
+  background-image: linear-gradient(var(--r-accent-c), var(--r-panel)) !important;
+}
+main [style*="--background-base"] {
+  --background-base: var(--r-accent-c) !important;
+  --background-base-min-contrast: var(--r-accent-c) !important;
+  --background-base-20: color-mix(in srgb, var(--r-accent-c) 20%, transparent) !important;
+}
+
+/* ---- surfaces ---- */
+body, .Root, .Root__top-container { background: var(--r-frame) !important; }
+.Root__globalNav, .Root__now-playing-bar { background-color: var(--r-frame) !important; }
+.main-view-container, .Root__main-view, .Root__nav-bar, .Root__right-sidebar, .main-yourLibraryX-libraryContainer { background-color: var(--r-panel) !important; }
+.main-nowPlayingBar-nowPlayingBar { background: var(--r-frame) !important; }
+
+/* ---- Spotify artwork that is fixed brand purple ---- */
+.main-yourLibraryX-libraryContainer article > div:first-child {
+  background-image: none !important; background-color: var(--r-accent-c) !important; color: var(--r-on-accent-c) !important;
+  border-radius: 14px;
+}
+.main-yourLibraryX-libraryContainer article > div:first-child :is(h2, p) { --text-base: var(--r-on-accent-c); --text-subdued: var(--r-on-accent-c); color: var(--r-on-accent-c) !important; }
+
+/* ---- lyrics card ---- */
+[style*="--lyrics-color-background"] {
+  --lyrics-color-background: var(--r-accent-c) !important;
+  --lyrics-color-active: var(--r-on-accent-c) !important;
+  --lyrics-color-passed: color-mix(in srgb, var(--r-on-accent-c) 82%, transparent) !important;
+  --lyrics-color-inactive: color-mix(in srgb, var(--r-on-accent-c) 55%, transparent) !important;
+}
+
+/* ---- profile button without a picture ---- */
+[data-testid="user-widget-link"] > div, [data-testid="user-widget-link"] figure { background-color: var(--r-accent-c) !important; color: var(--r-on-accent-c) !important; }
+
+/* ---- "Browse all" tiles: fixed vivid colours with white text become palette containers with matching text ---- */
+[role="listitem"] > a > div[style*="background-color"] { background-color: var(--r-accent-c) !important; color: var(--r-on-accent-c) !important; --text-base: var(--r-on-accent-c); }
+[role="listitem"]:nth-child(3n+2) > a > div[style*="background-color"] { background-color: var(--r-second-c) !important; color: var(--r-on-second-c) !important; --text-base: var(--r-on-second-c); }
+[role="listitem"]:nth-child(3n) > a > div[style*="background-color"] { background-color: var(--r-third-c) !important; color: var(--r-on-third-c) !important; --text-base: var(--r-on-third-c); }
+
+/* header meta text had white hard-coded for the dark cover-art washes */
+[class*="main-entityHeader"] { --text-subdued: color-mix(in srgb, var(--r-on-accent-c) 78%, transparent) !important; }
