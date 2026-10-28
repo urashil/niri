@@ -4,7 +4,7 @@ import Quickshell.Services.Mpris
 import QtQuick
 import QtQuick.Layouts
 
-// Now-playing card (click the island while a player is going): opens under the CPU/RAM chip.
+// Now-playing card (click the island while a player is going): opens centered under the island.
 PanelWindow {
     id: win
     visible: UiState.media
@@ -26,7 +26,7 @@ PanelWindow {
 
     Rectangle {
         id: card
-        x: Math.max(8, Math.min(win.width - width - 8, UiState.statsCenter - width / 2))
+        x: (win.width - width) / 2
         y: 56
         width: 340
         height: col.implicitHeight + 32
