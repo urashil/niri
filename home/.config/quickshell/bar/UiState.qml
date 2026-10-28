@@ -13,6 +13,8 @@ Singleton {
     property string quickPage: "main"
     property bool history: false
     property bool media: false
+    property bool songOpen: false        // the island expanded into the song's film
+    property real pillW: 200             // width of the center island, so the expanded one can grow out of it
     property bool launcher: false
     property bool focusOpen: false
     property string focusTab: "timer"

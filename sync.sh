@@ -18,12 +18,12 @@ FILES=(
   .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userContent.css
   .config/librewolf/librewolf/6yv4qbnb.default-release/user.js
   .local/bin/lock .local/bin/lid-close .local/bin/rec .local/bin/notify-me .local/bin/caffeine-off .local/bin/theme-mode .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
-  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login .local/bin/pia-killswitch
+  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login .local/bin/pia-killswitch .local/bin/still-film .local/bin/still-fetch
   .config/quickshell/bootpreview
   .config/rice/wallpaper-modes.json
   .config/rice/network-login.sh
   .local/share/rice/librewolf-ext
-  .local/share/rice/emoji.tsv
+  .local/share/rice/emoji.tsv .local/share/rice/still-at-server/frame.html .local/share/rice/still-at-server/frame.js
   .librewolf/native-messaging-hosts/rice_theme.json
 )
 for f in "${FILES[@]}"; do

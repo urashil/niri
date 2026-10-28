@@ -5,6 +5,7 @@ Rectangle {
     id: root
     readonly property bool active: UiState.islandActive
     readonly property real idleW: clockRow.implicitWidth + 32
+    readonly property bool songShown: Song.nowPlaying
     readonly property real eventW: Math.max(idleW, evRow.implicitWidth + 36)
 
     width: active ? eventW : idleW
@@ -15,6 +16,10 @@ Rectangle {
     border.color: active ? Qt.alpha(UiState.islandColor, 0.7) : Qt.alpha(Theme.outlineVariant, 0.8)
     clip: true
 
+    onWidthChanged: UiState.pillW = width
+    // the expanded song island takes over while it is open
+    opacity: UiState.songOpen ? 0 : 1
+    Behavior on opacity { NumberAnimation { duration: 140 } }
     Behavior on width { NumberAnimation { duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.15 } }
     Behavior on height { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: 300 } }
@@ -28,9 +33,20 @@ Rectangle {
         spacing: 10
         opacity: root.active ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: 180 } }
-        Glyph { text: ""; color: Theme.primary; font.pixelSize: 14 }
-        Label { text: Qt.formatDateTime(clock.date, "ddd d MMM"); color: Theme.textDim }
-        Label { text: Qt.formatDateTime(clock.date, "HH:mm:ss"); font.weight: Font.Bold }
+        Row {
+            visible: !root.songShown
+            spacing: 10
+            Glyph { text: ""; color: Theme.primary; font.pixelSize: 14 }
+            Label { text: Qt.formatDateTime(clock.date, "ddd d MMM"); color: Theme.textDim }
+            Label { text: Qt.formatDateTime(clock.date, "HH:mm:ss"); font.weight: Font.Bold }
+        }
+        // a song is playing: it stays in the island until it stops
+        Row {
+            visible: root.songShown
+            spacing: 10
+            Equalizer { anchors.verticalCenter: parent.verticalCenter; active: Song.nowPlaying; barColor: Song.playing ? Theme.primary : Theme.tertiary }
+            Label { text: Song.nowText; elide: Text.ElideRight; width: Math.min(implicitWidth, 260); font.weight: Font.Bold }
+        }
 
         // timer chip (running timer: remaining time, red in the last minute)
         Item {
@@ -97,7 +113,9 @@ Rectangle {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: {
-            if (root.active && UiState.islandKind === "media") UiState.media = true;
+            if (root.active && UiState.islandKind === "media") { if (Song.started) UiState.songOpen = true; else UiState.media = true; }
+            else if (!root.active && Song.playing) UiState.songOpen = true;
+            else if (!root.active && root.songShown) UiState.media = true;
             else UiState.openFocus("todo");
         }
     }

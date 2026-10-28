@@ -167,6 +167,9 @@ PanelWindow {
         }
         const v = calc(q);
         if (v !== null) out.push({ title: "= " + (Number.isInteger(v) ? v : +v.toFixed(8)), sub: "press Enter to copy", icon: iconFor("accessories-calculator"), go: () => run(["wl-copy", String(v)]) });
+        const q1 = q.toLowerCase().trim();
+        if (Song.installed && q1.length >= 2 && ["still@server", "song", "film", "music"].some(w => w.startsWith(q1)))
+            out.push({ title: "Play " + Song.name, sub: "the animated music film · opens in the island", icon: iconFor("multimedia-audio-player"), go: () => Song.open() });
         const cv = convert(q);
         if (cv) out.push({ title: "= " + cv.text, sub: "press Enter to copy", icon: iconFor("accessories-calculator"), go: () => run(["wl-copy", String(+cv.v.toPrecision(8))]) });
         const q2 = q.toLowerCase().trim();

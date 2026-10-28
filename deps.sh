@@ -25,7 +25,7 @@ echo "==> desktop packages"
 for pkg in niri quickshell kitty fuzzel sddm librewolf iwd bluez bluez-utils upower power-profiles-daemon \
            ffmpeg librsvg imagemagick python grub efibootmgr plymouth mkinitcpio \
            ttf-jetbrains-mono-nerd ttf-nerd-fonts-symbols noto-fonts-emoji \
-           qt6-svg qt6-virtualkeyboard qt6-multimedia-ffmpeg qt6-imageformats zip jq; do
+           qt6-svg nodejs chromium qt6-virtualkeyboard qt6-multimedia-ffmpeg qt6-imageformats zip jq; do
   pacman -S --needed --noconfirm "$pkg" >/dev/null 2>&1 || echo "   (could not install $pkg from the repos: install it yourself if you need it)"
 done
 # AUR packages: PIA is what the VPN controls talk to

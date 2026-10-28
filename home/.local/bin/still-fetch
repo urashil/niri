@@ -1,0 +1,20 @@
+#!/bin/sh
+# Mirror song.tylerium.pro (the "still@server" animated music film) into ~/.local/share/rice/still-at-server for the island player.
+# The page/frame code (frame.html, frame.js) is ours and comes with the dotfiles; the song and the film's code are downloaded.
+set -e
+dir="$HOME/.local/share/rice/still-at-server"
+site=https://song.tylerium.pro
+mkdir -p "$dir/assets/addons/environments" "$dir/assets/addons/postprocessing" "$dir/assets/addons/shaders" "$dir/assets/addons/geometries" "$dir/assets/addons/utils"
+for f in style.css app.js opening.js terminal-script.js terminals.js film.js timeline.js characters.js dialogue.js sets.js storyboard.js visuals.js \
+         assets/still-at-server.mp3 assets/three.module.js assets/three.core.min.js \
+         assets/addons/environments/RoomEnvironment.js assets/addons/geometries/RoundedBoxGeometry.js assets/addons/utils/BufferGeometryUtils.js \
+         assets/addons/postprocessing/EffectComposer.js assets/addons/postprocessing/OutputPass.js assets/addons/postprocessing/RenderPass.js \
+         assets/addons/postprocessing/ShaderPass.js assets/addons/postprocessing/UnrealBloomPass.js assets/addons/postprocessing/MaskPass.js assets/addons/postprocessing/Pass.js \
+         assets/addons/shaders/CopyShader.js assets/addons/shaders/LuminosityHighPassShader.js assets/addons/shaders/OutputShader.js; do
+  [ -s "$dir/$f" ] || { echo "fetching $f"; curl -sfL -m 180 -o "$dir/$f" "$site/$f"; }
+done
+# a cheaper renderer for a small island (no MSAA, hard shadows, pixel ratio 1)
+cp -n "$dir/film.js" "$dir/film.orig.js"
+sed -i 's/antialias:true,powerPreference:.high-performance./antialias:false,powerPreference:"high-performance"/; s/THREE.PCFSoftShadowMap/THREE.BasicShadowMap/; s/this.renderer.setPixelRatio(Math.min(devicePixelRatio,innerWidth<700?1.35:1.6));/this.renderer.setPixelRatio(1);/' "$dir/film.js"
+node "$HOME/.local/bin/still-film" --chapters
+echo "still@server is ready"

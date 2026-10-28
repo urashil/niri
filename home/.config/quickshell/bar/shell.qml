@@ -15,6 +15,7 @@ ShellRoot {
     PowerMenu {}
     WallpaperPicker {}
     Notifications {}
+    SongIsland {}
     AuthPrompt {}
     Events {}
 
@@ -48,6 +49,15 @@ ShellRoot {
         function wg(): void { Vpn.useWireguard(); }
         function school(): void { Vpn.useSchool(); }
         function auto(): void { Vpn.useOpenvpnAuto(); }
+    }
+    // qs -c bar ipc call song <open|toggle|expand|key>   (key: play-pause|next|previous|stop, for the media keys)
+    IpcHandler {
+        target: "song"
+        function open(): void { Song.open(); }
+        function toggle(): void { Song.toggle(); }
+        function expand(): void { if (Song.started) UiState.songOpen = !UiState.songOpen; else Song.open(); }
+        function key(what: string): void { Song.key(what); }
+        function state(): string { return JSON.stringify({ started: Song.started, playing: Song.playing, pos: Song.position, open: UiState.songOpen, film: Song.filmReady, frames: Song.frameCount }); }
     }
     IpcHandler { target: "launcher";  function toggle(): void { UiState.launcher = !UiState.launcher; } }
     IpcHandler {

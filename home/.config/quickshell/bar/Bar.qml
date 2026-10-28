@@ -102,7 +102,8 @@ Variants {
                 spacing: 8
 
                 Island {
-                    visible: win.player !== null
+                    // the island shows what is playing; this chip is for a paused player
+                    visible: (win.player !== null && !win.player.isPlaying) || (Song.started && !Song.playing)
                     spacing: 8
                     Glyph {
                         text: win.player && win.player.isPlaying ? "" : ""

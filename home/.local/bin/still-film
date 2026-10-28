@@ -1,0 +1,174 @@
+#!/usr/bin/env node
+// Renders the "still@server" film (~/.local/share/rice/still-at-server, mirrored from song.tylerium.pro) for the island.
+// A headless Chromium draws one frame per requested song time and this writes it to $XDG_RUNTIME_DIR/still-frame.jpg.
+//   stdin : "t <seconds> <1|0>"  set the film clock: song time and whether it is playing (the page advances it by itself)
+//           "size <w> <h>"  frame size in px (default 640 360)
+//           "quit"
+//   stdout: "ready" once the page is loaded, then "frame <n>\t<0|1>" for every frame written
+//           (the frame is $XDG_RUNTIME_DIR/still-frame-<0|1>.jpg; two names alternate so a viewer sees a new URL each time)
+//   still-film --chapters   write the chapter list to chapters.json in the film folder and exit
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { createInterface } from 'node:readline';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const HOME = os.homedir();
+const ROOT = path.join(HOME, '.local/share/rice/still-at-server');
+const RUN = process.env.XDG_RUNTIME_DIR || os.tmpdir();
+const OUT = i => path.join(RUN, `still-frame-${i}.jpg`);
+const ENERGY_CACHE = path.join(HOME, '.cache/rice/still-energy.json');
+const MP3 = path.join(ROOT, 'assets/still-at-server.mp3');
+if (process.argv[2] === '--chapters') {
+  const { chapters } = await import(path.join(ROOT, 'timeline.js'));
+  fs.writeFileSync(path.join(ROOT, 'chapters.json'), JSON.stringify(chapters.map(c => ({ title: c.title, start: c.start }))));
+  process.exit(0);
+}
+const log = m => process.stderr.write(`[still-film] ${m}\n`);
+
+// ---- loudness envelope: the site drives the film's pulse from a live spectrum; here it comes from the file (30 values/s)
+async function energyEnvelope() {
+  try {
+    const c = JSON.parse(fs.readFileSync(ENERGY_CACHE, 'utf8'));
+    if (c.mtime === fs.statSync(MP3).mtimeMs) return c.values;
+  } catch {}
+  const chunks = [];
+  await new Promise((res, rej) => {
+    const ff = spawn('ffmpeg', ['-v', 'error', '-i', MP3, '-ac', '1', '-ar', '6000', '-af', 'lowpass=f=2500,highpass=f=80', '-f', 's16le', '-'], { stdio: ['ignore', 'pipe', 'inherit'] });
+    ff.stdout.on('data', d => chunks.push(d));
+    ff.on('error', rej); ff.on('close', res);
+  });
+  const buf = Buffer.concat(chunks);
+  const per = 200;                                  // 6000 Hz / 30
+  const vals = [];
+  for (let i = 0; i + per <= buf.length / 2; i += per) {
+    let s = 0;
+    for (let j = 0; j < per; j++) { const v = buf.readInt16LE((i + j) * 2) / 32768; s += v * v; }
+    vals.push(Math.sqrt(s / per));
+  }
+  const sorted = [...vals].sort((a, b) => a - b);
+  const top = sorted[Math.floor(sorted.length * 0.95)] || 1;
+  const values = vals.map(v => Math.min(1, v / top) * 0.55);
+  try {
+    fs.mkdirSync(path.dirname(ENERGY_CACHE), { recursive: true });
+    fs.writeFileSync(ENERGY_CACHE, JSON.stringify({ mtime: fs.statSync(MP3).mtimeMs, values }));
+  } catch {}
+  return values;
+}
+const envelope = await energyEnvelope().catch(e => { log('no energy envelope: ' + e.message); return []; });
+let energy = 0;
+const energyAt = t => {
+  const i = Math.max(0, Math.floor(t * 30));
+  const target = envelope.length ? envelope[Math.min(i, envelope.length - 1)] : 0;
+  energy += (target - energy) * 0.45;
+  return energy;
+};
+
+// ---- static server for the mirrored site (ES modules do not load from file://)
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.mp3': 'audio/mpeg' };
+let n = 0;
+const server = createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/f') {
+    const parts = [];
+    req.on('data', c => parts.push(c));
+    req.on('end', () => {
+      const slot = n % 2;
+      try {
+        fs.writeFileSync(OUT(slot) + '.tmp', Buffer.concat(parts));
+        fs.renameSync(OUT(slot) + '.tmp', OUT(slot));
+        console.log(`frame ${++n}\t${slot}`);
+      } catch {}
+      res.writeHead(204).end();
+    });
+    return;
+  }
+  const p = path.normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
+  const file = path.join(ROOT, p === '/' ? 'frame.html' : p);
+  if (!file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404).end(); return; }
+  res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream' });
+  fs.createReadStream(file).pipe(res);
+});
+await new Promise(r => server.listen(0, '127.0.0.1', r));
+const port = server.address().port;
+
+// ---- headless Chromium
+const profile = fs.mkdtempSync(path.join(RUN, 'still-chromium-'));
+const flags = (process.env.STILL_FLAGS || '--use-angle=gl --disable-gpu-compositing --ignore-gpu-blocklist').split(' ').filter(Boolean);
+const chrome = spawn('chromium', ['--headless=new', '--no-sandbox', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--hide-scrollbars',
+  '--mute-audio', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
+  '--no-first-run', '--no-default-browser-check', ...flags, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+const wsUrl = await new Promise((resolve, reject) => {
+  let buf = '';
+  chrome.stderr.on('data', d => { buf += d; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) resolve(m[1]); });
+  chrome.on('exit', c => reject(new Error('chromium exited ' + c)));
+  setTimeout(() => reject(new Error('chromium did not start')), 20000);
+});
+const cleanup = () => { try { chrome.kill('SIGKILL'); } catch {} try { fs.rmSync(profile, { recursive: true, force: true }); } catch {} try { server.close(); } catch {} };
+process.on('exit', cleanup);
+for (const s of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(s, () => { cleanup(); process.exit(0); });
+chrome.on('exit', () => { cleanup(); process.exit(1); });
+
+const base = new URL(wsUrl);
+const list = await (await fetch(`http://127.0.0.1:${base.port}/json/list`)).json();
+const pageWs = list.find(t => t.type === 'page').webSocketDebuggerUrl;
+const ws = new WebSocket(pageWs);
+await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+let id = 0; const pending = new Map();
+ws.onmessage = e => {
+  const m = JSON.parse(e.data);
+  if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+  else if (m.method === 'Runtime.exceptionThrown') log('page error: ' + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text));
+  else if (m.method === 'Log.entryAdded' && !m.params.entry.text.includes('performance warning') && !m.params.entry.url?.endsWith('favicon.ico')) log('log.' + m.params.entry.level + ': ' + m.params.entry.text + ' ' + (m.params.entry.url || ''));
+  else if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) log('console.' + m.params.type + ': ' + m.params.args.map(a => a.value ?? a.description).join(' '));
+};
+const cdp = (method, params = {}) => new Promise((res, rej) => {
+  const n = ++id;
+  const timer = setTimeout(() => { pending.delete(n); rej(new Error(method + ' timed out')); }, 8000);
+  pending.set(n, m => { clearTimeout(timer); m.error ? rej(new Error(m.error.message)) : res(m.result); });
+  ws.send(JSON.stringify({ id: n, method, params }));
+});
+
+let W = 480, H = 270;
+const setSize = () => cdp('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
+await setSize();
+await cdp('Page.enable'); await cdp('Runtime.enable'); await cdp('Log.enable');
+const nav = await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/frame.html${process.env.STILL_QUERY || ''}` });
+if (nav.errorText) log('navigate: ' + nav.errorText);
+for (let i = 0; i < 100; i++) {
+  const r = await cdp('Runtime.evaluate', { expression: 'window.ready === true', returnByValue: true });
+  if (r.result.value) break;
+  await new Promise(r => setTimeout(r, 200));
+}
+// ---- the page draws on its own clock and posts its frames to the server above
+await cdp('Runtime.evaluate', { expression: `window.setEnv(${JSON.stringify(envelope.map(v => +v.toFixed(3)))})` });
+if (process.env.STILL_DEBUG) {
+  const r = await cdp('Runtime.evaluate', { expression: `(()=>{const g=document.createElement('canvas').getContext('webgl2');const x=g.getExtension('WEBGL_debug_renderer_info');return g.getParameter(x.UNMASKED_RENDERER_WEBGL)})()`, returnByValue: true });
+  log('webgl renderer: ' + r.result.value);
+}
+if (process.env.STILL_DEBUG) {
+  let prev = 0;
+  setInterval(async () => {
+    const r = await cdp('Runtime.evaluate', { expression: 'window.stats() + " | " + window.timing()', returnByValue: true }).catch(() => null);
+    if (r) log(`page: ${r.result.value}  frames out: ${n}`);
+  }, 3000);
+}
+if (process.env.STILL_PROFILE) {
+  setTimeout(async () => {
+    await cdp('Profiler.enable'); await cdp('Profiler.start');
+    setTimeout(async () => {
+      const { profile } = await cdp('Profiler.stop');
+      const self = new Map(); const byId = new Map(profile.nodes.map(x => [x.id, x]));
+      profile.samples.forEach((id, i) => { const nd = byId.get(id); const k = nd.callFrame.functionName + ' ' + nd.callFrame.url.split('/').pop() + ':' + nd.callFrame.lineNumber; self.set(k, (self.get(k) || 0) + (profile.timeDeltas[i] || 0)); });
+      const total = [...self.values()].reduce((a, b) => a + b, 0);
+      for (const [k, v] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 14)) log(`${(v / total * 100).toFixed(1)}%  ${k}`);
+    }, 4000);
+  }, 6000);
+}
+console.log('ready');
+createInterface({ input: process.stdin }).on('line', async line => {
+  const [cmd, a, b] = line.trim().split(/\s+/);
+  if (cmd === 't') { const t = parseFloat(a); if (Number.isFinite(t)) cdp('Runtime.evaluate', { expression: `window.setClock(${t}, ${b === '1'})` }).catch(() => {}); }
+  else if (cmd === 'size') { W = parseInt(a) || W; H = parseInt(b) || H; await setSize(); await cdp('Runtime.evaluate', { expression: 'window.dispatchEvent(new Event("resize"))' }); }
+  else if (cmd === 'quit') process.exit(0);
+}).on('close', () => process.exit(0));

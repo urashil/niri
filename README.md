@@ -56,3 +56,11 @@ Boot: `sudo bash deps.sh` also applies the GRUB theme and builds the extra Plymo
 does nothing when it already says GRUB; on systemd-boot it installs GRUB beside it and only makes it first after checks.
 `sudo bash boot/boot-theme.sh status` first; `preview` draws pictures of both screens without root, `grub` themes the menu and tidies its entries (one per kernel image, extras under Advanced), `splash` puts a matching picture in the kernel
 image, `plymouth` builds an extra boot entry with a spinner and a themed passphrase screen (normal entry untouched).
+
+## Song player (island)
+
+A song that is playing stays in the center island (animated bars + what is playing). Click it and the island grows into a
+player; for the `still@server` film (song.tylerium.pro) it shows the animation itself. Open it from the launcher (`still`),
+`qs -c bar ipc call song open`, or the media keys (they control the film when it is loaded, otherwise `playerctl`).
+`~/.local/bin/still-fetch` mirrors the song and the film's code into `~/.local/share/rice/still-at-server`
+(not part of this repo); `still-film` renders it with a headless Chromium only while the island is expanded.
