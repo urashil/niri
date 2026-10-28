@@ -73,10 +73,11 @@ Singleton {
 
     // killswitch: always (blocks everything while the VPN is down) / auto (only while it should be up) / off
     function setKillswitch(mode) {
+        if (mode === killswitch && pendingKs === "") return;      // nothing to change: restarting the daemon would only drop the tunnel
         pendingKs = mode;
         pendingTimer.restart();
         const reconnect = connected || busy;
-        run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia-killswitch " + mode + "; sleep 1; piactl background enable" + (reconnect ? "; piactl connect" : "")]);
+        run([Quickshell.env("HOME") + "/.local/bin/pia-killswitch", mode].concat(reconnect ? ["reconnect"] : []));
     }
     function pick(c) { pending = c; pendingTimer.restart(); }
     Timer { id: pendingTimer; interval: 25000; onTriggered: { root.pending = ""; root.pendingKs = ""; } }

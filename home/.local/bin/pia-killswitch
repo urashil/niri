@@ -1,0 +1,36 @@
+#!/bin/sh
+# pia-killswitch <on|auto|off> [reconnect]
+# PIA has no piactl setting for the killswitch, so the root helper stops the daemon, edits its settings and starts it
+# again, which drops the tunnel. Here we wait until the daemon really answers again (it can take several seconds on a
+# slower machine; a fixed 1 s sleep was too early) and then bring the VPN back and check that it came up.
+mode=${1:?mode}; reconnect=${2:-}
+log="$HOME/.cache/rice/pia-killswitch.log"
+mkdir -p "$(dirname "$log")"
+say() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >> "$log"; }
+: > "$log"
+
+cur=$(grep -o '"killswitch" *: *"[a-z]*"' /opt/piavpn/etc/settings.json 2>/dev/null | sed 's/.*: *"\(.*\)"/\1/')
+if [ "$cur" = "$mode" ]; then say "killswitch already $mode, daemon left alone"; exit 0; fi
+say "set killswitch $mode (reconnect: ${reconnect:-no})"
+pkexec /usr/local/lib/rice/net-helper pia-killswitch "$mode" >>"$log" 2>&1 || { say "helper failed ($?)"; exit 1; }
+
+up=0
+for _ in $(seq 60); do
+  if piactl get connectionstate >/dev/null 2>&1; then up=1; break; fi
+  sleep 0.5
+done
+[ "$up" = 1 ] || { say "daemon did not come back"; exit 2; }
+say "daemon is up: $(piactl get connectionstate)"
+piactl background enable >>"$log" 2>&1
+
+[ -n "$reconnect" ] || exit 0
+for try in 1 2 3 4; do
+  st=$(piactl get connectionstate 2>/dev/null)
+  case "$st" in Connected|Connecting|Reconnecting) say "state $st"; exit 0 ;; esac
+  say "connect attempt $try (state ${st:-?})"
+  piactl connect >>"$log" 2>&1
+  sleep 3
+done
+st=$(piactl get connectionstate 2>/dev/null)
+say "final state $st"
+[ "$st" = Connected ] || [ "$st" = Connecting ]

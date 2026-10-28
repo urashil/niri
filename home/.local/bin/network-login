@@ -7,7 +7,6 @@
 vpn=${1:-off}; ks=${2:-auto}; iface=${3:-wlan0}; login=${4:-1}
 script="$HOME/.config/rice/network-login.sh"
 log="$HOME/.cache/rice/network-login.log"
-helper=/usr/local/lib/rice/net-helper
 mkdir -p "$(dirname "$log")"
 say() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >> "$log"; }
 : > "$log"
@@ -16,8 +15,7 @@ if [ "$login" = 1 ]; then
 
 say "vpn off, kill switch off"
 piactl disconnect >/dev/null 2>&1
-pkexec "$helper" pia-killswitch off >>"$log" 2>&1
-piactl background enable >/dev/null 2>&1
+pia-killswitch off >>"$log" 2>&1
 for _ in 1 2 3 4 5 6 7 8; do
   [ "$(piactl get connectionstate 2>/dev/null)" = Disconnected ] && break
   sleep 1
@@ -44,8 +42,7 @@ done
 fi
 
 say "kill switch $ks"
-pkexec "$helper" pia-killswitch "$ks" >>"$log" 2>&1
-piactl background enable >/dev/null 2>&1
+pia-killswitch "$ks" >>"$log" 2>&1
 case "$vpn" in
   off) say "vpn stays off" ;;
   *)   [ "$vpn" = 443 ] && vpn=school; say "vpn $vpn"; qs -c bar ipc call vpn "$vpn" >>"$log" 2>&1 ;;
