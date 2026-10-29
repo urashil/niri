@@ -182,7 +182,7 @@ PanelWindow {
         const tools = [
             [["pick", "colour", "color", "picker", "eyedropper"], "Pick a colour from the screen", "copies the hex", "color-select", [Quickshell.env("HOME") + "/.local/bin/colorpick"]],
             [["explain", "ask", "claude"], "Explain a part of the screen", "select a region, Claude explains it", "applets-screenshooter", [Quickshell.env("HOME") + "/.local/bin/explain-shot"]],
-            [["memorize", "password", "practice"], "Practise a password", "type it from memory; only a hash is kept", "dialog-password", null]
+            [["memorize", "password", "practice", "digits"], "Memorize", "learn a password or long number in chunks, then review it", "dialog-password", null]
         ];
         if (q2.length >= 3) for (const t of tools) if (t[0].some(w => w.startsWith(q2))) {
             const cmd = t[4];

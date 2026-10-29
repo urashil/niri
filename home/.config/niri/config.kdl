@@ -506,7 +506,7 @@ binds {
     Mod+Y hotkey-overlay-title="Clipboard History" { spawn "quickshell" "-c" "bar" "ipc" "call" "launcher" "open" "c "; }
     Mod+Alt+A hotkey-overlay-title="Ask Claude" { spawn "quickshell" "-c" "bar" "ipc" "call" "ask" "open"; }
     Mod+Alt+S hotkey-overlay-title="Explain a screen region (Claude)" { spawn "@HOME@/.local/bin/explain-shot"; }
-    Mod+Alt+P hotkey-overlay-title="Practise a password" { spawn "quickshell" "-c" "bar" "ipc" "call" "drill" "toggle"; }
+    Mod+Alt+P hotkey-overlay-title="Memorize" { spawn "quickshell" "-c" "bar" "ipc" "call" "drill" "toggle"; }
     Mod+Alt+C hotkey-overlay-title="Colour picker" { spawn "@HOME@/.local/bin/colorpick"; }
     Mod+Shift+S hotkey-overlay-title="Screenshot + Annotate" { spawn "@HOME@/.local/bin/shot" "region"; }
     Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "@HOME@/.local/bin/scratch"; }

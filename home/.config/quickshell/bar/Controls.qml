@@ -83,7 +83,7 @@ Item {
         property color accent: Theme.primary
         signal clicked()
         height: 30; radius: 15
-        width: t.implicitWidth + 28
+        implicitWidth: t.implicitWidth + 28
         color: on ? Theme.primaryContainer : Theme.surfaceHigh
         border.width: on ? 1 : 0
         border.color: accent

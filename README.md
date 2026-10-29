@@ -50,8 +50,8 @@ one to jump to its terminal); the island pings when a session finishes or needs 
 `Mod+Alt+A` or `? question` in the launcher asks Claude in a card (follow-ups continue it), `Mod+Alt+S` explains a
 selected part of the screen.
 
-More: `Mod+Alt+C` colour picker (copies the hex), `Mod+Alt+P` password practice (type from memory; only a scrypt hash
-is kept, spaced repetition, the island nudges when one is due), `Mod+Y` clipboard search in the launcher (`c `), open
+More: `Mod+Alt+C` colour picker (copies the hex), `Mod+Alt+P` memorize (learn a password or 50 digits in one sitting:
+chunk by chunk, then reviews at 1/3/8/15/30/60 min with island nudges; Show and Remove buttons), `Mod+Y` clipboard search in the launcher (`c `), open
 windows show up in the normal launcher search, night light (quick settings: sunset to sunrise at the weather location,
 or always; wlsunset), per-app volume under the master slider and in Mixer (plus microphone), data used per Wi-Fi network
 (Wi-Fi page), and a USBGuard prompt (bottom right) when a device gets blocked: allow once / always / later / never.
