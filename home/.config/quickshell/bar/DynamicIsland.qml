@@ -1,3 +1,4 @@
+import Quickshell
 import QtQuick
 
 // The center pill: clock when idle, morphs into whatever just happened.
@@ -119,7 +120,10 @@ Rectangle {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: {
-            if (root.active && UiState.islandKind === "media") { if (Song.started) UiState.songOpen = true; else UiState.media = true; }
+            if (root.active && UiState.islandKind === "drill") UiState.drill = true;
+            else if (root.active && UiState.islandKind === "claude") UiState.claude = true;
+            else if (root.active && UiState.islandKind.startsWith("claude:")) Quickshell.execDetached(["niri", "msg", "action", "focus-window", "--id", UiState.islandKind.slice(7)]);
+            else if (root.active && UiState.islandKind === "media") { if (Song.started) UiState.songOpen = true; else UiState.media = true; }
             else if (!root.active && root.songShown) { if (Song.started && Song.shownMpris === null) UiState.songOpen = true; else UiState.media = true; }
             else UiState.openFocus("todo");
         }

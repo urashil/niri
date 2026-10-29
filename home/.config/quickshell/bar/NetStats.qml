@@ -3,7 +3,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 
-// Up/down rate of the Wi-Fi interface.
+// Up/down rate of the Wi-Fi interface, and how much each Wi-Fi network has used (by day; ~/.local/state/rice/data-usage.json).
 Singleton {
     id: root
     property real down: 0   // bytes/s
@@ -11,6 +11,44 @@ Singleton {
     property var last: null
     property var downHist: []
     property var upHist: []
+
+    // ---- data used per network: { ssid: { "YYYY-MM-DD": [rx, tx] } } ----
+    property var usage: ({})
+    property bool usageDirty: false
+    function day(d) { return Qt.formatDate(d || new Date(), "yyyy-MM-dd"); }
+    function used(ssid, scope) {           // bytes, scope "today" | "month" | "all"
+        const u = usage[ssid];
+        if (!u) return 0;
+        const today = day(), month = today.slice(0, 7);
+        let n = 0;
+        for (const k in u) if (scope === "all" || (scope === "today" ? k === today : k.startsWith(month))) n += u[k][0] + u[k][1];
+        return n;
+    }
+    function size(b) {
+        if (b < 1e6) return Math.round(b / 1e3) + " KB";
+        if (b < 1e9) return (b / 1e6).toFixed(b < 1e7 ? 1 : 0) + " MB";
+        return (b / 1e9).toFixed(2) + " GB";
+    }
+    function account(rx, tx) {
+        const ssid = Wifi.connected ? Wifi.ssid : "";
+        if (!ssid || (rx <= 0 && tx <= 0)) return;
+        const u = usage[ssid] || {};
+        const k = day();
+        const c = u[k] || [0, 0];
+        u[k] = [c[0] + rx, c[1] + tx];
+        usage[ssid] = u;
+        usageDirty = true;
+    }
+    FileView {
+        id: usageFile
+        path: Quickshell.env("HOME") + "/.local/state/rice/data-usage.json"
+        onLoaded: { try { root.usage = JSON.parse(text()); } catch (e) {} }
+    }
+    Timer {
+        interval: 60000; running: true; repeat: true
+        onTriggered: if (root.usageDirty) { root.usageDirty = false; root.usageChanged(); usageFile.setText(JSON.stringify(root.usage)); }
+    }
+    Process { running: true; command: ["mkdir", "-p", Quickshell.env("HOME") + "/.local/state/rice"] }
 
     function fmt(b) {
         if (b < 1024) return Math.round(b) + "B";
@@ -29,6 +67,8 @@ Singleton {
                 if (root.last) {
                     const dt = (now - root.last.t) / 1000;
                     if (dt > 0) {
+                        // counters reset when the interface goes down: skip that sample
+                        if (p[0] >= root.last.rx && p[1] >= root.last.tx) root.account(p[0] - root.last.rx, p[1] - root.last.tx);
                         root.down = Math.max(0, (p[0] - root.last.rx) / dt);
                         root.up = Math.max(0, (p[1] - root.last.tx) / dt);
                         root.downHist = root.downHist.concat([root.down]).slice(-60);

@@ -9,6 +9,9 @@ ShellRoot {
     History {}
     MediaPopup {}
     ClaudePopup {}
+    ClaudeAsk {}
+    PasswordDrill {}
+    UsbPrompt {}
     Launcher {}
     Monitor {}
     FocusPanel {}
@@ -29,7 +32,21 @@ ShellRoot {
         function open(page: string): void { UiState.openQuick(page); }
     }
     IpcHandler { target: "history";   function toggle(): void { UiState.history = !UiState.history; } }
-    IpcHandler { target: "claude";    function toggle(): void { UiState.claude = !UiState.claude; } }
+    IpcHandler { target: "drill";     function toggle(): void { UiState.drill = !UiState.drill; } }
+    IpcHandler {
+        target: "ask"
+        function open(): void { UiState.askClaude("", ""); }
+        function close(): void { UiState.ask = false; }
+        function question(q: string): void { UiState.askClaude(q, ""); }
+        function image(path: string): void { UiState.askClaude("", path); }
+    }
+    IpcHandler {
+        target: "claude"
+        function toggle(): void { UiState.claude = !UiState.claude; }
+        // from the Claude Code hooks (claude-island)
+        function event(state: string, win: string, project: string, msg: string, ping: string): void { ClaudeUsage.event(state, parseInt(win), project, msg, ping === "1"); }
+        function changed(): void { ClaudeUsage.listSessions(); }
+    }
     IpcHandler { target: "media";     function toggle(): void { UiState.media = !UiState.media; } }
     IpcHandler {
         target: "monitor"
@@ -61,7 +78,11 @@ ShellRoot {
         function key(what: string): void { Song.key(what); }
         function state(): string { return JSON.stringify({ started: Song.started, playing: Song.playing, pos: Song.position, open: UiState.songOpen, film: Song.filmReady, frames: Song.frameCount }); }
     }
-    IpcHandler { target: "launcher";  function toggle(): void { UiState.launcher = !UiState.launcher; } }
+    IpcHandler {
+        target: "launcher"
+        function toggle(): void { UiState.launcher = !UiState.launcher; }
+        function open(text: string): void { UiState.launcherText = text; UiState.launcher = true; }
+    }
     IpcHandler {
         target: "switcher"
         function next(): void { UiState.switcherStep(1); }

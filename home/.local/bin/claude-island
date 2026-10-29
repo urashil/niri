@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Claude Code hook -> bar. Tracks sessions in $XDG_RUNTIME_DIR/claude-sessions and pings the island when a session
+finishes or needs you (click the island to jump to its terminal).
+
+  claude-island hook      (from ~/.claude/settings.json hooks; reads the hook JSON on stdin)
+  claude-island list      JSON list of live sessions (dead ones are pruned)
+"""
+import json, os, subprocess, sys, time
+
+DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "claude-sessions")
+
+def ppid(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as f: return int(f.read().rsplit(")", 1)[1].split()[1])
+    except Exception: return 0
+
+def alive(pid):
+    return pid > 0 and os.path.exists(f"/proc/{pid}")
+
+def niri_windows():
+    try: return json.loads(subprocess.run(["niri", "msg", "-j", "windows"], capture_output=True, text=True, timeout=3).stdout)
+    except Exception: return []
+
+def find_window(pid, wins):
+    pids = {w.get("pid"): w for w in wins}
+    for _ in range(30):
+        if pid <= 1: return None
+        if pid in pids: return pids[pid]
+        pid = ppid(pid)
+    return None
+
+def claude_pid():
+    # the hook runs under a shell started by claude; walk up to the claude process
+    p = os.getppid()
+    for _ in range(6):
+        try:
+            with open(f"/proc/{p}/cmdline", "rb") as f: cmd = f.read().split(b"\0")
+        except Exception: break
+        if any(b"claude" in os.path.basename(c) for c in cmd[:2]): return p
+        p = ppid(p)
+    return os.getppid()
+
+def ipc(*a):
+    subprocess.Popen(["qs", "-c", "bar", "ipc", "call", "claude", *a], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def hook():
+    try: ev = json.load(sys.stdin)
+    except Exception: return
+    if (ev.get("cwd") or "").endswith("/.cache/rice/claude-ask"): return      # the bar's own Ask Claude card
+    sid = ev.get("session_id") or "unknown"
+    name = ev.get("hook_event_name", "")
+    os.makedirs(DIR, mode=0o700, exist_ok=True)
+    path = os.path.join(DIR, sid + ".json")
+    try:
+        with open(path) as f: s = json.load(f)
+    except Exception: s = {}
+    if name == "SessionEnd":
+        try: os.remove(path)
+        except FileNotFoundError: pass
+        ipc("changed"); return
+    wins = niri_windows()
+    if not s.get("window"):
+        cp = claude_pid()
+        w = find_window(cp, wins)
+        s.update({"id": sid, "pid": cp, "window": w["id"] if w else 0})
+    cwd = ev.get("cwd") or s.get("cwd") or ""
+    s["cwd"] = cwd
+    s["project"] = os.path.basename(cwd.rstrip("/")) or "~"
+    if cwd == os.path.expanduser("~"): s["project"] = "~"
+    state = {"SessionStart": "idle", "UserPromptSubmit": "working", "Stop": "done", "Notification": "waiting"}.get(name, s.get("state", "idle"))
+    msg = ev.get("message", "") if name == "Notification" else ""
+    # "waiting for your input" after a while idle is not worth a ping
+    if name == "Notification" and "waiting for your input" in msg: state = "done"
+    if name == "UserPromptSubmit": s["prompt"] = (ev.get("prompt") or "")[:120]
+    s.update({"state": state, "msg": msg, "t": time.time()})
+    with open(path + ".tmp", "w") as f: json.dump(s, f)
+    os.replace(path + ".tmp", path)
+    focused = next((w["id"] for w in wins if w.get("is_focused")), None)
+    ping = name in ("Stop", "Notification") and s["window"] != focused and not (name == "Notification" and state == "done")
+    ipc("event", state, str(s.get("window") or 0), s["project"], msg if ping or name == "Stop" else "", "1" if ping else "0")
+
+def listing():
+    out = []
+    if os.path.isdir(DIR):
+        for f in os.listdir(DIR):
+            if not f.endswith(".json"): continue
+            p = os.path.join(DIR, f)
+            try:
+                with open(p) as fh: s = json.load(fh)
+            except Exception: continue
+            if not alive(s.get("pid", 0)): os.remove(p); continue
+            out.append(s)
+    out.sort(key=lambda s: -s.get("t", 0))
+    print(json.dumps(out))
+
+if __name__ == "__main__":
+    (hook if sys.argv[1:] == ["hook"] else listing)()

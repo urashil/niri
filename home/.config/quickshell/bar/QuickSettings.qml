@@ -43,6 +43,17 @@ PanelWindow {
 
     function back() { UiState.quickPage = "main"; askSsid = ""; }
 
+    // ---- per-app audio ----
+    // playback streams (Quickshell counts an app stream that plays into a sink as isSink)
+    readonly property var streams: Pipewire.nodes.values.filter(n => n.isStream && n.isSink && n.audio)
+    function appName(n) { return (n.properties && n.properties["application.name"]) || n.description || n.name; }
+    function appIcon(n) {
+        const p = n.properties || {};
+        for (const c of [p["application.icon-name"], p["application.icon_name"], p["application.process.binary"], (p["application.name"] || "").toLowerCase()])
+            if (c) { const i = Quickshell.iconPath(c, true); if (i) return i; }
+        return "";
+    }
+
     MouseArea { anchors.fill: parent; onClicked: UiState.quick = false }
     Item { focus: win.visible; Keys.onEscapePressed: { if (win.page !== "main") win.back(); else UiState.quick = false; } }
 
@@ -120,6 +131,7 @@ PanelWindow {
                           : win.page === "vpn" ? vpnPage.implicitHeight
                           : win.page === "weather" ? weatherPage.implicitHeight
                           : win.page === "caffeine" ? caffeinePage.implicitHeight
+                          : win.page === "nightlight" ? nightPage.implicitHeight
                           : win.page === "power" ? powerPage.implicitHeight
                           : privPage.implicitHeight
 
@@ -213,6 +225,16 @@ PanelWindow {
                     }
                     Controls.Tile {
                         Layout.fillWidth: true
+                        icon: "\uf0eb"
+                        title: "Night light"
+                        subtitle: !NightLight.installed ? "Install wlsunset" : NightLight.mode === "auto" ? "Sunset to sunrise" : NightLight.mode === "on" ? "On · " + NightLight.temp + "K" : "Off"
+                        on: NightLight.active
+                        chevron: true
+                        onToggled: NightLight.setMode(NightLight.mode === "off" ? "auto" : "off")
+                        onOpened: UiState.quickPage = "nightlight"
+                    }
+                    Controls.Tile {
+                        Layout.fillWidth: true
                         Layout.columnSpan: 1
                         icon: Weather.configured && Weather.loaded ? Weather.icon : "\ue302"
                         title: Weather.configured ? (Weather.loaded ? Weather.tempText + "  " + Weather.desc : "Weather…") : "Weather"
@@ -280,6 +302,22 @@ PanelWindow {
                     accent: Theme.yellow
                     value: UiState.brightness
                     onMoved: v => { bright.command = ["brightnessctl", "--class=backlight", "set", Math.max(1, Math.round(v * 100)) + "%"]; bright.running = true; }
+                }
+                // apps playing sound, right under the master volume (the full mixer is behind "Mixer")
+                Repeater {
+                    model: win.streams.slice(0, 3)
+                    delegate: Controls.Slider {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        height: 28
+                        icon: "\uf028"
+                        image: win.appIcon(modelData)
+                        dim: modelData.audio.muted
+                        accent: Theme.primary
+                        value: modelData.audio.volume
+                        onMoved: v => { modelData.audio.muted = false; modelData.audio.volume = v; }
+                        onIconClicked: modelData.audio.muted = !modelData.audio.muted
+                    }
                 }
 
                 RowLayout {
@@ -351,6 +389,7 @@ PanelWindow {
                             readonly property var rule: Wifi.rules[row.modelData.ssid]
                             text: (row.modelData.connected ? "Connected" : row.modelData.security === "8021x" ? "802.1X (enterprise)" : (row.modelData.known ? "Saved · " : "") + (row.modelData.security === "open" ? "Open" : "Secured"))
                                   + (rule ? (rule.override ? " · custom MAC" : rule.always ? " · random MAC" : "") : "")
+                                  + (NetStats.used(row.modelData.ssid, "month") > 1e6 ? " · " + NetStats.size(NetStats.used(row.modelData.ssid, "month")) + " this month" : "")
                             font.family: Theme.font; font.pixelSize: 10
                             color: row.modelData.connected ? Qt.alpha(Theme.fgContainer, 0.8) : Theme.textDim
                         }
@@ -416,6 +455,21 @@ PanelWindow {
                                 text: "Connect"; font.family: Theme.font; font.pixelSize: 11; font.bold: true; color: Theme.primary
                                 MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: { Wifi.connectTo(row.modelData.ssid, pass.text); win.askSsid = ""; } }
                             }
+                        }
+                    }
+                }
+                // data used on the current network
+                RowLayout {
+                    visible: Wifi.connected
+                    Layout.fillWidth: true
+                    spacing: 14
+                    Text { text: "\uf1c0  " + Wifi.ssid; elide: Text.ElideRight; Layout.fillWidth: true; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                    Repeater {
+                        model: [["today", "today"], ["month", "this month"], ["all", "total"]]
+                        delegate: Text {
+                            required property var modelData
+                            text: NetStats.size(NetStats.used(Wifi.ssid, modelData[0])) + " " + modelData[1]
+                            font.family: Theme.font; font.pixelSize: 10; color: Theme.text
                         }
                     }
                 }
@@ -626,15 +680,17 @@ PanelWindow {
                 Text { text: "Apps"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 6 }
                 Repeater {
                     id: mixer
-                    model: Pipewire.nodes.values.filter(n => n.isStream && !n.isSink && n.audio && n.properties && n.properties["media.class"] === "Stream/Output/Audio")
+                    model: win.streams
                     delegate: ColumnLayout {
                         required property var modelData
                         Layout.fillWidth: true
                         spacing: 0
-                        Text { text: modelData.properties["application.name"] || modelData.description || modelData.name; elide: Text.ElideRight; Layout.fillWidth: true; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                        Text { text: win.appName(modelData) + (modelData.properties && modelData.properties["media.name"] && modelData.properties["media.name"] !== win.appName(modelData) ? "  ·  " + modelData.properties["media.name"] : ""); elide: Text.ElideRight; Layout.fillWidth: true; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
                         Controls.Slider {
                             Layout.fillWidth: true
                             icon: modelData.audio.muted ? "\udb81\udd81" : "\uf028"
+                            image: win.appIcon(modelData)
+                            dim: modelData.audio.muted
                             accent: Theme.primary
                             value: modelData.audio.volume
                             onMoved: v => { modelData.audio.muted = false; modelData.audio.volume = v; }
@@ -643,6 +699,69 @@ PanelWindow {
                     }
                 }
                 Text { visible: mixer.count === 0; text: "Nothing is playing"; font.family: Theme.font; font.pixelSize: 11; color: Theme.outline }
+
+                Text { text: "Microphone"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 6 }
+                Controls.Slider {
+                    Layout.fillWidth: true
+                    readonly property var src: Pipewire.defaultAudioSource
+                    visible: src !== null && src.audio !== null
+                    icon: src && src.audio && src.audio.muted ? "\uf131" : "\uf130"
+                    dim: src && src.audio ? src.audio.muted : false
+                    accent: Theme.red
+                    value: src && src.audio ? src.audio.volume : 0
+                    onMoved: v => { if (src && src.audio) { src.audio.muted = false; src.audio.volume = v; } }
+                    onIconClicked: if (src && src.audio) src.audio.muted = !src.audio.muted
+                }
+                Repeater {
+                    model: Pipewire.nodes.values.filter(n => !n.isSink && !n.isStream && n.audio && n.properties && n.properties["media.class"] === "Audio/Source")
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true; height: 36; radius: 10
+                        readonly property bool cur: Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.id === modelData.id
+                        color: cur ? Theme.primaryContainer : Theme.surfaceContainer
+                        Text {
+                            anchors { left: parent.left; leftMargin: 14; right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                            text: modelData.description || modelData.nickname || modelData.name
+                            elide: Text.ElideRight
+                            font.family: Theme.font; font.pixelSize: 11; color: parent.cur ? Theme.fgContainer : Theme.text
+                        }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Pipewire.preferredDefaultAudioSource = modelData }
+                    }
+                }
+            }
+
+            // ================= night light =================
+            ColumnLayout {
+                id: nightPage
+                visible: win.page === "nightlight"
+                width: parent.width
+                spacing: 10
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
+                    Text { text: "Night light"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
+                }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "Off"; on: NightLight.mode === "off"; onClicked: NightLight.setMode("off") }
+                    Controls.Chip { label: "Sunset to sunrise"; accent: Theme.yellow; on: NightLight.mode === "auto"; onClicked: NightLight.setMode("auto") }
+                    Controls.Chip { label: "Always"; accent: Theme.yellow; on: NightLight.mode === "on"; onClicked: NightLight.setMode("on") }
+                }
+                Text { text: "Warmth  ·  " + NightLight.temp + "K"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 4 }
+                Controls.Slider {
+                    Layout.fillWidth: true
+                    icon: "\uf2c9"
+                    accent: Theme.yellow
+                    // left = warm (2500K), right = barely (5500K)
+                    value: (NightLight.temp - 2500) / 3000
+                    onMoved: v => NightLight.setTemp(2500 + v * 3000)
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: !NightLight.installed ? "wlsunset is not installed: sudo pacman -S wlsunset"
+                        : Weather.configured ? "Sunset and sunrise for " + Weather.name + " (the weather location)." : "Set a weather city for real sunset times; until then 19:30 to 07:00."
+                    font.family: Theme.font; font.pixelSize: 9; color: NightLight.installed ? Theme.outline : Theme.error
+                }
             }
 
             // ================= caffeine =================

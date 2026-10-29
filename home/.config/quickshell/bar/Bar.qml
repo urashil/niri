@@ -192,6 +192,8 @@ Variants {
                     Glyph {
                         id: claudeGlyph
                         text: "\uf069"
+                        // a dot while a Claude Code session waits on you
+                        Rectangle { visible: ClaudeUsage.waiting > 0; width: 7; height: 7; radius: 4; color: Theme.yellow; anchors { right: parent.right; rightMargin: -3; top: parent.top; topMargin: 8 } }
                         color: ClaudeUsage.hot >= 90 ? Theme.error : ClaudeUsage.hot >= 70 ? Theme.yellow : Theme.primary
                         function publish() { UiState.claudeCenter = claudeGlyph.mapToItem(null, claudeGlyph.width / 2, 0).x; }
                         onXChanged: publish()

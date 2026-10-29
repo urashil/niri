@@ -5,8 +5,8 @@ import Quickshell.Widgets
 import QtQuick
 import QtQuick.Layouts
 
-// Mod+Space. Apps by default; "w " windows, "c " clipboard, "e " emoji, "f " files, "> " run, "s " web search;
-// maths and unit conversions ("5 km in mi") evaluate inline.
+// Mod+Space. Apps (and matching open windows) by default; "w " windows, "c " clipboard, "e " emoji, "f " files, "> " run,
+// "s " web search, "? " ask Claude; maths and unit conversions ("5 km in mi") evaluate inline.
 PanelWindow {
     id: win
     visible: UiState.launcher
@@ -23,7 +23,7 @@ PanelWindow {
     readonly property var results: build(query)
 
     onVisibleChanged: {
-        if (visible) { input.text = ""; input.forceActiveFocus(); list.currentIndex = 0; Niri.refresh(); }
+        if (visible) { clipProc.running = true; input.text = UiState.launcherText; UiState.launcherText = ""; input.forceActiveFocus(); list.currentIndex = 0; Niri.refresh(); }
     }
     function close() { UiState.launcher = false; }
 
@@ -160,6 +160,12 @@ PanelWindow {
             if (c) out.push({ title: "Run  " + c, sub: "shell", icon: iconFor("utilities-terminal"), go: () => run(["sh", "-c", c]) });
             return out;
         }
+        if (q.startsWith("?")) {
+            const t = q.slice(1).trim();
+            out.push({ title: t ? "Ask Claude:  " + t : "Ask Claude…", sub: "answers in a card · follow-ups keep the conversation", icon: iconFor("help-about"), go: () => UiState.askClaude(t, "") });
+            out.push({ title: "Explain a part of the screen", sub: "select a region, Claude explains it · Mod+Alt+S", icon: iconFor("applets-screenshooter"), go: () => run([Quickshell.env("HOME") + "/.local/bin/explain-shot"]) });
+            return out;
+        }
         if (q.startsWith("s ")) {
             const t = q.slice(2).trim();
             if (t) out.push({ title: "Search the web for “" + t + "”", sub: "DuckDuckGo", icon: iconFor("web-browser"), go: () => run(["xdg-open", "https://duckduckgo.com/?q=" + encodeURIComponent(t)]) });
@@ -173,10 +179,26 @@ PanelWindow {
         const cv = convert(q);
         if (cv) out.push({ title: "= " + cv.text, sub: "press Enter to copy", icon: iconFor("accessories-calculator"), go: () => run(["wl-copy", String(+cv.v.toPrecision(8))]) });
         const q2 = q.toLowerCase().trim();
+        const tools = [
+            [["pick", "colour", "color", "picker", "eyedropper"], "Pick a colour from the screen", "copies the hex", "color-select", [Quickshell.env("HOME") + "/.local/bin/colorpick"]],
+            [["explain", "ask", "claude"], "Explain a part of the screen", "select a region, Claude explains it", "applets-screenshooter", [Quickshell.env("HOME") + "/.local/bin/explain-shot"]],
+            [["memorize", "password", "practice"], "Practise a password", "type it from memory; only a hash is kept", "dialog-password", null]
+        ];
+        if (q2.length >= 3) for (const t of tools) if (t[0].some(w => w.startsWith(q2))) {
+            const cmd = t[4];
+            out.push({ title: t[1], sub: t[2], icon: iconFor(t[3]), go: cmd ? () => run(cmd) : () => { UiState.drill = true; } });
+        }
+        if (q2.length >= 2) for (const w of Niri.windows) {
+            if ((w.title + " " + w.app_id).toLowerCase().indexOf(q2) < 0) continue;
+            out.push({ title: w.title || w.app_id, sub: "window · " + w.app_id, icon: iconFor(w.app_id), go: () => run(["niri", "msg", "action", "focus-window", "--id", String(w.id)]) });
+            if (out.length >= 6) break;
+        }
         const apps = DesktopEntries.applications.values.filter(e => !e.noDisplay);
         const scored = q2 === "" ? apps.map(e => ({ e: e, s: 1 })) : apps.map(e => ({ e: e, s: score(e, q2) })).filter(x => x.s > 0);
         scored.sort((a, b) => b.s - a.s || a.e.name.localeCompare(b.e.name));
         for (const x of scored.slice(0, 40)) out.push({ title: x.e.name, sub: x.e.comment || x.e.genericName || "", icon: iconFor(x.e.icon), go: () => x.e.execute() });
+        // a question-looking query: offer Claude
+        if (q2.indexOf(" ") > 0 && q2.length >= 8) out.push({ title: "Ask Claude:  " + q.trim(), sub: "or start with ?", icon: iconFor("help-about"), go: () => UiState.askClaude(q.trim(), "") });
         return out;
     }
     function accept() {
@@ -229,7 +251,7 @@ PanelWindow {
             anchors { left: parent.left; leftMargin: 24; top: parent.top; topMargin: 66 }
             spacing: 14
             Repeater {
-                model: [["w", "windows"], ["c", "clipboard"], ["e", "emoji"], ["f", "files"], [">", "run"], ["s", "web"], ["t", "timer"], ["todo", "task"], ["5 km in mi", "convert"]]
+                model: [["w", "windows"], ["c", "clipboard"], ["e", "emoji"], ["f", "files"], [">", "run"], ["s", "web"], ["?", "claude"], ["t", "timer"], ["todo", "task"], ["5 km in mi", "convert"]]
                 delegate: Text {
                     required property var modelData
                     text: modelData[0] + "  " + modelData[1]

@@ -45,6 +45,17 @@ Agent utilities (for scripts and AI agents):
   (`NTFY_URL`, `NTFY_PASSWORD`, optional `NTFY_USER`). `--dry-run` shows what would be sent.
 - `caffeine-off [--lock]` switches caffeine / super caffeine off and turns the screen off at the same time.
 
+Claude: the asterisk in the bar is plan usage (5 hour / weekly / all time) plus your live Claude Code sessions (click
+one to jump to its terminal); the island pings when a session finishes or needs permission (hooks: `claude-island`).
+`Mod+Alt+A` or `? question` in the launcher asks Claude in a card (follow-ups continue it), `Mod+Alt+S` explains a
+selected part of the screen.
+
+More: `Mod+Alt+C` colour picker (copies the hex), `Mod+Alt+P` password practice (type from memory; only a scrypt hash
+is kept, spaced repetition, the island nudges when one is due), `Mod+Y` clipboard search in the launcher (`c `), open
+windows show up in the normal launcher search, night light (quick settings: sunset to sunrise at the weather location,
+or always; wlsunset), per-app volume under the master slider and in Mixer (plus microphone), data used per Wi-Fi network
+(Wi-Fi page), and a USBGuard prompt (bottom right) when a device gets blocked: allow once / always / later / never.
+
 Chromebook keyboards: `keyboard-mode` (also run at login, and by `./install.sh --keyboard=...`) makes the **Alt** key the main
 modifier (Mod) by swapping Alt and the Search key, so every `Mod+...` bind works from the Alt key; `keyboard-mode auto`
 detects a Chromebook (Google DMI vendor / cros_ec keyboard), or force `keyboard-mode chromebook` / `standard`.

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Pick a colour from the screen: copies the hex, shows it in a notification.  colorpick [hex|rgb]
+pt=$(slurp -p -b '#00000000' -c '#88c0d0ff') || exit 0
+hex=$(grim -g "$pt" -s 1 -t ppm - | python3 -c '
+import sys
+d = sys.stdin.buffer.read()
+# P6 header: magic, width, height, maxval, then RGB bytes
+parts = d.split(maxsplit=4)
+r, g, b = parts[4][:3]
+print("#%02x%02x%02x" % (r, g, b))') || exit 1
+out=$hex
+[ "${1:-}" = rgb ] && out=$(printf 'rgb(%d, %d, %d)' 0x${hex:1:2} 0x${hex:3:2} 0x${hex:5:2})
+printf '%s' "$out" | wl-copy
+icon="${XDG_RUNTIME_DIR:-/tmp}/colorpick.png"
+python3 - "$hex" "$icon" <<'PY'
+import sys, zlib, struct
+h = sys.argv[1]; c = bytes(int(h[i:i+2], 16) for i in (1, 3, 5)); n = 48
+raw = b''.join(b'\0' + c * n for _ in range(n))
+chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d))
+open(sys.argv[2], 'wb').write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', n, n, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+PY
+notify-send -a colorpick -i "$icon" "Copied $out" "$hex"

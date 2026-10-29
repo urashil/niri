@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Practise passwords from memory. Only a scrypt hash of each password is stored (~/.local/share/rice/pw-drill.json, 0600);
+the password itself never touches disk. Spaced repetition: a correct answer doubles the gap, a miss resets it to a day.
+
+  pw-drill list                 JSON: [{name, due, streak, gap_days, last}]
+  pw-drill add <name>           password on stdin (twice, one per line, must match)
+  pw-drill check <name>         password on stdin; prints ok / wrong, updates the schedule
+  pw-drill remove <name>
+  pw-drill due                  number of entries due now
+"""
+import hashlib, hmac, json, os, sys, time
+
+PATH = os.path.expanduser("~/.local/share/rice/pw-drill.json")
+N, R, P = 2 ** 17, 8, 1                     # scrypt cost: 128 MiB, about half a second
+
+def load():
+    try:
+        with open(PATH) as f: return json.load(f)
+    except FileNotFoundError: return {}
+
+def save(d):
+    os.makedirs(os.path.dirname(PATH), exist_ok=True)
+    tmp = PATH + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f: json.dump(d, f)
+    os.replace(tmp, PATH)
+
+def digest(pw, salt, n=N, r=R, p=P):
+    return hashlib.scrypt(pw.encode(), salt=salt, n=n, r=r, p=p, maxmem=256 * 1024 * 1024, dklen=32)
+
+def line():
+    return sys.stdin.readline().rstrip("\n")
+
+cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
+d = load()
+now = time.time()
+if cmd == "list":
+    print(json.dumps(sorted(({"name": k, "due": v["due"], "streak": v["streak"], "gap_days": v["gap"], "last": v.get("last", 0)} for k, v in d.items()), key=lambda e: e["due"])))
+elif cmd == "due":
+    print(sum(1 for v in d.values() if v["due"] <= now))
+elif cmd == "add":
+    name = sys.argv[2].strip()
+    a, b = line(), line()
+    if not name or not a: sys.exit("empty name or password")
+    if a != b: print("mismatch"); sys.exit(2)
+    salt = os.urandom(16)
+    d[name] = {"salt": salt.hex(), "hash": digest(a, salt).hex(), "n": N, "r": R, "p": P, "streak": 0, "gap": 0.0, "due": now, "last": 0}
+    save(d); print("added")
+elif cmd == "check":
+    e = d.get(sys.argv[2])
+    if not e: sys.exit("no such entry")
+    ok = hmac.compare_digest(digest(line(), bytes.fromhex(e["salt"]), e["n"], e["r"], e["p"]).hex(), e["hash"])
+    if ok:
+        e["streak"] += 1
+        e["gap"] = 1.0 if e["gap"] < 1 else min(e["gap"] * 2, 60)
+    else:
+        e["streak"] = 0
+        e["gap"] = 0.25 if e["gap"] < 1 else 1.0      # missed: try again in a few hours / tomorrow
+    e["last"] = now; e["due"] = now + e["gap"] * 86400
+    save(d); print("ok" if ok else "wrong")
+elif cmd == "remove":
+    d.pop(sys.argv[2], None); save(d); print("removed")
+else:
+    sys.exit(__doc__)

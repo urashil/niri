@@ -36,3 +36,7 @@ SongIsland 1.0 SongIsland.qml
 Equalizer 1.0 Equalizer.qml
 singleton ClaudeUsage 1.0 ClaudeUsage.qml
 ClaudePopup 1.0 ClaudePopup.qml
+ClaudeAsk 1.0 ClaudeAsk.qml
+PasswordDrill 1.0 PasswordDrill.qml
+UsbPrompt 1.0 UsbPrompt.qml
+singleton NightLight 1.0 NightLight.qml

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Select a region and have Claude explain it (the Ask Claude card in the bar).  explain-shot [screen]
+dir="${XDG_RUNTIME_DIR:-/tmp}/claude-shots"; mkdir -p "$dir"; chmod 700 "$dir"
+find "$dir" -name '*.png' -mmin +120 -delete 2>/dev/null
+f="$dir/shot-$(date +%Y%m%d-%H%M%S).png"
+if [ "${1:-}" = screen ]; then grim "$f" || exit 1
+else geom=$(slurp -d -b '#00000066' -c '#88c0d0ff' -w 2) || exit 0; grim -g "$geom" "$f" || exit 1; fi
+exec qs -c bar ipc call ask image "$f"

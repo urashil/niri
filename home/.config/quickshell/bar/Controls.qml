@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Widgets
 
 // Small shared controls for the quick-settings pages.
 Item {
@@ -41,6 +42,8 @@ Item {
     component Slider: Item {
         id: sl
         property string icon
+        property string image: ""          // an icon file (an app's icon) instead of the glyph
+        property bool dim: false            // muted: grey track
         property real value: 0
         property color accent: Theme.primary
         signal moved(real v)
@@ -49,7 +52,9 @@ Item {
         Text {
             id: sic
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-            width: 26; text: sl.icon; font.family: Theme.font; font.pixelSize: 16; color: sl.accent
+            width: 26; text: sl.image ? "" : sl.icon; font.family: Theme.font; font.pixelSize: 16; color: sl.accent
+            height: 26; verticalAlignment: Text.AlignVCenter
+            IconImage { visible: sl.image !== ""; anchors.centerIn: parent; implicitSize: 20; source: sl.image; opacity: sl.dim ? 0.4 : 1 }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: sl.iconClicked() }
         }
         Rectangle {
@@ -57,7 +62,7 @@ Item {
             anchors { left: sic.right; leftMargin: 8; right: parent.right; verticalCenter: parent.verticalCenter }
             height: 10; radius: 5; color: Theme.surfaceHigh
             Rectangle {
-                width: Math.max(10, track.width * Math.max(0, Math.min(1, sl.value))); height: parent.height; radius: 5; color: sl.accent
+                width: Math.max(10, track.width * Math.max(0, Math.min(1, sl.value))); height: parent.height; radius: 5; color: sl.dim ? Theme.outline : sl.accent
                 Behavior on width { enabled: !drag.pressed; NumberAnimation { duration: 120 } }
             }
             MouseArea {

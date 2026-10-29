@@ -60,6 +60,21 @@ fi
 chmod 600 "$HOME/.config/rice/.env"
 # keyboard flavour: Chromebook keyboards get the Alt key as Mod (niri includes the generated keyboard.kdl)
 "$HOME/.local/bin/keyboard-mode" "$KBD" || warn "keyboard-mode failed"
+# Claude Code hooks -> the bar (island pings when a session finishes or needs you, session list in the usage card)
+python3 - <<'PY' || warn "could not add the Claude Code hooks"
+import json, os
+p = os.path.expanduser("~/.claude/settings.json")
+try: d = json.load(open(p))
+except FileNotFoundError: d = {}
+cmd = {"type": "command", "command": os.path.expanduser("~/.local/bin/claude-island hook"), "timeout": 10}
+hooks = d.setdefault("hooks", {})
+for ev in ("SessionStart", "UserPromptSubmit", "Stop", "Notification", "SessionEnd"):
+    lst = hooks.setdefault(ev, [])
+    if not any("claude-island" in h.get("command", "") for e in lst for h in e.get("hooks", [])):
+        lst.append({"hooks": [cmd]})
+os.makedirs(os.path.dirname(p), exist_ok=True)
+json.dump(d, open(p, "w"), indent=2)
+PY
 
 # ---------- 3. wallpapers ----------
 if [ "$WALL" = 1 ] && [ -d wallpapers ]; then

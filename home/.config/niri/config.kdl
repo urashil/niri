@@ -503,7 +503,11 @@ binds {
     Mod+Alt+R hotkey-overlay-title="Record Screen (toggle)" { spawn "@HOME@/.local/bin/rec" "toggle"; }
     Mod+Alt+Shift+R hotkey-overlay-title="Record Region" { spawn "@HOME@/.local/bin/rec" "region"; }
     Mod+Alt+T hotkey-overlay-title="Timer / Todo" { spawn "quickshell" "-c" "bar" "ipc" "call" "focus" "open" "timer"; }
-    Mod+Y hotkey-overlay-title="Clipboard History" { spawn "@HOME@/.local/bin/clip"; }
+    Mod+Y hotkey-overlay-title="Clipboard History" { spawn "quickshell" "-c" "bar" "ipc" "call" "launcher" "open" "c "; }
+    Mod+Alt+A hotkey-overlay-title="Ask Claude" { spawn "quickshell" "-c" "bar" "ipc" "call" "ask" "open"; }
+    Mod+Alt+S hotkey-overlay-title="Explain a screen region (Claude)" { spawn "@HOME@/.local/bin/explain-shot"; }
+    Mod+Alt+P hotkey-overlay-title="Practise a password" { spawn "quickshell" "-c" "bar" "ipc" "call" "drill" "toggle"; }
+    Mod+Alt+C hotkey-overlay-title="Colour picker" { spawn "@HOME@/.local/bin/colorpick"; }
     Mod+Shift+S hotkey-overlay-title="Screenshot + Annotate" { spawn "@HOME@/.local/bin/shot" "region"; }
     Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "@HOME@/.local/bin/scratch"; }
     Ctrl+Grave hotkey-overlay-title="Next Wallpaper" { spawn "@HOME@/.local/bin/wallpaper" "next"; }

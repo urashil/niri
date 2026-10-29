@@ -17,6 +17,23 @@ Singleton {
     readonly property real hot: Math.max(session, weekly)
 
     function refresh() { if (!proc.running) proc.running = true; }
+
+    // ---- Claude Code sessions (from the hooks, ~/.local/bin/claude-island) ----
+    property var sessions: []
+    readonly property int waiting: sessions.filter(s => s.state === "waiting").length
+    function listSessions() { if (!lister.running) lister.running = true; }
+    function event(state, win, project, msg, ping) {
+        listSessions();
+        if (!ping) return;
+        const wait = state === "waiting";
+        UiState.pulse(win > 0 ? "claude:" + win : "claude", "\uf069", project + (wait ? " · " + (msg || "needs you") : " · done"), -1, wait ? Theme.yellow : Theme.primary, wait ? 8000 : 5000);
+    }
+    Process {
+        id: lister
+        command: [Quickshell.env("HOME") + "/.local/bin/claude-island", "list"]
+        stdout: StdioCollector { onStreamFinished: { try { root.sessions = JSON.parse(text); } catch (e) {} } }
+    }
+    Timer { interval: 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.listSessions() }
     function until(iso) {
         const s = Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 1000));
         const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);

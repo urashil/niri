@@ -14,11 +14,16 @@ Singleton {
     property bool history: false
     property bool media: false
     property bool claude: false          // Claude usage card
+    property bool ask: false             // Ask Claude card
+    signal askRequested(string q, string image)
+    function askClaude(q, image) { ask = true; askRequested(q || "", image || ""); }
     property real claudeCenter: 1300     // x of the Claude button, where the card opens under
     property bool songOpen: false        // the island expanded into the song's film
     property real statsCenter: 1100      // x of the CPU/RAM chip, where the media card opens under
     property real pillW: 200             // width of the center island, so the expanded one can grow out of it
     property bool launcher: false
+    property string launcherText: ""   // what the launcher opens with ("c " for clipboard search)
+    property bool drill: false           // password practice card
     property bool focusOpen: false
     property string focusTab: "timer"
     function openFocus(tab) {

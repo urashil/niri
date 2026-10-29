@@ -15,7 +15,7 @@ pacman -S --needed --noconfirm \
   xwayland-satellite xdg-desktop-portal-gnome \
   zsh-autosuggestions zsh-syntax-highlighting zsh-completions \
   eza bat fd ripgrep zoxide fzf btop fastfetch \
-  cliphist wl-clipboard grim slurp satty libnotify \
+  cliphist wl-clipboard grim slurp satty libnotify wlsunset \
   papirus-icon-theme capitaine-cursors \
   neovim tree-sitter-cli gcc make git unzip curl \
   wf-recorder
@@ -42,6 +42,9 @@ SRC="$UHOME/dotfiles/root"
 [ -d "$SRC" ] || SRC="$HERE/root"
 install -Dm755 "$SRC/usr/local/lib/rice/net-helper" /usr/local/lib/rice/net-helper
 install -Dm644 "$SRC/usr/share/polkit-1/actions/org.rice.net.policy" /usr/share/polkit-1/actions/org.rice.net.policy
+# USBGuard prompt in the bar: allow a blocked device from a click
+install -Dm755 "$SRC/usr/local/lib/rice/usb-helper" /usr/local/lib/rice/usb-helper
+install -Dm644 "$SRC/usr/share/polkit-1/actions/org.rice.usb.policy" /usr/share/polkit-1/actions/org.rice.usb.policy
 # world-readable mirror of the per-network MAC policy (/var/lib/iwd is root-only)
 /usr/local/lib/rice/net-helper sync || true
 
