@@ -8,6 +8,7 @@ ShellRoot {
     QuickSettings {}
     History {}
     MediaPopup {}
+    ClaudePopup {}
     Launcher {}
     Monitor {}
     FocusPanel {}
@@ -28,6 +29,7 @@ ShellRoot {
         function open(page: string): void { UiState.openQuick(page); }
     }
     IpcHandler { target: "history";   function toggle(): void { UiState.history = !UiState.history; } }
+    IpcHandler { target: "claude";    function toggle(): void { UiState.claude = !UiState.claude; } }
     IpcHandler { target: "media";     function toggle(): void { UiState.media = !UiState.media; } }
     IpcHandler {
         target: "monitor"

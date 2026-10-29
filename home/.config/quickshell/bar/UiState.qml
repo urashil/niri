@@ -13,6 +13,8 @@ Singleton {
     property string quickPage: "main"
     property bool history: false
     property bool media: false
+    property bool claude: false          // Claude usage card
+    property real claudeCenter: 1300     // x of the Claude button, where the card opens under
     property bool songOpen: false        // the island expanded into the song's film
     property real statsCenter: 1100      // x of the CPU/RAM chip, where the media card opens under
     property real pillW: 200             // width of the center island, so the expanded one can grow out of it

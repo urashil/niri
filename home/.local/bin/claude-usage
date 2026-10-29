@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+# Claude usage for the bar: plan limits (5 hour / weekly) from Anthropic's usage endpoint, all-time totals from local transcripts.
+import json, os, glob, urllib.request, time, sys
+home = os.path.expanduser('~')
+out = {}
+try:
+    tok = json.load(open(f'{home}/.claude/.credentials.json'))['claudeAiOauth']
+    req = urllib.request.Request('https://api.anthropic.com/api/oauth/usage', headers={
+        'Authorization': 'Bearer ' + tok['accessToken'], 'anthropic-beta': 'oauth-2025-04-20', 'User-Agent': 'claude-code'})
+    out['limits'] = json.load(urllib.request.urlopen(req, timeout=10))
+    out['plan'] = tok.get('subscriptionType')
+except Exception as e:
+    out['error'] = str(e)
+cache = f'{home}/.cache/rice/claude-usage-all.json'
+try: c = json.load(open(cache))
+except Exception: c = {'files': {}}
+seen = {}
+for f in glob.glob(f'{home}/.claude/projects/**/*.jsonl', recursive=True):
+    st = os.stat(f)
+    k = c['files'].get(f)
+    if k and k['m'] == st.st_mtime and k['s'] == st.st_size: seen[f] = k; continue
+    tot = {'in': 0, 'out': 0, 'cr': 0, 'cc': 0, 'msgs': 0}
+    ids = set()
+    for line in open(f, errors='ignore'):
+        if '"usage"' not in line: continue
+        try: m = json.loads(line)
+        except Exception: continue
+        msg = m.get('message')
+        if not isinstance(msg, dict) or not msg.get('usage'): continue
+        mid = msg.get('id') or m.get('uuid')
+        if mid in ids: continue
+        ids.add(mid)
+        u = msg['usage']
+        tot['in'] += u.get('input_tokens') or 0; tot['out'] += u.get('output_tokens') or 0
+        tot['cr'] += u.get('cache_read_input_tokens') or 0; tot['cc'] += u.get('cache_creation_input_tokens') or 0
+        tot['msgs'] += 1
+    seen[f] = {'m': st.st_mtime, 's': st.st_size, **tot}
+os.makedirs(os.path.dirname(cache), exist_ok=True)
+json.dump({'files': seen}, open(cache, 'w'))
+out['all'] = {k: sum(v[k] for v in seen.values()) for k in ('in', 'out', 'cr', 'cc', 'msgs')}
+out['all']['sessions'] = len(seen)
+print(json.dumps(out))

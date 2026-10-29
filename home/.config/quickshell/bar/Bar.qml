@@ -109,6 +109,23 @@ Variants {
                     Label { text: Qt.formatDateTime(clock.date, "HH:mm"); font.weight: Font.Bold }
                 }
 
+                // Claude usage: ring-less glyph, tints as the limits fill up
+                Island {
+                    id: claudeChip
+                    spacing: 6
+                    function publish() { UiState.claudeCenter = claudeChip.mapToItem(null, claudeChip.width / 2, 0).x; }
+                    onXChanged: publish()
+                    onWidthChanged: publish()
+                    Component.onCompleted: publish()
+                    Glyph { text: "\uf0e7"; font.pixelSize: 14; color: ClaudeUsage.hot >= 90 ? Theme.error : ClaudeUsage.hot >= 70 ? Theme.yellow : Theme.primary }
+                    Label { visible: ClaudeUsage.loaded; text: Math.round(ClaudeUsage.session) + "%" }
+                    overlay: MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: UiState.claude = !UiState.claude
+                    }
+                }
+
                 Stats {
                     id: stats
                     // the media card opens right under this chip

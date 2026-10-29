@@ -34,3 +34,5 @@ AuthPrompt 1.0 AuthPrompt.qml
 singleton Song 1.0 Song.qml
 SongIsland 1.0 SongIsland.qml
 Equalizer 1.0 Equalizer.qml
+singleton ClaudeUsage 1.0 ClaudeUsage.qml
+ClaudePopup 1.0 ClaudePopup.qml
