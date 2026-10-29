@@ -320,7 +320,7 @@ CSS = """
 h1{font-size:18px;margin:4px 0 14px;display:flex;justify-content:space-between;align-items:center}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px}
 .row{display:flex;justify-content:space-between;gap:10px;padding:3px 0}.dim{color:var(--dim)}.k{color:var(--dim)}
-.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:6px 0 2px}.bar i{display:block;height:100%;background:var(--acc)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:6px 0 2px}.bar i{display:block;height:100%;width:0;background:var(--acc)}
 .on{color:var(--acc);font-weight:600}.warn{color:var(--warn)}.bad{color:var(--bad)}
 button{font:inherit;border:0;border-radius:12px;padding:12px 14px;background:var(--line);color:var(--text);flex:1}
 button.acc{background:var(--acc);color:var(--bg)}.btns{display:flex;gap:8px;flex-wrap:wrap}
@@ -335,7 +335,8 @@ JS = r"""
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function pct(v){ return v == null ? '–' : Math.round(v) + '%'; }
-function meter(v){ return '<div class=bar><i style="width:' + Math.min(100, Math.max(0, v || 0)) + '%"></i></div>'; }
+// widths are set from script below: the CSP blocks inline style attributes
+function meter(v){ return '<div class=bar><i data-w="' + Math.min(100, Math.max(0, v || 0)) + '"></i></div>'; }
 async function load(){
   const r = await fetch('/api/status', {cache:'no-store'});
   if (r.status === 401) { location.reload(); return; }
@@ -352,11 +353,12 @@ async function load(){
   h += '</div>';
   const c = s.claude || {}, u = c.usage || {};
   const lim = (name, v) => '<div class=row><span class=k>' + name + '</span><span class="' + (v >= 90 ? 'bad' : v >= 70 ? 'warn' : '') + '">' + pct(v) + '</span></div>'
-    + '<div class=bar><i class="' + (v >= 90 ? 'b' : v >= 70 ? 'w' : '') + '" style="width:' + Math.min(100, Math.max(0, v || 0)) + '%"></i></div>';
+    + '<div class=bar><i class="' + (v >= 90 ? 'b' : v >= 70 ? 'w' : '') + '" data-w="' + Math.min(100, Math.max(0, v || 0)) + '"></i></div>';
   h += '<div class=card><div class=row><b>Claude</b></div>' + lim('5 hour limit', u.session) + lim('Weekly limit', u.weekly);
   for (const x of c.sessions || []) h += '<div class=row><span>' + esc(x.project) + '</span><span class="' + (x.state === 'waiting' ? 'warn' : x.state === 'working' ? 'on' : 'dim') + '">' + esc(x.state === 'waiting' ? 'needs you' : x.state) + '</span></div>';
   h += '</div>';
   $('#s').innerHTML = h;
+  document.querySelectorAll('[data-w]').forEach(e => e.style.width = e.dataset.w + '%');
   $('#t').textContent = new Date(s.time * 1000).toLocaleTimeString();
 }
 async function act(a){
