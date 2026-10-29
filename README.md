@@ -45,6 +45,10 @@ Agent utilities (for scripts and AI agents):
   (`NTFY_URL`, `NTFY_PASSWORD`, optional `NTFY_USER`). `--dry-run` shows what would be sent.
 - `caffeine-off [--lock]` switches caffeine / super caffeine off and turns the screen off at the same time.
 
+Chromebook keyboards: `keyboard-mode` (also run at login, and by `./install.sh --keyboard=...`) makes the **Alt** key the main
+modifier (Mod) by swapping Alt and the Search key, so every `Mod+...` bind works from the Alt key; `keyboard-mode auto`
+detects a Chromebook (Google DMI vendor / cros_ec keyboard), or force `keyboard-mode chromebook` / `standard`.
+
 Timer and todo: `Mod+Alt+T`, the chips next to the clock, the launcher (`t 25`, `todo buy milk`), or
 `quickshell -c bar ipc call focus timer 25` / `focus todo "text"`.
 

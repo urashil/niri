@@ -5,19 +5,21 @@
 #   ./install.sh --no-root       only the user part: configs, wallpapers, themes (no sudo)
 #   ./install.sh --no-boot       skip the GRUB / Plymouth steps
 #   ./install.sh --no-wallpapers don't copy wallpapers/ into ~/Pictures/Wallpapers
+#   ./install.sh --keyboard=chromebook|standard|auto   Alt as the main key (Chromebook) or Super; auto looks at the hardware
 #
 # Safe to re-run. Anything it replaces in $HOME is first copied to ~/.config-backup-<date>.
 set -euo pipefail
 [ "$(id -u)" -ne 0 ] || { echo "run this as your normal user; it uses sudo where it needs root" >&2; exit 1; }
 cd "$(dirname "$0")"
 REPO=$PWD
-ROOT=1; BOOT=1; WALL=1
+ROOT=1; BOOT=1; WALL=1; KBD=auto
 for a in "$@"; do
   case $a in
     --no-root) ROOT=0 ;;
     --no-boot) BOOT=0 ;;
     --no-wallpapers) WALL=0 ;;
-    -h|--help) sed -n 2,9p "$0"; exit 0 ;;
+    --keyboard=*) KBD=${a#--keyboard=} ;;
+    -h|--help) sed -n 2,10p "$0"; exit 0 ;;
     *) echo "unknown option: $a (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -56,6 +58,8 @@ if [ ! -f "$HOME/.config/rice/.env" ]; then
   printf '# ntfy settings for notify-me\nNTFY_URL=\nNTFY_PASSWORD=\n#NTFY_USER=\n' > "$HOME/.config/rice/.env"
 fi
 chmod 600 "$HOME/.config/rice/.env"
+# keyboard flavour: Chromebook keyboards get the Alt key as Mod (niri includes the generated keyboard.kdl)
+"$HOME/.local/bin/keyboard-mode" "$KBD" || warn "keyboard-mode failed"
 
 # ---------- 3. wallpapers ----------
 if [ "$WALL" = 1 ] && [ -d wallpapers ]; then

@@ -18,7 +18,7 @@ FILES=(
   .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userContent.css
   .config/librewolf/librewolf/6yv4qbnb.default-release/user.js
   .local/bin/lock .local/bin/lid-close .local/bin/rec .local/bin/notify-me .local/bin/caffeine-off .local/bin/theme-mode .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
-  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login .local/bin/pia-killswitch .local/bin/still-film .local/bin/still-fetch .local/bin/song .local/bin/still .local/bin/film .local/bin/spotify .local/bin/spicetify-fetch .local/bin/spotify-theme .local/bin/claude-usage
+  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login .local/bin/pia-killswitch .local/bin/still-film .local/bin/still-fetch .local/bin/song .local/bin/still .local/bin/film .local/bin/spotify .local/bin/spicetify-fetch .local/bin/spotify-theme .local/bin/claude-usage .local/bin/keyboard-mode
   .config/quickshell/bootpreview
   .config/rice/wallpaper-modes.json
   .config/rice/network-login.sh .config/spotify-launcher.conf .config/spicetify/Themes/rice/user.css .config/spicetify/Extensions/rice-live.js .config/spicetify/config-xpui.ini .local/share/applications/spotify-launcher.desktop
