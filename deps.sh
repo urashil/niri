@@ -15,7 +15,7 @@ pacman -S --needed --noconfirm \
   xwayland-satellite xdg-desktop-portal-gnome \
   zsh-autosuggestions zsh-syntax-highlighting zsh-completions \
   eza bat fd ripgrep zoxide fzf btop fastfetch \
-  cliphist wl-clipboard grim slurp satty libnotify wlsunset \
+  cliphist wl-clipboard grim slurp satty libnotify wlsunset python-cryptography \
   papirus-icon-theme capitaine-cursors \
   neovim tree-sitter-cli gcc make git unzip curl \
   wf-recorder

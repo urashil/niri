@@ -6,6 +6,12 @@ actions (lock, screen off, let it sleep). Meant to sit behind your own HTTPS rev
   rice-remote enable       install + start the systemd user service (listens on 127.0.0.1:8765)
   rice-remote disable      stop it
   rice-remote serve        run in the foreground (what the service runs)
+  rice-remote origin <https://host>   the public address (needed for passkeys and the origin check)
+  rice-remote tunnel ...   see `rice-remote tunnel --help`: a reverse SSH tunnel to a server's nginx
+
+Passkeys: sign in once with the password, then "Add a passkey" (phone fingerprint / face). After that the passkey
+signs you in; the password stays as a fallback unless you set "password_login": false in remote.json.
+It installs as a PWA (Add to home screen).
 
 Security: binds to localhost only (expose it through the proxy), password login with lockouts (5 misses per client
 per 15 min, 20 misses in total per hour locks everyone out for an hour), HttpOnly + SameSite=Strict + Secure session
@@ -183,6 +189,128 @@ def session_ok(h):
                 if exp and exp > time.time(): return d
     return None
 
+
+# ---------------------------------------------------------------- passkeys (WebAuthn)
+import base64
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
+from cryptography.exceptions import InvalidSignature
+
+KEYS = os.environ.get("RICE_REMOTE_KEYS") or os.path.join(HOME, ".local/state/rice-remote/passkeys.json")
+pending = {}                            # challenge -> (kind, expiry)
+
+def b64u(b): return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+def unb64u(s): return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+def load_keys():
+    try:
+        with open(KEYS) as f: return json.load(f)
+    except FileNotFoundError: return []
+
+def save_keys(k):
+    os.makedirs(os.path.dirname(KEYS), mode=0o700, exist_ok=True)
+    fd = os.open(KEYS + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f: json.dump(k, f, indent=2)
+    os.replace(KEYS + ".tmp", KEYS)
+
+def cbor(b, i=0):
+    """Minimal CBOR decoder (what WebAuthn uses): returns (value, next index)."""
+    ib = b[i]; mt, ai = ib >> 5, ib & 31; i += 1
+    if ai < 24: n = ai
+    elif ai == 24: n = b[i]; i += 1
+    elif ai == 25: n = int.from_bytes(b[i:i + 2], "big"); i += 2
+    elif ai == 26: n = int.from_bytes(b[i:i + 4], "big"); i += 4
+    elif ai == 27: n = int.from_bytes(b[i:i + 8], "big"); i += 8
+    else: raise ValueError("indefinite CBOR not supported")
+    if mt == 0: return n, i
+    if mt == 1: return -1 - n, i
+    if mt == 2: return bytes(b[i:i + n]), i + n
+    if mt == 3: return b[i:i + n].decode(), i + n
+    if mt == 4:
+        out = []
+        for _ in range(n): v, i = cbor(b, i); out.append(v)
+        return out, i
+    if mt == 5:
+        out = {}
+        for _ in range(n): k, i = cbor(b, i); v, i = cbor(b, i); out[k] = v
+        return out, i
+    if mt == 7: return {20: False, 21: True, 22: None}.get(n), i
+    raise ValueError("unsupported CBOR")
+
+def cose_to_pem(k):
+    kty, alg = k.get(1), k.get(3)
+    if kty == 2 and k.get(-1) == 1:
+        pub = ec.EllipticCurvePublicNumbers(int.from_bytes(k[-2], "big"), int.from_bytes(k[-3], "big"), ec.SECP256R1()).public_key()
+    elif kty == 1 and k.get(-1) == 6:
+        pub = ed25519.Ed25519PublicKey.from_public_bytes(k[-2])
+    elif kty == 3:
+        pub = rsa.RSAPublicNumbers(int.from_bytes(k[-2], "big"), int.from_bytes(k[-1], "big")).public_key()
+    else: raise ValueError("unsupported key type")
+    return pub.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode(), alg
+
+def verify_sig(pem, alg, sig, data):
+    pub = serialization.load_pem_public_key(pem.encode())
+    if alg == -7: pub.verify(sig, data, ec.ECDSA(hashes.SHA256()))
+    elif alg == -8: pub.verify(sig, data)
+    elif alg == -257: pub.verify(sig, data, padding.PKCS1v15(), hashes.SHA256())
+    else: raise InvalidSignature()
+
+def new_challenge(kind):
+    now = time.time()
+    with lock:
+        for c in [c for c, v in pending.items() if v[1] < now]: del pending[c]
+        if len(pending) > 50: return None
+        ch = b64u(secrets.token_bytes(32))
+        pending[ch] = (kind, now + 300)
+    return ch
+
+def take_challenge(ch, kind):
+    with lock:
+        v = pending.pop(ch, None)
+    return v is not None and v[0] == kind and v[1] > time.time()
+
+def check_client_data(cfg, raw, kind):
+    cd = json.loads(raw)
+    if cd.get("type") != kind: raise ValueError("wrong type")
+    if cd.get("origin") != cfg.get("origin"): raise ValueError("wrong origin")
+    if not take_challenge(cd.get("challenge", ""), kind): raise ValueError("unknown or expired challenge")
+
+def check_auth_data(cfg, ad):
+    if ad[:32] != hashlib.sha256(cfg["rp_id"].encode()).digest(): raise ValueError("wrong rp id")
+    flags = ad[32]
+    if not (flags & 1 and flags & 4): raise ValueError("user presence / verification missing")
+    return flags, int.from_bytes(ad[33:37], "big")
+
+def passkey_register(cfg, j):
+    raw = unb64u(j["clientDataJSON"])
+    check_client_data(cfg, raw, "webauthn.create")
+    att, _ = cbor(unb64u(j["attestationObject"]))
+    ad = att["authData"]
+    flags, count = check_auth_data(cfg, ad)
+    if not flags & 0x40: raise ValueError("no credential data")
+    n = int.from_bytes(ad[53:55], "big")
+    cred_id = ad[55:55 + n]
+    key, _ = cbor(ad, 55 + n)
+    pem, alg = cose_to_pem(key)
+    keys = load_keys()
+    if any(k["id"] == b64u(cred_id) for k in keys): raise ValueError("already registered")
+    name = str(j.get("name") or "Passkey")[:40]
+    keys.append({"id": b64u(cred_id), "pem": pem, "alg": alg, "count": count, "name": name, "added": int(time.time())})
+    save_keys(keys)
+
+def passkey_login(cfg, j):
+    keys = load_keys()
+    k = next((k for k in keys if k["id"] == j.get("id")), None)
+    if not k: raise ValueError("unknown passkey")
+    raw = unb64u(j["clientDataJSON"])
+    check_client_data(cfg, raw, "webauthn.get")
+    ad = unb64u(j["authenticatorData"])
+    _, count = check_auth_data(cfg, ad)
+    verify_sig(k["pem"], k["alg"], unb64u(j["signature"]), ad + hashlib.sha256(raw).digest())
+    if count and k["count"] and count <= k["count"]: raise ValueError("signature counter went backwards (cloned key?)")
+    k["count"] = count; k["used"] = int(time.time())
+    save_keys(keys)
+
 # ---------------------------------------------------------------- pages
 CSS = """
 :root{--bg:#f6f7f2;--card:#fff;--text:#1c1d19;--dim:#6b6d63;--acc:#4f6b2f;--warn:#a26b00;--bad:#b3261e;--line:#e2e4da}
@@ -197,9 +325,10 @@ button{font:inherit;border:0;border-radius:12px;padding:12px 14px;background:var
 button.acc{background:var(--acc);color:var(--bg)}.btns{display:flex;gap:8px;flex-wrap:wrap}
 input{font:inherit;width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);margin:8px 0}
 small{color:var(--dim)}
+.pk{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0}.pk button{flex:0;padding:6px 10px}
 """
 
-JS = """
+JS = r"""
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function pct(v){ return v == null ? '–' : Math.round(v) + '%'; }
@@ -235,22 +364,103 @@ async function act(a){
 document.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => act(b.dataset.a)));
 $('#out').addEventListener('click', async () => { await fetch('/logout', {method: 'POST', headers: {'X-Rice': '1'}}); location.reload(); });
 load(); setInterval(load, 15000);
+
+// ---- passkeys ----
+const u8 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4)), c => c.charCodeAt(0));
+const b64 = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function keys(){
+  const r = await fetch('/api/passkeys', {cache: 'no-store'}); if (!r.ok) return;
+  const l = await r.json();
+  $('#keys').innerHTML = l.map(k => '<div class=pk><span>🔑 ' + esc(k.name) + ' <small>' + (k.used ? 'used ' + new Date(k.used * 1000).toLocaleDateString() : 'never used') + '</small></span><button data-k="' + esc(k.id) + '">Remove</button></div>').join('') || '<small>No passkeys yet</small>';
+  document.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Remove this passkey?')) return;
+    await fetch('/api/passkeys/remove', {method: 'POST', headers: {'X-Rice': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({id: b.dataset.k})});
+    keys();
+  }));
+}
+$('#addkey').addEventListener('click', async () => {
+  try {
+    const o = await (await fetch('/api/passkey/register-options', {method: 'POST', headers: {'X-Rice': '1'}})).json();
+    const c = await navigator.credentials.create({publicKey: {
+      challenge: u8(o.challenge), rp: o.rp, user: {id: u8(o.user.id), name: o.user.name, displayName: o.user.displayName},
+      pubKeyCredParams: o.pubKeyCredParams, authenticatorSelection: o.authenticatorSelection, attestation: 'none', timeout: 120000,
+      excludeCredentials: o.exclude.map(id => ({type: 'public-key', id: u8(id)}))}});
+    const name = prompt('Name this passkey', 'Phone') || 'Passkey';
+    const r = await fetch('/api/passkey/register', {method: 'POST', headers: {'X-Rice': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({
+      name, clientDataJSON: b64(c.response.clientDataJSON), attestationObject: b64(c.response.attestationObject)})});
+    $('#msg').textContent = r.ok ? 'Passkey added' : 'Passkey failed: ' + await r.text();
+    keys();
+  } catch (e) { $('#msg').textContent = 'Passkey cancelled (' + e.name + ')'; }
+});
+keys();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 """
+
+LOGIN_JS = r"""
+const u8 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4)), c => c.charCodeAt(0));
+const b64 = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const msg = document.getElementById('msg');
+async function passkey(){
+  try {
+    const o = await (await fetch('/api/passkey/login-options', {method: 'POST', headers: {'X-Rice': '1'}})).json();
+    if (o.error) { msg.textContent = o.error; return; }
+    const c = await navigator.credentials.get({publicKey: {challenge: u8(o.challenge), rpId: o.rpId, userVerification: 'required', timeout: 120000}});
+    const r = await fetch('/api/passkey/login', {method: 'POST', headers: {'X-Rice': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({
+      id: b64(c.rawId), clientDataJSON: b64(c.response.clientDataJSON), authenticatorData: b64(c.response.authenticatorData), signature: b64(c.response.signature)})});
+    if (r.ok) location.reload(); else msg.textContent = 'Passkey sign-in failed: ' + await r.text();
+  } catch (e) { msg.textContent = 'Passkey cancelled (' + e.name + ')'; }
+}
+document.getElementById('pk').addEventListener('click', passkey);
+if (window.PublicKeyCredential && document.body.dataset.keys === '1') passkey();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+"""
+
+# no caching: the page is live data; the worker only exists so the PWA installs everywhere
+SW = "self.addEventListener('fetch', () => {});\n"
+
+MANIFEST = json.dumps({"name": "Laptop", "short_name": "Laptop", "start_url": "/", "scope": "/", "display": "standalone",
+    "background_color": "#121410", "theme_color": "#121410",
+    "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"}, {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]})
+
+def icon_png(n):
+    """A plain app icon: dark tile, green laptop shape (drawn here so there is no image file to ship)."""
+    import zlib, struct
+    bg, fg = (0x12, 0x14, 0x10), (0xb5, 0xd4, 0x8c)
+    rows = []
+    for y in range(n):
+        row = bytearray()
+        for x in range(n):
+            u, v = x / n, y / n
+            screen = 0.24 < u < 0.76 and 0.28 < v < 0.62 and not (0.29 < u < 0.71 and 0.33 < v < 0.57)
+            base = 0.16 < u < 0.84 and 0.65 < v < 0.71
+            row += bytes(fg if screen or base else bg)
+        rows.append(b"\0" + bytes(row))
+    chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", n, n, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"".join(rows), 9)) + chunk(b"IEND", b""))
+ICONS = {}
 
 def page(body):
     return ("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-            "<meta name=robots content=noindex><title>Laptop</title><link rel=stylesheet href=/style.css></head><body>" + body + "</body></html>")
+            "<meta name=robots content=noindex><title>Laptop</title><link rel=stylesheet href=/style.css>"
+            "<link rel=manifest href=/manifest.webmanifest><link rel=apple-touch-icon href=/icon-192.png>"
+            "<meta name=theme-color content='#121410'><meta name=apple-mobile-web-app-capable content=yes>"
+            "<meta name=mobile-web-app-capable content=yes></head>" + body + "</body></html>")
 
-APP = page("<h1>Laptop <small id=t></small></h1><div id=s><div class=card>Loading…</div></div>"
+APP = page("<body><h1>Laptop <small id=t></small></h1><div id=s><div class=card>Loading…</div></div>"
            "<div class=card><div class=btns><button data-a=lock>Lock</button><button data-a=screen-off>Screen off</button>"
            "<button class=acc data-a=sleep>Let it sleep</button></div><p><small id=msg></small></p></div>"
+           "<div class=card><b>Passkeys</b><div id=keys></div><p><button id=addkey>Add a passkey</button></p></div>"
            "<p><button id=out>Sign out</button></p><script src=/app.js></script>")
 
-def login_page(msg=""):
-    return page("<h1>Laptop</h1><div class=card><form method=post action=/login>"
-                "<input type=password name=password autocomplete=current-password autofocus placeholder=Password>"
-                "<button class=acc type=submit>Sign in</button></form>"
-                + (f"<p class=bad>{html.escape(msg)}</p>" if msg else "") + "</div>")
+def login_page(msg="", cfg=None):
+    has_keys = bool(load_keys())
+    pw = (cfg or {}).get("password_login", True)
+    return page(f"<body data-keys={'1' if has_keys and not msg else '0'}><h1>Laptop</h1><div class=card>"
+                + ("<p><button class=acc id=pk type=button>Sign in with a passkey</button></p>" if has_keys else "<button id=pk type=button hidden></button>")
+                + ("<form method=post action=/login><input type=password name=password autocomplete=current-password placeholder=Password>"
+                   "<button type=submit>Sign in with the password</button></form>" if pw or not has_keys else "")
+                + f"<p class=bad id=msg>{html.escape(msg)}</p></div><script src=/login.js></script>")
 
 # ---------------------------------------------------------------- server
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -268,9 +478,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "no-referrer")
+        # same-origin, not no-referrer: with no-referrer browsers send "Origin: null" on form posts
+        self.send_header("Referrer-Policy", "same-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
         for k, v in extra: self.send_header(k, v)
         self.end_headers()
         if self.command != "HEAD": self.wfile.write(body)
@@ -283,6 +494,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # browsers send Origin on POST; it must match the host the page was served from
         o = self.headers.get("Origin")
         if not o: return True
+        if self.server.cfg.get("origin"): return o == self.server.cfg["origin"]
         host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
         return urllib.parse.urlparse(o).netloc == host.split(",")[0].strip()
 
@@ -297,8 +509,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == "/style.css": return self.send(200, CSS, "text/css; charset=utf-8")
         if path == "/app.js": return self.send(200, JS, "text/javascript; charset=utf-8")
+        if path == "/login.js": return self.send(200, LOGIN_JS, "text/javascript; charset=utf-8")
+        if path == "/sw.js": return self.send(200, SW, "text/javascript; charset=utf-8")
+        if path == "/manifest.webmanifest": return self.send(200, MANIFEST, "application/manifest+json")
+        if path in ("/icon-192.png", "/icon-512.png"):
+            n = 192 if "192" in path else 512
+            if n not in ICONS: ICONS[n] = icon_png(n)
+            return self.send(200, ICONS[n], "image/png")
         authed = session_ok(self)
-        if path == "/": return self.send(200, APP if authed else login_page())
+        if path == "/": return self.send(200, APP if authed else login_page(cfg=self.server.cfg))
+        if path == "/api/passkeys":
+            if not authed: return self.send(401, b"[]", "application/json")
+            return self.send(200, json.dumps([{"id": k["id"], "name": k["name"], "used": k.get("used")} for k in load_keys()]), "application/json")
         if path == "/api/status":
             if not authed: return self.send(401, b"{}", "application/json")
             return self.send(200, json.dumps(status()), "application/json")
@@ -307,25 +529,66 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         if not self.same_origin(): return self.send(403, "bad origin", "text/plain")
+        c = self.server.cfg
+        if path == "/api/passkey/login-options":
+            if self.headers.get("X-Rice") != "1": return self.send(401, "no", "text/plain")
+            if not c.get("rp_id") or not load_keys(): return self.send(200, json.dumps({"error": "No passkeys set up"}), "application/json")
+            if locked_out(client_key(self)): return self.send(429, json.dumps({"error": "Too many tries. Wait a while."}), "application/json")
+            ch = new_challenge("webauthn.get")
+            if not ch: return self.send(429, json.dumps({"error": "Busy, try again"}), "application/json")
+            return self.send(200, json.dumps({"challenge": ch, "rpId": c["rp_id"]}), "application/json")
+        if path == "/api/passkey/login":
+            key = client_key(self)
+            if self.headers.get("X-Rice") != "1": return self.send(401, "no", "text/plain")
+            if locked_out(key): return self.send(429, "Too many tries. Wait a while.", "text/plain")
+            raw = self.body(16384)
+            try:
+                passkey_login(c, json.loads(raw or b"{}"))
+            except Exception as e:
+                note_fail(key)
+                print(f"rice-remote: failed passkey login from {key}: {e}", file=sys.stderr, flush=True)
+                return self.send(401, "Not accepted", "text/plain")
+            return self.send(204, "", extra=[self.cookie(new_session(), SESSION_DAYS * 86400)])
         if path == "/login":
             key = client_key(self)
-            if locked_out(key): return self.send(429, login_page("Too many tries. Wait a while."))
+            if not c.get("password_login", True) and load_keys(): return self.send(403, login_page("Password sign-in is off; use a passkey.", c))
+            if locked_out(key): return self.send(429, login_page("Too many tries. Wait a while.", c))
             raw = self.body()
             if raw is None: return self.send(413, "too big", "text/plain")
             pw = urllib.parse.parse_qs(raw.decode(errors="replace")).get("password", [""])[0]
-            c = self.server.cfg
             with kdf_lock:
                 ok = bool(pw) and hmac.compare_digest(kdf(pw, bytes.fromhex(c["salt"]), c["n"], c["r"], c["p"]).hex(), c["hash"])
             if not ok:
                 note_fail(key)
                 print(f"rice-remote: failed login from {key}", file=sys.stderr, flush=True)
                 time.sleep(1)
-                return self.send(401, login_page("Wrong password."))
+                return self.send(401, login_page("Wrong password.", c))
             return self.send(303, "", extra=[("Location", "/"), self.cookie(new_session(), SESSION_DAYS * 86400)])
         # everything else: signed in, and the custom header a cross-site form cannot send
         d = session_ok(self)
         if not d or self.headers.get("X-Rice") != "1": return self.send(401, "no", "text/plain")
-        self.body()
+        raw = self.body(16384)
+        if raw is None: return self.send(413, "too big", "text/plain")
+        if path == "/api/passkey/register-options":
+            if not c.get("rp_id"): return self.send(400, "set the public address first: rice-remote origin https://...", "text/plain")
+            ch = new_challenge("webauthn.create")
+            if not ch: return self.send(429, "busy", "text/plain")
+            return self.send(200, json.dumps({
+                "challenge": ch, "rp": {"id": c["rp_id"], "name": "Laptop"},
+                "user": {"id": b64u(b"rice-remote-owner"), "name": "owner", "displayName": "Laptop owner"},
+                "pubKeyCredParams": [{"type": "public-key", "alg": a} for a in (-7, -8, -257)],
+                "authenticatorSelection": {"residentKey": "required", "userVerification": "required"},
+                "exclude": [k["id"] for k in load_keys()]}), "application/json")
+        if path == "/api/passkey/register":
+            try: passkey_register(c, json.loads(raw or b"{}"))
+            except Exception as e: return self.send(400, str(e)[:120], "text/plain")
+            print(f"rice-remote: passkey added from {client_key(self)}", file=sys.stderr, flush=True)
+            return self.send(204, "")
+        if path == "/api/passkeys/remove":
+            try: kid = json.loads(raw or b"{}").get("id")
+            except Exception: kid = None
+            save_keys([k for k in load_keys() if k["id"] != kid])
+            return self.send(204, "")
         if path == "/logout":
             with lock: sessions.pop(d, None)
             return self.send(204, "", extra=[self.cookie("", 0)])
@@ -340,6 +603,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+
+TUNNEL_KEY = os.path.join(HOME, ".ssh/rice-tunnel")
+TUNNEL_UNIT = """[Unit]
+Description=rice-remote: reverse SSH tunnel to {dest}
+After=network-online.target rice-remote.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/ssh -NT -i {key} -o IdentitiesOnly=yes -o BatchMode=yes -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes \
+  -p {port} -R 127.0.0.1:{rport}:127.0.0.1:{lport} {dest}
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target
+"""
+
+def tunnel(args, c):
+    if len(args) != 3 or "@" not in args[0] or not args[1].isdigit() or not args[2].isdigit():
+        sys.exit("usage: rice-remote tunnel <user@host> <ssh port> <remote port>\n"
+                 "  makes ~/.ssh/rice-tunnel (a key that can only open that one forward), prints the line for the\n"
+                 "  server's ~/.ssh/authorized_keys, and starts rice-remote-tunnel.service (restarts by itself)")
+    dest, port, rport = args
+    if not os.path.exists(TUNNEL_KEY):
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "rice-tunnel", "-f", TUNNEL_KEY], check=True)
+    pub = open(TUNNEL_KEY + ".pub").read().strip()
+    c.update({"tunnel": {"dest": dest, "port": int(port), "remote_port": int(rport)}}); save_cfg(c)
+    d = os.path.join(HOME, ".config/systemd/user"); os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "rice-remote-tunnel.service"), "w") as f:
+        f.write(TUNNEL_UNIT.format(dest=dest, key=TUNNEL_KEY, port=port, rport=rport, lport=c.get("port", 8765)))
+    subprocess.run(["systemctl", "--user", "daemon-reload"])
+    print("Add this line to ~/.ssh/authorized_keys on the server (it can only listen on 127.0.0.1:%s, nothing else):\n" % rport)
+    print(f'restrict,port-forwarding,permitlisten="127.0.0.1:{rport}",permitopen="127.0.0.1:1",command="/bin/false" {pub}\n')
+    print("then: systemctl --user enable --now rice-remote-tunnel")
 
 UNIT = """[Unit]
 Description=rice-remote: laptop status page for the phone
@@ -364,7 +663,7 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 UMask=0077
 # claude-usage keeps a cache, claude-island prunes its session files
-ReadWritePaths=%h/.cache/rice %t
+ReadWritePaths=%h/.cache/rice %t %h/.local/state/rice-remote
 
 [Install]
 WantedBy=graphical-session.target
@@ -384,13 +683,21 @@ def main():
         save_cfg(c); print("saved; restart the service if it runs: systemctl --user restart rice-remote")
     elif cmd == "enable":
         if "hash" not in c: sys.exit("set a password first: rice-remote passwd")
+        os.makedirs(os.path.dirname(KEYS), mode=0o700, exist_ok=True)
         d = os.path.join(HOME, ".config/systemd/user"); os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "rice-remote.service"), "w") as f: f.write(UNIT)
         subprocess.run(["systemctl", "--user", "daemon-reload"])
         subprocess.run(["systemctl", "--user", "enable", "--now", "rice-remote.service"])
         print(f"listening on {c.get('bind', '127.0.0.1')}:{c.get('port', 8765)}; point your reverse proxy (HTTPS) at it")
+    elif cmd == "origin":
+        o = (sys.argv[2] if len(sys.argv) > 2 else "").rstrip("/")
+        u = urllib.parse.urlparse(o)
+        if u.scheme != "https" or not u.hostname or u.path: sys.exit("usage: rice-remote origin https://host.example")
+        c.update({"origin": o, "rp_id": u.hostname}); save_cfg(c); print("origin:", o)
+    elif cmd == "tunnel":
+        tunnel(sys.argv[2:], c)
     elif cmd == "disable":
-        subprocess.run(["systemctl", "--user", "disable", "--now", "rice-remote.service"])
+        subprocess.run(["systemctl", "--user", "disable", "--now", "rice-remote.service", "rice-remote-tunnel.service"])
     elif cmd == "serve":
         if "hash" not in c: sys.exit("no password set: rice-remote passwd")
         srv = Server((c.get("bind", "127.0.0.1"), int(c.get("port", 8765))), Handler)
