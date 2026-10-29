@@ -109,23 +109,6 @@ Variants {
                     Label { text: Qt.formatDateTime(clock.date, "HH:mm"); font.weight: Font.Bold }
                 }
 
-                // Claude usage: ring-less glyph, tints as the limits fill up
-                Island {
-                    id: claudeChip
-                    spacing: 6
-                    function publish() { UiState.claudeCenter = claudeChip.mapToItem(null, claudeChip.width / 2, 0).x; }
-                    onXChanged: publish()
-                    onWidthChanged: publish()
-                    Component.onCompleted: publish()
-                    Glyph { text: "\uf0e7"; font.pixelSize: 14; color: ClaudeUsage.hot >= 90 ? Theme.error : ClaudeUsage.hot >= 70 ? Theme.yellow : Theme.primary }
-                    Label { visible: ClaudeUsage.loaded; text: Math.round(ClaudeUsage.session) + "%" }
-                    overlay: MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: UiState.claude = !UiState.claude
-                    }
-                }
-
                 Stats {
                     id: stats
                     // the media card opens right under this chip
@@ -202,6 +185,22 @@ Variants {
                             cursorShape: Qt.PointingHandCursor
                             acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                             onClicked: mouse => { if (mouse.button === Qt.MiddleButton) { UiState.superCaffeine = false; UiState.caffeine = false; } else UiState.openQuick("caffeine"); }
+                        }
+                    }
+
+                    // Claude usage (card with the 5 hour / weekly limits); tints as they fill up
+                    Glyph {
+                        id: claudeGlyph
+                        text: "\uf069"
+                        color: ClaudeUsage.hot >= 90 ? Theme.error : ClaudeUsage.hot >= 70 ? Theme.yellow : Theme.primary
+                        function publish() { UiState.claudeCenter = claudeGlyph.mapToItem(null, claudeGlyph.width / 2, 0).x; }
+                        onXChanged: publish()
+                        onWidthChanged: publish()
+                        Component.onCompleted: publish()
+                        MouseArea {
+                            anchors.fill: parent; anchors.margins: -4
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: UiState.claude = !UiState.claude
                         }
                     }
 
