@@ -93,33 +93,47 @@ Singleton {
     }
 
     // ---- live state ----
-    component Mon: Process {
+    // One `piactl monitor` (connection state). Settings (region, protocol, allow LAN, port forward request) come from
+    // settings.json below; the IPs and forwarded port are read with `piactl get` whenever the state changes.
+    // When the daemon restarts, piactl monitor can spin reconnecting at full CPU, so it runs under a CPU-time limit
+    // (an idle monitor uses next to none): a spinning one is killed and restarted with backoff.
+    Process {
         id: mon
-        required property string what
-        property var apply
         property int fails: 0
         property real startedAt: 0
-        // pdeathsig: the monitors die with the shell instead of being left behind
-        command: ["setpriv", "--pdeathsig", "SIGTERM", "piactl", "monitor", what]
+        // pdeathsig: the monitor dies with the shell instead of being left behind
+        command: ["setpriv", "--pdeathsig", "SIGTERM", "prlimit", "--cpu=15:20", "piactl", "monitor", "connectionstate"]
         running: true
-        stdout: SplitParser { onRead: line => apply(line.trim()) }
+        stdout: SplitParser { onRead: line => { root.state = line.trim(); details.later(); } }
         onStarted: startedAt = Date.now()
         // while the daemon is down (restarting, no network) piactl exits at once: back off instead of respawning every 3 s forever
         onExited: {
-            fails = Date.now() - startedAt < 4000 ? Math.min(fails + 1, 5) : 0;
-            restart.interval = 3000 * Math.pow(2, fails);
-            restart.start();
+            fails = Date.now() - startedAt < 60000 ? Math.min(fails + 1, 5) : 0;
+            restartMon.interval = 3000 * Math.pow(2, fails);
+            restartMon.start();
         }
-        property Timer restart: Timer { interval: 3000; onTriggered: mon.running = true }
     }
-    Mon { what: "connectionstate"; apply: v => { root.state = v; } }
-    Mon { what: "region"; apply: v => { root.region = v; } }
-    Mon { what: "protocol"; apply: v => { root.method = v; } }
-    Mon { what: "vpnip"; apply: v => { root.vpnIp = v === "Unknown" ? "" : v; } }
-    Mon { what: "pubip"; apply: v => { root.pubIp = v === "Unknown" ? "" : v; } }
-    Mon { what: "portforward"; apply: v => { root.forwardedPort = v; } }
-    Mon { what: "allowlan"; apply: v => { root.allowLan = v === "true"; } }
-    Mon { what: "requestportforward"; apply: v => { root.requestPortForward = v === "true"; } }
+    Timer { id: restartMon; interval: 3000; onTriggered: mon.running = true }
+
+    Process {
+        id: details
+        property int left: 0
+        // read now, and again a few times: the public IP and forwarded port arrive some seconds after "Connected"
+        function later() { left = 3; detailsTimer.interval = 500; detailsTimer.restart(); }
+        command: ["sh", "-c", "for k in vpnip pubip portforward; do printf '%s %s\\n' $k \"$(timeout 4 piactl get $k)\"; done"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                for (const l of text.split("\n")) {
+                    const i = l.indexOf(" "), k = l.slice(0, i), v = l.slice(i + 1).trim();
+                    if (k === "vpnip") root.vpnIp = v === "Unknown" ? "" : v;
+                    else if (k === "pubip") root.pubIp = v === "Unknown" ? "" : v;
+                    else if (k === "portforward" && v !== "") root.forwardedPort = v;
+                }
+            }
+        }
+        onExited: if (left > 0) { detailsTimer.interval = 5000; detailsTimer.restart(); }
+    }
+    Timer { id: detailsTimer; onTriggered: if (!details.running) { details.left--; details.running = true; } }
 
     Process {
         id: regionList
@@ -142,6 +156,9 @@ Singleton {
                 root.autoTransport = j.automaticTransport !== false;
                 root.killswitch = j.killswitch || "auto";
                 if (j.method) root.method = j.method;
+                root.region = j.location || "auto";
+                root.allowLan = j.allowLAN === true;
+                root.requestPortForward = j.portForward === true;
             } catch (e) {}
         }
     }

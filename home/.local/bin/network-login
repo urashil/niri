@@ -9,11 +9,13 @@ script="$HOME/.config/rice/network-login.sh"
 log="$HOME/.cache/rice/network-login.log"
 mkdir -p "$(dirname "$log")"
 say() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >> "$log"; }
+# step: also printed on stdout, where the shell shows it in the island
+step() { say "$*"; printf '%s\n' "$*"; }
 : > "$log"
 if [ "$login" = 1 ]; then
 [ -r "$script" ] || { say "missing $script"; exit 2; }
 
-say "vpn off, kill switch off"
+step "Turning VPN and kill switch off"
 timeout 10 piactl disconnect >/dev/null 2>&1
 pia-killswitch off >>"$log" 2>&1
 for _ in 1 2 3 4 5 6 7 8; do
@@ -31,20 +33,21 @@ wait_online() { for _ in 1 2 3 4 5 6; do online && return 0; sleep 2; done; retu
 ok=0
 cd "$(dirname "$log")" || exit 2
 for try in 1 2 3 4; do
-  say "login attempt $try"
+  step "Signing in$( [ "$try" -gt 1 ] && echo " (try $try)")"
   if IFACE="$iface" sh "$script" >>"$log" 2>&1; then rc=0; else rc=$?; fi
+  step "Checking connection"
   if wait_online; then say "online (script exit $rc)"; ok=1; break; fi
   say "not online after attempt $try (script exit $rc)"
   sleep 3
 done
-[ "$ok" = 1 ] || { say "login failed"; exit 3; }
+[ "$ok" = 1 ] || { step "Sign-in failed"; exit 3; }
 
 fi
 
-say "kill switch $ks"
+step "Kill switch $ks"
 pia-killswitch "$ks" >>"$log" 2>&1
 case "$vpn" in
   off) say "vpn stays off" ;;
-  *)   [ "$vpn" = 443 ] && vpn=school; say "vpn $vpn"; qs -c bar ipc call vpn "$vpn" >>"$log" 2>&1 ;;
+  *)   [ "$vpn" = 443 ] && vpn=school; step "Connecting VPN ($( case $vpn in wg|wireguard) echo WireGuard ;; school) echo OpenVPN 443 ;; *) echo $vpn ;; esac))"; qs -c bar ipc call vpn "$vpn" >>"$log" 2>&1 ;;
 esac
 exit 0

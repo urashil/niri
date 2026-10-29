@@ -13,6 +13,7 @@ Singleton {
     property bool prevDnd: false
     property string appliedFor: ""
     property var lastApplied: ({})          // ssid -> ms of the last time its rule ran
+    property int busyWaits: 0               // settle retries spent waiting for PIA to stop being busy
 
     function rule(ssid) { return rules[ssid] || { vpn: "", dnd: false, login: false, ks: "" }; }
     function set(ssid, key, value) {
@@ -29,6 +30,8 @@ Singleton {
     Process {
         id: signin
         property string ssid: ""
+        // each step network-login prints stays in the island until the next one
+        stdout: SplitParser { onRead: line => { if (line.trim() !== "") UiState.pulse("auto", "", signin.ssid + " · " + line.trim() + "…", -1, Theme.primary, 30000); } }
         onExited: code => UiState.pulse("auto", "", signin.ssid + (code === 0 ? " · done" : code === 3 ? " · sign-in failed, VPN left off" : " · sign-in script missing"),
                                          -1, code === 0 ? Theme.primary : Theme.red, code === 0 ? 3500 : 6000)
     }
@@ -40,7 +43,6 @@ Singleton {
         signin.ssid = ssid;
         signin.command = ["network-login", vpn, r.ks || Vpn.killswitch, Wifi.dev, r.login ? "1" : "0"];
         signin.running = true;
-        if (r.login) UiState.pulse("auto", "", ssid + " · signing in…", -1, Theme.primary, 3500);
     }
     FileView {
         path: root.path
@@ -48,12 +50,28 @@ Singleton {
         onFileChanged: reload()
         onLoaded: { try { root.rules = JSON.parse(text()); } catch (e) {} }
     }
+    // the network whose rule already ran this login: a restarted shell must not run it again (a sign-in rule would drop the VPN)
+    FileView {
+        id: marker
+        path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/rice-net-applied"
+        blockLoading: true
+        printErrors: false
+    }
+    property string startupApplied: marker.text().trim()
+    function mark(ssid) {
+        save.command = ["sh", "-c", "printf '%s' \"$2\" > \"$1\"", "_", marker.path, ssid];
+        save.running = true;
+    }
 
     function apply(ssid) {
         const r = rule(ssid);
         // a flapping link must not re-run the rule over and over (each run talks to the PIA daemon): once a minute per network at most,
-        // and never while the previous run, or a VPN connect, is still going
-        if (Date.now() - (lastApplied[ssid] || 0) < 60000 || signin.running || Vpn.busy) return;
+        // and never while the previous run is still going
+        if (Date.now() - (lastApplied[ssid] || 0) < 60000 || signin.running) return;
+        // PIA still busy with the last network (e.g. "Reconnecting" after waking up somewhere new, which behind a portal never ends):
+        // a sign-in rule disconnects it anyway; a plain VPN rule waits a little, then goes ahead
+        if (Vpn.busy && !r.login && !r.ks && busyWaits < 6) { busyWaits++; settle.restart(); return; }
+        busyWaits = 0;
         lastApplied[ssid] = Date.now();
         let did = [];
         if (r.dnd) { if (appliedFor === "") prevDnd = UiState.dnd; UiState.dnd = true; did.push("quiet"); }
@@ -62,10 +80,12 @@ Singleton {
         else if (r.vpn === "443") { if (!(Vpn.connected && Vpn.choice === "school")) Vpn.useSchool(); did.push("OpenVPN 443"); }
         else if (r.vpn === "off") { Vpn.disconnect(); did.push("VPN off"); }
         appliedFor = ssid;
+        mark(ssid);
         if (did.length) UiState.pulse("auto", "", ssid + " · " + did.join(" · "), -1, Theme.primary, 3500);
     }
     function leave() {
         if (appliedFor !== "" && rule(appliedFor).dnd) UiState.dnd = prevDnd;
+        if (appliedFor !== "") mark("");
         appliedFor = "";
     }
 
@@ -75,7 +95,13 @@ Singleton {
         function onSsidChanged() {
             settle.stop();
             if (Wifi.connected && Wifi.ssid !== "") {
-                if (Wifi.ssid !== root.appliedFor) { root.leave(); settle.restart(); }
+                // first network seen after a shell restart, and its rule already ran: adopt it instead of re-running
+                if (root.startupApplied !== "") {
+                    const same = Wifi.ssid === root.startupApplied;
+                    root.startupApplied = "";
+                    if (same) { root.appliedFor = Wifi.ssid; return; }
+                }
+                if (Wifi.ssid !== root.appliedFor) { root.leave(); root.busyWaits = 0; settle.restart(); }
             } else if (!Wifi.connected) {
                 root.leave();
             }
