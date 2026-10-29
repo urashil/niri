@@ -28,9 +28,9 @@ PanelWindow {
 
     onVisibleChanged: {
         if (visible) { priv.refresh(); Wifi.refresh(); if (page === "wifi") Wifi.scan(); }
-        else { UiState.quickPage = "main"; askSsid = ""; }
+        else { UiState.quickPage = "main"; askSsid = ""; Remote.watching = false; }
     }
-    onPageChanged: { if (page === "wifi" && visible) Wifi.scan(); if (page === "privacy") priv.refresh(); }
+    onPageChanged: { Remote.watching = page === "remote" && visible; if (page === "remote") Remote.refresh(); if (page === "wifi" && visible) Wifi.scan(); if (page === "privacy") priv.refresh(); }
 
     property string askSsid: ""
     property string detailSsid: ""
@@ -138,6 +138,7 @@ PanelWindow {
                           : win.page === "weather" ? weatherPage.implicitHeight
                           : win.page === "caffeine" ? caffeinePage.implicitHeight
                           : win.page === "nightlight" ? nightPage.implicitHeight
+                          : win.page === "remote" ? remotePage.implicitHeight
                           : win.page === "power" ? powerPage.implicitHeight
                           : privPage.implicitHeight
 
@@ -238,6 +239,16 @@ PanelWindow {
                         chevron: true
                         onToggled: NightLight.setMode(NightLight.mode === "off" ? "auto" : "off")
                         onOpened: UiState.quickPage = "nightlight"
+                    }
+                    Controls.Tile {
+                        Layout.fillWidth: true
+                        icon: "\uf3cd"
+                        title: "Phone access"
+                        subtitle: !Remote.configured ? "Not set up" : Remote.on ? "Online" : Remote.serverFailed || Remote.tunnelFailed ? "Failing" : Remote.server ? "Local only" : "Off"
+                        on: Remote.on
+                        chevron: true
+                        onToggled: if (Remote.configured) Remote.setAll(!Remote.on); else UiState.quickPage = "remote"
+                        onOpened: UiState.quickPage = "remote"
                     }
                     Controls.Tile {
                         Layout.fillWidth: true
@@ -733,6 +744,93 @@ PanelWindow {
                         }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Pipewire.preferredDefaultAudioSource = modelData }
                     }
+                }
+            }
+
+            // ================= phone access (rice-remote) =================
+            ColumnLayout {
+                id: remotePage
+                visible: win.page === "remote"
+                width: parent.width
+                spacing: 10
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "\uf053"; font.family: Theme.font; font.pixelSize: 14; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.back() } }
+                    Text { text: "Phone access"; font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text; Layout.fillWidth: true }
+                    Controls.Switch { visible: Remote.configured; on: Remote.on; onToggled: Remote.setAll(!Remote.on) }
+                }
+                Text {
+                    visible: !Remote.configured
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: "Not set up yet. In a terminal: rice-remote passwd, then rice-remote enable and rice-remote tunnel (see rice-remote --help)."
+                    font.family: Theme.font; font.pixelSize: 11; color: Theme.textDim
+                }
+                Rectangle {
+                    visible: Remote.origin !== ""
+                    Layout.fillWidth: true; height: 40; radius: 12
+                    color: Theme.surfaceContainer
+                    Text {
+                        anchors { left: parent.left; leftMargin: 14; right: parent.right; rightMargin: 90; verticalCenter: parent.verticalCenter }
+                        text: Remote.origin.replace("https://", ""); elide: Text.ElideRight
+                        font.family: Theme.font; font.pixelSize: 11; color: Theme.text
+                    }
+                    Row {
+                        anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                        spacing: 14
+                        Text { text: "\uf0c5"; font.family: Theme.font; font.pixelSize: 13; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["wl-copy", Remote.origin]) } }
+                        Text { text: "\uf08e"; font.family: Theme.font; font.pixelSize: 13; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: { Quickshell.execDetached(["xdg-open", Remote.origin]); UiState.quick = false; } } }
+                    }
+                }
+                // the two parts, each with its own switch
+                Repeater {
+                    model: [
+                        ["Page server", "on this laptop, 127.0.0.1:8765", Remote.server, Remote.serverFailed, "server"],
+                        ["Tunnel", "SSH to the server, which serves it over HTTPS", Remote.tunnel, Remote.tunnelFailed, "tunnel"]
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true; height: 50; radius: 12
+                        color: Theme.surfaceContainer
+                        Rectangle {
+                            id: dotR
+                            width: 8; height: 8; radius: 4
+                            anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                            color: parent.modelData[2] ? Theme.green : parent.modelData[3] ? Theme.error : Theme.outline
+                        }
+                        Column {
+                            anchors { left: dotR.right; leftMargin: 10; right: sw.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                            Text { text: parent.parent.modelData[0] + (parent.parent.modelData[3] ? " · failing" : ""); font.family: Theme.font; font.pixelSize: 12; font.bold: true; color: Theme.text }
+                            Text { width: parent.width; elide: Text.ElideRight; text: parent.parent.modelData[1]; font.family: Theme.font; font.pixelSize: 9; color: Theme.textDim }
+                        }
+                        Controls.Switch {
+                            id: sw
+                            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                            enabled: Remote.configured
+                            on: parent.modelData[2]
+                            onToggled: { if (parent.modelData[4] === "server") Remote.setServer(!Remote.server); else Remote.setTunnel(!Remote.tunnel); }
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "\uf084  " + Remote.passkeys + (Remote.passkeys === 1 ? " passkey" : " passkeys"); font.family: Theme.font; font.pixelSize: 11; color: Theme.textDim; Layout.fillWidth: true }
+                    Controls.Chip { label: "Sign out every device"; accent: Theme.error; enabled: Remote.server; onClicked: Remote.signOutAll() }
+                }
+                Text { visible: Remote.events.length > 0; text: "Recent"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 4 }
+                Repeater {
+                    model: Remote.events
+                    delegate: Text {
+                        required property var modelData
+                        Layout.fillWidth: true; elide: Text.ElideRight
+                        text: modelData
+                        font.family: Theme.font; font.pixelSize: 10
+                        color: modelData.indexOf("failed") >= 0 ? Theme.error : Theme.text
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: "Off stops both. Passkeys are managed on the page itself. Failed sign-ins and anything done from the phone also show in the island."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
             }
 

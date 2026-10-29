@@ -649,21 +649,12 @@ PartOf=graphical-session.target
 ExecStart=%h/.local/bin/rice-remote serve
 Restart=on-failure
 RestartSec=5
+# only what works in a user unit on linux-hardened (no unprivileged user namespaces, so no Protect*/Private*)
 NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ProtectHome=read-only
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-RestrictNamespaces=yes
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 UMask=0077
-# claude-usage keeps a cache, claude-island prunes its session files
-ReadWritePaths=%h/.cache/rice %t %h/.local/state/rice-remote
 
 [Install]
 WantedBy=graphical-session.target

@@ -40,3 +40,4 @@ ClaudeAsk 1.0 ClaudeAsk.qml
 PasswordDrill 1.0 PasswordDrill.qml
 UsbPrompt 1.0 UsbPrompt.qml
 singleton NightLight 1.0 NightLight.qml
+singleton Remote 1.0 Remote.qml
