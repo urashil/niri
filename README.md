@@ -56,6 +56,16 @@ windows show up in the normal launcher search, night light (quick settings: suns
 or always; wlsunset), per-app volume under the master slider and in Mixer (plus microphone), data used per Wi-Fi network
 (Wi-Fi page), and a USBGuard prompt (bottom right) when a device gets blocked: allow once / always / later / never.
 
+Leave it running: `awake <command>` (or `awake -p <pid>`) keeps super caffeine on until the job ends, then lets the
+laptop sleep; the island says when it finished and jobs over a minute push to your phone (notify-me). Super caffeine's
+"Low power while closed" switches to power saver and turns the keyboard light off while the lid is shut. Finished
+downloads in ~/Downloads show in the island (click: open the folder). Windows are snapshotted every minute and reopened
+on their workspaces after a reboot (switch in quick settings → Power profile; `session-restore off`).
+
+Phone page: `rice-remote passwd` then `rice-remote enable` serves a read-mostly status page on 127.0.0.1:8765
+(battery, temperature, super caffeine, awake jobs, Claude) with lock / screen off / let it sleep. Put it behind your
+HTTPS reverse proxy; it has its own login with lockouts, strict cookies and CSP (details: `rice-remote --help`).
+
 Chromebook keyboards: `keyboard-mode` (also run at login, and by `./install.sh --keyboard=...`) makes the **Alt** key the main
 modifier (Mod) by swapping Alt and the Search key, so every `Mod+...` bind works from the Alt key; `keyboard-mode auto`
 detects a Chromebook (Google DMI vendor / cros_ec keyboard), or force `keyboard-mode chromebook` / `standard`.

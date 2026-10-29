@@ -224,6 +224,24 @@ Scope {
         }
     }
 
+    // ---- finished downloads (~/.local/bin/download-watch): click the island to open the folder ----
+    Process {
+        running: true
+        command: [Quickshell.env("HOME") + "/.local/bin/download-watch"]
+        stdout: SplitParser {
+            onRead: line => {
+                const f = line.split("\t");
+                if (f.length < 2) return;
+                const b = parseInt(f[0]);
+                const size = b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1e3)) + " KB";
+                UiState.pulse("download:" + f[1], "\uf019", f[1].replace(/.*\//, "") + " · " + size, -1, Theme.green, 5000);
+            }
+        }
+    }
+
+    // ---- snapshot the open windows for session-restore ----
+    Timer { interval: 60000; running: true; repeat: true; onTriggered: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/session-restore", "save"]) }
+
     // ---- toggles ----
     property bool togReady: false
     Connections {

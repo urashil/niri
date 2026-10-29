@@ -121,6 +121,7 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             if (root.active && UiState.islandKind === "drill") UiState.drill = true;
+            else if (root.active && UiState.islandKind.startsWith("download:")) Quickshell.execDetached(["xdg-open", UiState.islandKind.slice(9).replace(/\/[^\/]*$/, "")]);
             else if (root.active && UiState.islandKind === "claude") UiState.claude = true;
             else if (root.active && UiState.islandKind.startsWith("claude:")) Quickshell.execDetached(["niri", "msg", "action", "focus-window", "--id", UiState.islandKind.slice(7)]);
             else if (root.active && UiState.islandKind === "media") { if (Song.started) UiState.songOpen = true; else UiState.media = true; }

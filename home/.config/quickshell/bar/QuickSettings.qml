@@ -43,6 +43,12 @@ PanelWindow {
 
     function back() { UiState.quickPage = "main"; askSsid = ""; }
 
+    property bool restoreOn: true
+    FileView {
+        path: Quickshell.env("HOME") + "/.config/rice/session.json"
+        onLoaded: { try { win.restoreOn = JSON.parse(text()).restore !== false; } catch (e) {} }
+    }
+
     // ---- per-app audio ----
     // playback streams (Quickshell counts an app stream that plays into a sink as isSink)
     readonly property var streams: Pipewire.nodes.values.filter(n => n.isStream && n.isSink && n.audio)
@@ -807,6 +813,28 @@ PanelWindow {
                     }
                 }
 
+                // awake <command>: what super caffeine is waiting on
+                Text { visible: Caffeine.jobs.length > 0; text: "Staying awake for"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 4 }
+                Repeater {
+                    model: Caffeine.jobs
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true; height: 34; radius: 10
+                        color: Theme.surfaceContainer
+                        Text {
+                            anchors { left: parent.left; leftMargin: 12; right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                            elide: Text.ElideRight
+                            text: "\uf110  " + parent.modelData.name + "  ·  " + Math.max(1, Math.round((win.nowSec - parseInt(parent.modelData.start)) / 60)) + "m"
+                            font.family: Theme.font; font.pixelSize: 11; color: Theme.text
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: "In a terminal: awake <command> keeps super caffeine on until it finishes (awake -p <pid> for one already running), then lets the laptop sleep."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
+                }
+
                 Text { text: "SUPER CAFFEINE"; font.family: Theme.font; font.pixelSize: 10; font.bold: true; color: Theme.red; Layout.topMargin: 4 }
                 Text { text: "When the lid closes"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
                 Flow {
@@ -835,10 +863,11 @@ PanelWindow {
                 Flow {
                     Layout.fillWidth: true; spacing: 8
                     Controls.Chip { label: "Block manual suspend"; on: Caffeine.blockSuspend; onClicked: Caffeine.set("blockSuspend", !Caffeine.blockSuspend) }
+                    Controls.Chip { label: "Low power while closed"; on: Caffeine.lowPower; onClicked: Caffeine.set("lowPower", !Caffeine.lowPower) }
                 }
                 Text {
                     Layout.fillWidth: true; wrapMode: Text.Wrap
-                    text: "Block manual suspend: the power menu's suspend does nothing while super caffeine is on."
+                    text: "Block manual suspend: the power menu's suspend does nothing while super caffeine is on. Low power while closed: power saver and the keyboard light off until the lid opens."
                     font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
             }
@@ -891,6 +920,19 @@ PanelWindow {
                         model: [["keep", "Keep"],["balanced", "Balanced"],["power-saver", "Power saver"]]
                         delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Power.onBattery === modelData[0]; onClicked: Power.set("onBattery", modelData[0]) }
                     }
+                }
+
+                // reopen the windows after a reboot (~/.local/bin/session-restore)
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 6
+                    Text { text: "Reopen windows after a reboot"; font.family: Theme.font; font.pixelSize: 12; color: Theme.text; Layout.fillWidth: true }
+                    Controls.Switch { on: win.restoreOn; onToggled: { win.restoreOn = !win.restoreOn; Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/session-restore", win.restoreOn ? "on" : "off"]); } }
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: "Apps and terminals come back on the workspaces they were on (terminals in the same folder)."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
             }
 

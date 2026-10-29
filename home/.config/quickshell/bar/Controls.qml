@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell.Widgets
 
 // Small shared controls for the quick-settings pages.
@@ -84,6 +85,7 @@ Item {
         signal clicked()
         height: 30; radius: 15
         implicitWidth: t.implicitWidth + 28
+        Layout.minimumWidth: implicitWidth      // never squeezed below its label in a row
         color: on ? Theme.primaryContainer : Theme.surfaceHigh
         border.width: on ? 1 : 0
         border.color: accent

@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+"""Phone page for the laptop: status (battery, temperature, super caffeine, awake jobs, Claude) plus three fixed
+actions (lock, screen off, let it sleep). Meant to sit behind your own HTTPS reverse proxy; it also has its own login.
+
+  rice-remote passwd       set the password (stored as a scrypt hash in ~/.config/rice/remote.json)
+  rice-remote enable       install + start the systemd user service (listens on 127.0.0.1:8765)
+  rice-remote disable      stop it
+  rice-remote serve        run in the foreground (what the service runs)
+
+Security: binds to localhost only (expose it through the proxy), password login with lockouts (5 misses per client
+per 15 min, 20 misses in total per hour locks everyone out for an hour), HttpOnly + SameSite=Strict + Secure session
+cookie, actions need POST + a custom header + a same-origin check, strict CSP, nothing user-supplied ever reaches a
+command line. Settings in remote.json: port, bind, secure_cookie (set false only to try it over plain http locally),
+trusted_proxies (whose X-Forwarded-For is believed)."""
+import getpass, hashlib, hmac, html, http.server, json, os, secrets, socketserver, subprocess, sys, threading, time, urllib.parse
+
+HOME = os.path.expanduser("~")
+CFG = os.environ.get("RICE_REMOTE_CFG") or os.path.join(HOME, ".config/rice/remote.json")
+RUN = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+BIN = os.path.join(HOME, ".local/bin")
+N, R, P = 2 ** 15, 8, 1
+SESSION_DAYS = 30
+COOKIE = "rr_session"
+
+# ---------------------------------------------------------------- config
+def load_cfg():
+    try:
+        with open(CFG) as f: return json.load(f)
+    except FileNotFoundError: return {}
+
+def save_cfg(c):
+    os.makedirs(os.path.dirname(CFG), exist_ok=True)
+    fd = os.open(CFG + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f: json.dump(c, f, indent=2)
+    os.replace(CFG + ".tmp", CFG)
+
+def kdf(pw, salt, n=N, r=R, p=P):
+    return hashlib.scrypt(pw.encode(), salt=salt, n=n, r=r, p=p, maxmem=64 * 1024 * 1024, dklen=32)
+
+# ---------------------------------------------------------------- status (read only)
+def read(path, default=""):
+    try:
+        with open(path) as f: return f.read().strip()
+    except Exception: return default
+
+def battery():
+    for b in sorted(os.listdir("/sys/class/power_supply")):
+        d = f"/sys/class/power_supply/{b}"
+        if read(f"{d}/type") != "Battery": continue
+        pw = read(f"{d}/power_now")
+        if not pw and read(f"{d}/current_now") and read(f"{d}/voltage_now"):
+            pw = str(int(read(f"{d}/current_now")) * int(read(f"{d}/voltage_now")) // 1000000)
+        return {"percent": int(read(f"{d}/capacity", "0") or 0), "status": read(f"{d}/status"),
+                "watts": round(int(pw) / 1e6, 1) if pw.isdigit() else None}
+    return None
+
+def temperature():
+    best = None
+    for h in os.listdir("/sys/class/hwmon"):
+        d = f"/sys/class/hwmon/{h}"
+        if read(f"{d}/name") not in ("coretemp", "k10temp", "zenpower", "cpu_thermal"): continue
+        for f in os.listdir(d):
+            if f.startswith("temp") and f.endswith("_input"):
+                v = read(f"{d}/{f}")
+                if v.isdigit(): best = max(best or 0, int(v) / 1000)
+    return round(best) if best else None
+
+def memory():
+    m = {}
+    for line in read("/proc/meminfo").splitlines():
+        k, v = line.split(":", 1); m[k] = int(v.split()[0])
+    return round(100 * (1 - m.get("MemAvailable", 0) / max(1, m.get("MemTotal", 1))))
+
+def proc_running(needle):
+    for p in os.listdir("/proc"):
+        if not p.isdigit(): continue
+        try:
+            with open(f"/proc/{p}/cmdline", "rb") as f: c = f.read().split(b"\0")
+        except Exception: continue
+        if needle(c): return True
+    return False
+
+def awake_jobs():
+    d = os.path.join(RUN, "awake"); out = []
+    if os.path.isdir(d):
+        for f in os.listdir(d):
+            if not f.endswith(".json") or not os.path.isdir(f"/proc/{f[:-5]}"): continue
+            try:
+                j = json.load(open(os.path.join(d, f)))
+                out.append({"name": str(j.get("name", ""))[:60], "minutes": int((time.time() - int(j.get("start", time.time()))) / 60)})
+            except Exception: pass
+    return out
+
+def claude_sessions():
+    try:
+        l = json.loads(subprocess.run([f"{BIN}/claude-island", "list"], capture_output=True, text=True, timeout=5).stdout)
+        return [{"project": s.get("project", "")[:40], "state": s.get("state", "")} for s in l]
+    except Exception: return []
+
+_usage = {"t": 0, "v": None}
+def claude_usage():
+    if time.time() - _usage["t"] > 300:
+        _usage["t"] = time.time()
+        try:
+            d = json.loads(subprocess.run([f"{BIN}/claude-usage"], capture_output=True, text=True, timeout=60).stdout)
+            l = d.get("limits") or {}
+            _usage["v"] = {"session": (l.get("five_hour") or {}).get("utilization"), "weekly": (l.get("seven_day") or {}).get("utilization")}
+        except Exception: pass
+    return _usage["v"]
+
+def status():
+    up = float(read("/proc/uptime", "0").split()[0])
+    lid = read(next((f"/proc/acpi/button/lid/{d}/state" for d in os.listdir("/proc/acpi/button/lid")), ""), "") if os.path.isdir("/proc/acpi/button/lid") else ""
+    return {
+        "time": int(time.time()),
+        "uptime_h": round(up / 3600, 1),
+        "battery": battery(),
+        "temp_c": temperature(),
+        "load": read("/proc/loadavg").split()[:3],
+        "memory_pct": memory(),
+        "lid": "closed" if "closed" in lid else "open" if lid else None,
+        "super_caffeine": os.path.exists(os.path.join(HOME, ".cache/rice/super")),
+        "locked": proc_running(lambda c: len(c) > 2 and c[0].endswith(b"quickshell") and b"lock" in c[1:4]),
+        "awake": awake_jobs(),
+        "claude": {"sessions": claude_sessions(), "usage": claude_usage()},
+    }
+
+# ---------------------------------------------------------------- actions (fixed commands only)
+def run(*cmd):
+    # as its own transient unit: outside this service's sandbox, and not killed when the service restarts
+    subprocess.Popen(["systemd-run", "--user", "--quiet", "--collect", "--"] + list(cmd), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+ACTIONS = {
+    "lock": lambda: run(f"{BIN}/lock"),
+    "screen-off": lambda: run("niri", "msg", "action", "power-off-monitors"),
+    # super caffeine off, lock, then suspend (logind lets it now)
+    "sleep": lambda: run("sh", "-c", f"qs -c bar ipc call caffeine off; {BIN}/lock & sleep 2; systemctl suspend"),
+}
+
+# ---------------------------------------------------------------- auth state
+lock = threading.Lock()
+kdf_lock = threading.Lock()             # one scrypt at a time: no memory blow-up from parallel logins
+sessions = {}                           # sha256(token) -> expiry
+fails = {}                              # client -> [timestamps]
+global_fails = []
+
+def client_key(h):
+    peer = h.client_address[0]
+    xff = h.headers.get("X-Forwarded-For")
+    if xff and peer in h.server.cfg.get("trusted_proxies", ["127.0.0.1", "::1"]):
+        return xff.split(",")[-1].strip()[:64]
+    return peer
+
+def locked_out(key):
+    now = time.time()
+    with lock:
+        global_fails[:] = [t for t in global_fails if now - t < 3600]
+        fails[key] = [t for t in fails.get(key, []) if now - t < 900]
+        return len(fails[key]) >= 5 or len(global_fails) >= 20
+
+def note_fail(key):
+    with lock:
+        now = time.time()
+        fails.setdefault(key, []).append(now); global_fails.append(now)
+
+def new_session():
+    tok = secrets.token_urlsafe(32)
+    with lock:
+        now = time.time()
+        for k in [k for k, v in sessions.items() if v < now]: del sessions[k]
+        if len(sessions) >= 20: del sessions[min(sessions, key=sessions.get)]
+        sessions[hashlib.sha256(tok.encode()).hexdigest()] = now + SESSION_DAYS * 86400
+    return tok
+
+def session_ok(h):
+    c = h.headers.get("Cookie", "")
+    for part in c.split(";"):
+        k, _, v = part.strip().partition("=")
+        if k == COOKIE and v:
+            d = hashlib.sha256(v.encode()).hexdigest()
+            with lock:
+                exp = sessions.get(d)
+                if exp and exp > time.time(): return d
+    return None
+
+# ---------------------------------------------------------------- pages
+CSS = """
+:root{--bg:#f6f7f2;--card:#fff;--text:#1c1d19;--dim:#6b6d63;--acc:#4f6b2f;--warn:#a26b00;--bad:#b3261e;--line:#e2e4da}
+@media (prefers-color-scheme:dark){:root{--bg:#121410;--card:#1d201a;--text:#e4e6dc;--dim:#a0a395;--acc:#b5d48c;--warn:#e9c46a;--bad:#f2b8b5;--line:#2c3027}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,sans-serif;padding:16px;max-width:560px;margin:auto}
+h1{font-size:18px;margin:4px 0 14px;display:flex;justify-content:space-between;align-items:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:3px 0}.dim{color:var(--dim)}.k{color:var(--dim)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:6px 0 2px}.bar i{display:block;height:100%;background:var(--acc)}
+.on{color:var(--acc);font-weight:600}.warn{color:var(--warn)}.bad{color:var(--bad)}
+button{font:inherit;border:0;border-radius:12px;padding:12px 14px;background:var(--line);color:var(--text);flex:1}
+button.acc{background:var(--acc);color:var(--bg)}.btns{display:flex;gap:8px;flex-wrap:wrap}
+input{font:inherit;width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);margin:8px 0}
+small{color:var(--dim)}
+"""
+
+JS = """
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function pct(v){ return v == null ? '–' : Math.round(v) + '%'; }
+function meter(v){ return '<div class=bar><i style="width:' + Math.min(100, Math.max(0, v || 0)) + '%"></i></div>'; }
+async function load(){
+  const r = await fetch('/api/status', {cache:'no-store'});
+  if (r.status === 401) { location.reload(); return; }
+  const s = await r.json();
+  const b = s.battery || {};
+  let h = '<div class=card><div class=row><b>Battery</b><span>' + pct(b.percent) + ' · ' + esc(b.status) + (b.watts ? ' · ' + b.watts + ' W' : '') + '</span></div>' + meter(b.percent)
+    + '<div class=row><span class=k>Temperature</span><span class="' + (s.temp_c >= 90 ? 'bad' : s.temp_c >= 80 ? 'warn' : '') + '">' + (s.temp_c ?? '–') + ' °C</span></div>'
+    + '<div class=row><span class=k>Load · memory</span><span>' + esc(s.load.join(' ')) + ' · ' + s.memory_pct + '%</span></div>'
+    + '<div class=row><span class=k>Up</span><span>' + s.uptime_h + ' h</span></div></div>';
+  h += '<div class=card><div class=row><b>Super caffeine</b><span class="' + (s.super_caffeine ? 'on' : 'dim') + '">' + (s.super_caffeine ? 'on' : 'off') + '</span></div>'
+    + '<div class=row><span class=k>Lid · screen</span><span>' + esc(s.lid ?? '–') + ' · ' + (s.locked ? 'locked' : 'unlocked') + '</span></div>';
+  for (const j of s.awake) h += '<div class=row><span>⏳ ' + esc(j.name) + '</span><span class=dim>' + j.minutes + ' min</span></div>';
+  if (!s.awake.length) h += '<div class=row><span class=dim>No awake jobs</span></div>';
+  h += '</div>';
+  const c = s.claude || {}, u = c.usage || {};
+  h += '<div class=card><div class=row><b>Claude</b><span class=dim>5 h ' + pct(u.session) + ' · week ' + pct(u.weekly) + '</span></div>' + meter(u.session);
+  for (const x of c.sessions || []) h += '<div class=row><span>' + esc(x.project) + '</span><span class="' + (x.state === 'waiting' ? 'warn' : x.state === 'working' ? 'on' : 'dim') + '">' + esc(x.state === 'waiting' ? 'needs you' : x.state) + '</span></div>';
+  h += '</div>';
+  $('#s').innerHTML = h;
+  $('#t').textContent = new Date(s.time * 1000).toLocaleTimeString();
+}
+async function act(a){
+  const labels = {lock: 'Lock the screen?', 'screen-off': 'Turn the screen off?', sleep: 'Turn super caffeine off and put the laptop to sleep? You lose this page until it wakes.'};
+  if (!confirm(labels[a])) return;
+  const r = await fetch('/api/action/' + a, {method: 'POST', headers: {'X-Rice': '1'}});
+  $('#msg').textContent = r.ok ? 'Done' : 'Failed (' + r.status + ')';
+  setTimeout(load, 1500);
+}
+document.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => act(b.dataset.a)));
+$('#out').addEventListener('click', async () => { await fetch('/logout', {method: 'POST', headers: {'X-Rice': '1'}}); location.reload(); });
+load(); setInterval(load, 15000);
+"""
+
+def page(body):
+    return ("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+            "<meta name=robots content=noindex><title>Laptop</title><link rel=stylesheet href=/style.css></head><body>" + body + "</body></html>")
+
+APP = page("<h1>Laptop <small id=t></small></h1><div id=s><div class=card>Loading…</div></div>"
+           "<div class=card><div class=btns><button data-a=lock>Lock</button><button data-a=screen-off>Screen off</button>"
+           "<button class=acc data-a=sleep>Let it sleep</button></div><p><small id=msg></small></p></div>"
+           "<p><button id=out>Sign out</button></p><script src=/app.js></script>")
+
+def login_page(msg=""):
+    return page("<h1>Laptop</h1><div class=card><form method=post action=/login>"
+                "<input type=password name=password autocomplete=current-password autofocus placeholder=Password>"
+                "<button class=acc type=submit>Sign in</button></form>"
+                + (f"<p class=bad>{html.escape(msg)}</p>" if msg else "") + "</div>")
+
+# ---------------------------------------------------------------- server
+class Handler(http.server.BaseHTTPRequestHandler):
+    server_version = "rice"
+    sys_version = ""
+    timeout = 15
+
+    def log_message(self, fmt, *a): pass
+
+    def send(self, code, body=b"", ctype="text/html; charset=utf-8", extra=()):
+        if isinstance(body, str): body = body.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+        for k, v in extra: self.send_header(k, v)
+        self.end_headers()
+        if self.command != "HEAD": self.wfile.write(body)
+
+    def cookie(self, value, age):
+        sec = "; Secure" if self.server.cfg.get("secure_cookie", True) else ""
+        return ("Set-Cookie", f"{COOKIE}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={age}{sec}")
+
+    def same_origin(self):
+        # browsers send Origin on POST; it must match the host the page was served from
+        o = self.headers.get("Origin")
+        if not o: return True
+        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+        return urllib.parse.urlparse(o).netloc == host.split(",")[0].strip()
+
+    def body(self, limit=4096):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > limit: return None
+        return self.rfile.read(n)
+
+    def do_HEAD(self): self.do_GET()
+
+    def do_GET(self):
+        path = urllib.parse.urlparse(self.path).path
+        if path == "/style.css": return self.send(200, CSS, "text/css; charset=utf-8")
+        if path == "/app.js": return self.send(200, JS, "text/javascript; charset=utf-8")
+        authed = session_ok(self)
+        if path == "/": return self.send(200, APP if authed else login_page())
+        if path == "/api/status":
+            if not authed: return self.send(401, b"{}", "application/json")
+            return self.send(200, json.dumps(status()), "application/json")
+        self.send(404, "not found", "text/plain")
+
+    def do_POST(self):
+        path = urllib.parse.urlparse(self.path).path
+        if not self.same_origin(): return self.send(403, "bad origin", "text/plain")
+        if path == "/login":
+            key = client_key(self)
+            if locked_out(key): return self.send(429, login_page("Too many tries. Wait a while."))
+            raw = self.body()
+            if raw is None: return self.send(413, "too big", "text/plain")
+            pw = urllib.parse.parse_qs(raw.decode(errors="replace")).get("password", [""])[0]
+            c = self.server.cfg
+            with kdf_lock:
+                ok = bool(pw) and hmac.compare_digest(kdf(pw, bytes.fromhex(c["salt"]), c["n"], c["r"], c["p"]).hex(), c["hash"])
+            if not ok:
+                note_fail(key)
+                print(f"rice-remote: failed login from {key}", file=sys.stderr, flush=True)
+                time.sleep(1)
+                return self.send(401, login_page("Wrong password."))
+            return self.send(303, "", extra=[("Location", "/"), self.cookie(new_session(), SESSION_DAYS * 86400)])
+        # everything else: signed in, and the custom header a cross-site form cannot send
+        d = session_ok(self)
+        if not d or self.headers.get("X-Rice") != "1": return self.send(401, "no", "text/plain")
+        self.body()
+        if path == "/logout":
+            with lock: sessions.pop(d, None)
+            return self.send(204, "", extra=[self.cookie("", 0)])
+        if path.startswith("/api/action/"):
+            a = ACTIONS.get(path[len("/api/action/"):])
+            if not a: return self.send(404, "no such action", "text/plain")
+            a()
+            print(f"rice-remote: action {path} from {client_key(self)}", file=sys.stderr, flush=True)
+            return self.send(204, "")
+        self.send(404, "not found", "text/plain")
+
+class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+UNIT = """[Unit]
+Description=rice-remote: laptop status page for the phone
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/rice-remote serve
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+UMask=0077
+# claude-usage keeps a cache, claude-island prunes its session files
+ReadWritePaths=%h/.cache/rice %t
+
+[Install]
+WantedBy=graphical-session.target
+"""
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    c = load_cfg()
+    if cmd == "passwd":
+        a = getpass.getpass("New password (12+ characters): ")
+        if len(a) < 12: sys.exit("too short")
+        if getpass.getpass("Again: ") != a: sys.exit("they don't match")
+        salt = os.urandom(16)
+        c.update({"salt": salt.hex(), "hash": kdf(a, salt).hex(), "n": N, "r": R, "p": P})
+        c.setdefault("port", 8765); c.setdefault("bind", "127.0.0.1"); c.setdefault("secure_cookie", True)
+        c.setdefault("trusted_proxies", ["127.0.0.1", "::1"])
+        save_cfg(c); print("saved; restart the service if it runs: systemctl --user restart rice-remote")
+    elif cmd == "enable":
+        if "hash" not in c: sys.exit("set a password first: rice-remote passwd")
+        d = os.path.join(HOME, ".config/systemd/user"); os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "rice-remote.service"), "w") as f: f.write(UNIT)
+        subprocess.run(["systemctl", "--user", "daemon-reload"])
+        subprocess.run(["systemctl", "--user", "enable", "--now", "rice-remote.service"])
+        print(f"listening on {c.get('bind', '127.0.0.1')}:{c.get('port', 8765)}; point your reverse proxy (HTTPS) at it")
+    elif cmd == "disable":
+        subprocess.run(["systemctl", "--user", "disable", "--now", "rice-remote.service"])
+    elif cmd == "serve":
+        if "hash" not in c: sys.exit("no password set: rice-remote passwd")
+        srv = Server((c.get("bind", "127.0.0.1"), int(c.get("port", 8765))), Handler)
+        srv.cfg = c
+        print(f"rice-remote on {c.get('bind', '127.0.0.1')}:{c.get('port', 8765)}", file=sys.stderr, flush=True)
+        srv.serve_forever()
+    else:
+        sys.exit(__doc__)
+
+main()

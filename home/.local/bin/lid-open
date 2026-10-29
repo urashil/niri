@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Lid opened (niri switch-event): undo "low power while closed" (power profile, keyboard light).
+STATE="$HOME/.cache/rice"
+f="$STATE/lowpower-saved"
+[ -f "$f" ] || exit 0
+read -r profile kbd < "$f"
+rm -f "$f"
+[ -n "$profile" ] && powerprofilesctl set "$profile" 2>/dev/null
+[ -n "$kbd" ] && [ "$kbd" != - ] && brightnessctl -q -d "$(ls /sys/class/leds 2>/dev/null | grep -m1 kbd_backlight)" set "$kbd" 2>/dev/null
+exit 0

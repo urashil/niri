@@ -5,6 +5,12 @@
 STATE="$HOME/.cache/rice"
 # Super caffeine: stay running (logind is blocked from suspending) but lock and turn the screen off
 if [ -f "$STATE/super" ]; then
+  # low power while closed (caffeine menu): remember the profile and keyboard light, lid-open puts them back
+  if [ -f "$STATE/super-lowpower" ] && [ ! -f "$STATE/lowpower-saved" ]; then
+    printf '%s %s\n' "$(powerprofilesctl get 2>/dev/null)" "$(brightnessctl -d "$(ls /sys/class/leds 2>/dev/null | grep -m1 kbd_backlight)" get 2>/dev/null || echo -)" > "$STATE/lowpower-saved"
+    powerprofilesctl set power-saver 2>/dev/null
+    brightnessctl -q -d "$(ls /sys/class/leds 2>/dev/null | grep -m1 kbd_backlight)" set 0 2>/dev/null
+  fi
   # what to do is chosen in the caffeine menu (written to super-lid): lockoff (default) | lock | none
   case "$(cat "$STATE/super-lid" 2>/dev/null)" in
     none) exit 0 ;;

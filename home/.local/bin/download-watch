@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""Print one line per finished download in ~/Downloads (or the folders given): "<size>\t<path>".
+Uses inotify directly (no inotify-tools). Browser temp files (.part, .crdownload, ...) are ignored;
+a download counts as finished when it is renamed into place or closed after writing with a non-zero size."""
+import ctypes, os, struct, sys, time
+
+IN_CLOSE_WRITE, IN_MOVED_TO = 0x8, 0x80
+TEMP = (".part", ".crdownload", ".tmp", ".download", ".partial", ".opdownload", ".!qb", ".aria2")
+dirs = sys.argv[1:] or [os.path.expanduser("~/Downloads")]
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
+fd = libc.inotify_init1(0)
+if fd < 0: sys.exit("inotify_init failed")
+wds = {}
+for d in dirs:
+    os.makedirs(d, exist_ok=True)
+    wd = libc.inotify_add_watch(fd, d.encode(), IN_CLOSE_WRITE | IN_MOVED_TO)
+    if wd >= 0: wds[wd] = d
+seen = {}
+while True:
+    buf = os.read(fd, 65536)
+    i = 0
+    while i < len(buf):
+        wd, mask, cookie, n = struct.unpack_from("iIII", buf, i)
+        name = buf[i + 16:i + 16 + n].rstrip(b"\0").decode(errors="replace")
+        i += 16 + n
+        if not name or name.startswith(".") or name.lower().endswith(TEMP): continue
+        p = os.path.join(wds.get(wd, ""), name)
+        try: size = os.path.getsize(p)
+        except OSError: continue
+        if size == 0 or os.path.isdir(p): continue
+        # a file is often closed several times while it is written: report it once per few seconds
+        now = time.time()
+        if now - seen.get(p, 0) < 5: continue
+        seen[p] = now
+        print(f"{size}\t{p}", flush=True)

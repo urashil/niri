@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Keep the laptop awake (super caffeine) until a job finishes, then let it sleep again.
+#   awake <command...>     run it; super caffeine stays on while it runs
+#   awake -p <pid> [name]  watch a process that is already running
+#   awake                  list what is being waited on
+# When the last job ends the bar turns super caffeine back off (if awake turned it on) and says so in the island;
+# jobs over a minute also send a push through notify-me.
+dir="${XDG_RUNTIME_DIR:-/tmp}/awake"; mkdir -p "$dir"; chmod 700 "$dir"
+
+if [ $# -eq 0 ]; then
+  for f in "$dir"/*.json; do [ -e "$f" ] || { echo "nothing"; exit 0; }; cat "$f"; echo; done; exit 0
+fi
+[ "$1" = -h ] || [ "$1" = --help ] && { sed -n 2,7p "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+
+json() { python3 -c 'import json,sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' "$@"; }
+ipc() { qs -c bar ipc call caffeine "$@" >/dev/null 2>&1; }
+start=$(date +%s)
+me=$$
+
+if [ "$1" = -p ]; then
+  pid=$2; name=${3:-$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | cut -c1-60)}
+  [ -d "/proc/$pid" ] || { echo "no process $pid" >&2; exit 1; }
+  json pid "$me" watch "$pid" name "$name" start "$start" > "$dir/$me.json"
+  trap 'rm -f "$dir/$me.json"; ipc jobs' EXIT
+  ipc jobs
+  while [ -d "/proc/$pid" ]; do sleep 2; done
+  code=""
+else
+  name=$(printf '%s ' "$@" | cut -c1-60)
+  json pid "$me" name "$name" start "$start" > "$dir/$me.json"
+  trap 'rm -f "$dir/$me.json"; ipc jobs' EXIT
+  ipc jobs
+  "$@" &
+  child=$!
+  trap 'kill -TERM $child 2>/dev/null' INT TERM HUP
+  wait $child; code=$?
+  # a signal interrupted wait: wait for the child to really finish
+  while kill -0 $child 2>/dev/null; do wait $child; code=$?; done
+fi
+
+took=$(( $(date +%s) - start ))
+rm -f "$dir/$me.json"
+ipc finished "$name" "${code:-done}" "$took"
+if [ "$took" -ge 60 ] && [ -x "$HOME/.local/bin/notify-me" ]; then
+  "$HOME/.local/bin/notify-me" "$name finished${code:+ (exit $code)} after $((took / 60))m" >/dev/null 2>&1 &
+fi
+trap - EXIT
+ipc jobs
+[ -n "$code" ] && exit "$code"
+exit 0

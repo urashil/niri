@@ -319,12 +319,19 @@ PanelWindow {
                     Controls.Chip { label: win.studying ? "Hide and type" : "Check"; on: true; onClicked: win.check() }
                 }
 
-                // tools: show it, chunk size, start over, remove
+                // tools: show it, start over, remove; chunk size on its own row
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
-                    Controls.Chip { label: win.reveal ? "  Hide" : "  Show"; onClicked: win.reveal = !win.reveal }
-                    Text { text: "chunk"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.leftMargin: 6 }
+                    Controls.Chip { label: win.reveal ? "\uf070  Hide" : "\uf06e  Show"; onClicked: win.reveal = !win.reveal }
+                    Controls.Chip { label: "Restart"; onClicked: win.relearn() }
+                    Item { Layout.fillWidth: true }
+                    Controls.Chip { label: "\uf1f8  Remove"; accent: Theme.error; onClicked: win.remove(win.cur) }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Text { text: "Chunk size"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.rightMargin: 4 }
                     Repeater {
                         model: [3, 4, 5, 6, 8]
                         delegate: Controls.Chip {
@@ -335,8 +342,6 @@ PanelWindow {
                         }
                     }
                     Item { Layout.fillWidth: true }
-                    Controls.Chip { label: "Restart"; onClicked: win.relearn() }
-                    Controls.Chip { label: "  Remove"; accent: Theme.error; onClicked: win.remove(win.cur) }
                 }
             }
         }

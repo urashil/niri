@@ -95,5 +95,9 @@ ShellRoot {
         function cycle(): void { UiState.cycleCaffeine(); }
         function off(): void { UiState.superCaffeine = false; UiState.caffeine = false; }
         function superMode(): void { UiState.superCaffeine = !UiState.superCaffeine; }
+        // from ~/.local/bin/awake
+        function jobs(): void { Caffeine.refreshJobs(); }
+        function finished(name: string, code: string, took: string): void { Caffeine.finished(name, code, took); }
+        function state(): string { return JSON.stringify({ caffeine: UiState.caffeine, superCaffeine: UiState.superCaffeine, jobs: Caffeine.jobs }); }
     }
 }

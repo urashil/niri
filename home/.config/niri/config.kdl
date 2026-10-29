@@ -277,6 +277,7 @@ spawn-at-startup "quickshell" "-c" "bar"
 spawn-sh-at-startup "wl-paste --type text --watch cliphist store"
 spawn-sh-at-startup "wl-paste --type image --watch cliphist store"
 spawn-at-startup "@HOME@/.local/bin/keyboard-mode" "auto"
+spawn-at-startup "@HOME@/.local/bin/session-restore" "restore"
 spawn-at-startup "@HOME@/.local/bin/clip-prune" "--daemon"
 spawn-at-startup "@HOME@/.local/bin/vpn-autoconnect"
 // Lock before suspend (lid close -> logind suspend), lock after 5 min idle, screens off after 10.
@@ -465,6 +466,7 @@ layer-rule {
 // Lid close: lock, then make sure it sleeps (logind skips lid events for 30 s after a resume). Super caffeine ignores it.
 switch-events {
     lid-close { spawn "@HOME@/.local/bin/lid-close"; }
+    lid-open { spawn "@HOME@/.local/bin/lid-open"; }
 }
 
 binds {
