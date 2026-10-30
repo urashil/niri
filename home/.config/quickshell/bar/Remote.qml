@@ -24,7 +24,7 @@ Singleton {
     function setTunnel(v) { ctl(["systemctl", "--user", v ? "enable" : "disable", "--now", "rice-remote-tunnel.service"]); }
     function setAll(v) { ctl(["systemctl", "--user", v ? "enable" : "disable", "--now", "rice-remote.service", "rice-remote-tunnel.service"]); }
     // sessions live in the server's memory: a restart signs every device out
-    function signOutAll() { ctl(["systemctl", "--user", "restart", "rice-remote.service"]); UiState.pulse("toggle", "\uf3cd", "Phone page: every device signed out", -1, Theme.yellow, 2500); }
+    function signOutAll() { ctl(["systemctl", "--user", "restart", "rice-remote.service"]); UiState.pulse("toggle", "\uf10b", "Phone page: every device signed out", -1, Theme.yellow, 2500); }
     function ctl(cmd) { runner.command = cmd; runner.running = true; }
     Process { id: runner; onExited: root.refresh() }
 
@@ -57,7 +57,7 @@ Singleton {
         stdout: SplitParser {
             onRead: line => {
                 if (line.indexOf("failed") >= 0) UiState.pulse("toggle", "\uf071", "Phone page: " + line.replace(/^rice-remote:\s*/, ""), -1, Theme.error, 6000);
-                else if (line.indexOf("action") >= 0) UiState.pulse("toggle", "\uf3cd", "Phone: " + line.replace(/^rice-remote:\s*action \/api\/action\//, "").replace(/ from .*/, ""), -1, Theme.primary, 4000);
+                else if (line.indexOf("action") >= 0) UiState.pulse("toggle", "\uf10b", "Phone: " + line.replace(/^rice-remote:\s*action \/api\/action\//, "").replace(/ from .*/, ""), -1, Theme.primary, 4000);
                 else if (line.indexOf("passkey added") >= 0) UiState.pulse("toggle", "\uf084", "Phone page: a passkey was added", -1, Theme.yellow, 5000);
                 root.refresh();
             }

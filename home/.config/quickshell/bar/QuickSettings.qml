@@ -236,7 +236,7 @@ PanelWindow {
                     }
                     Controls.Tile {
                         Layout.fillWidth: true
-                        icon: "\uf3cd"
+                        icon: "\uf10b"
                         title: "Phone access"
                         subtitle: !Remote.configured ? "Not set up" : Remote.on ? "Online" : Remote.serverFailed || Remote.tunnelFailed ? "Failing" : Remote.server ? "Local only" : "Off"
                         on: Remote.on
