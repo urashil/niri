@@ -9,6 +9,7 @@ Notifications 1.0 Notifications.qml
 singleton UiState 1.0 UiState.qml
 Stats 1.0 Stats.qml
 PowerMenu 1.0 PowerMenu.qml
+QuitPrompt 1.0 QuitPrompt.qml
 WallpaperPicker 1.0 WallpaperPicker.qml
 singleton Wifi 1.0 Wifi.qml
 Events 1.0 Events.qml

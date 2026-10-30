@@ -17,6 +17,7 @@ ShellRoot {
     FocusPanel {}
     Switcher {}
     PowerMenu {}
+    QuitPrompt {}
     WallpaperPicker {}
     Notifications {}
     SongIsland {}
@@ -24,7 +25,13 @@ ShellRoot {
     Events {}
 
     // qs -c bar ipc call <target> toggle
-    IpcHandler { target: "power";     function toggle(): void { UiState.power = !UiState.power; } }
+    IpcHandler {
+        target: "power"
+        function toggle(): void { UiState.power = !UiState.power; }
+        // Mod+Shift+E: ask first; pressing it again while asked logs out
+        function quit(): void { if (UiState.quitAsk) Quickshell.execDetached(["niri", "msg", "action", "quit", "--skip-confirmation"]); else { UiState.power = false; UiState.quitAsk = true; } }
+        function cancel(): void { UiState.quitAsk = false; }
+    }
     IpcHandler { target: "wallpaper"; function toggle(): void { UiState.wallpaper = !UiState.wallpaper; } }
     IpcHandler {
         target: "quick"

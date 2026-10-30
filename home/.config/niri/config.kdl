@@ -780,8 +780,8 @@ binds {
     // which ensures niri always processes them, even when an inhibitor is active.
     Mod+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
 
-    // Mod+Shift+E quits at once; Ctrl+Alt+Delete still asks first.
-    Mod+Shift+E { quit skip-confirmation=true; }
+    // Mod+Shift+E asks in the bar's own prompt (press it again to confirm); niri's dialog if the bar is not running.
+    Mod+Shift+E hotkey-overlay-title="Log out" { spawn-sh "qs -c bar ipc call power quit || niri msg action quit"; }
     Ctrl+Alt+Delete { quit; }
 
     // Powers off the monitors. To turn them back on, do any input like

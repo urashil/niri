@@ -8,6 +8,7 @@ Singleton {
 
     // overlays
     property bool power: false
+    property bool quitAsk: false        // Mod+Shift+E: "log out?" (QuitPrompt)
     property bool wallpaper: false
     property bool quick: false
     property string quickPage: "main"
