@@ -80,6 +80,7 @@ Singleton {
         else if (r.vpn === "443") { if (!(Vpn.connected && Vpn.choice === "school")) Vpn.useSchool(); did.push("OpenVPN 443"); }
         else if (r.vpn === "off") { Vpn.disconnect(); did.push("VPN off"); }
         appliedFor = ssid;
+        slept = false;
         mark(ssid);
         if (did.length) UiState.pulse("auto", "", ssid + " · " + did.join(" · "), -1, Theme.primary, 3500);
     }
@@ -89,23 +90,37 @@ Singleton {
         appliedFor = "";
     }
 
-    // connect to a network that has rules -> apply once DHCP has settled; leave -> undo quiet mode
+    // connect to a network that has rules -> apply once DHCP has settled; leave -> undo quiet mode.
+    // Reacts to the name and to the connected state: after a wake the new name often shows up while iwd is still connecting.
+    // the laptop slept since the rule ran (a 5 s tick that came late): the portal sign-in has likely expired
+    property bool slept: false
+    property real tick: Date.now()
+    Timer { interval: 5000; running: true; repeat: true; onTriggered: { if (Date.now() - root.tick > 60000) { root.slept = true; wakeCheck.restart(); } root.tick = Date.now(); } }
+    // the link often comes back before the 5 s Wi-Fi poll notices it dropped: look once things have settled
+    Timer { id: wakeCheck; interval: 8000; onTriggered: root.changed() }
+    // offline for a while (awake): undo quiet mode and forget the network, so joining it again runs the rule
+    Timer { id: leaveLater; interval: 120000; onTriggered: if (!Wifi.connected) root.leave() }
+    function changed() {
+        settle.stop();
+        if (Wifi.connected && Wifi.ssid !== "") {
+            // first network seen after a shell restart, and its rule already ran: adopt it instead of re-running
+            if (startupApplied !== "") {
+                const same = Wifi.ssid === startupApplied;
+                startupApplied = "";
+                if (same) { appliedFor = Wifi.ssid; slept = false; return; }
+            }
+            leaveLater.stop();
+            // back on the same network after a short drop: keep it; after a sleep run a sign-in rule again (the portal has likely forgotten us)
+            if (Wifi.ssid === appliedFor && !(slept && rule(appliedFor).login)) return;
+            leave(); busyWaits = 0; settle.restart();
+        } else if (!Wifi.connected && appliedFor !== "") {
+            leaveLater.restart();
+        }
+    }
     Connections {
         target: Wifi
-        function onSsidChanged() {
-            settle.stop();
-            if (Wifi.connected && Wifi.ssid !== "") {
-                // first network seen after a shell restart, and its rule already ran: adopt it instead of re-running
-                if (root.startupApplied !== "") {
-                    const same = Wifi.ssid === root.startupApplied;
-                    root.startupApplied = "";
-                    if (same) { root.appliedFor = Wifi.ssid; return; }
-                }
-                if (Wifi.ssid !== root.appliedFor) { root.leave(); root.busyWaits = 0; settle.restart(); }
-            } else if (!Wifi.connected) {
-                root.leave();
-            }
-        }
+        function onSsidChanged() { root.changed(); }
+        function onConnectedChanged() { root.changed(); }
     }
     Timer { id: settle; interval: 3500; onTriggered: if (Wifi.connected && Wifi.ssid !== "") root.apply(Wifi.ssid) }
 }

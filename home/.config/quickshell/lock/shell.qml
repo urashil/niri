@@ -139,10 +139,17 @@ ShellRoot {
                         Image {
                             id: face
                             anchors.fill: parent; anchors.margins: 3
-                            source: "file://" + root.home + "/.face"
+                            // the same picture as the login screen: ~/.face, else SDDM's copy, else the one in the dotfiles
+                            readonly property var tries: [root.home + "/.face", "/usr/share/sddm/faces/" + root.user + ".face.icon",
+                                                          root.home + "/dotfiles/root/usr/share/sddm/faces/" + root.user + ".face.icon"]
+                            property int at: 0
+                            source: "file://" + tries[at]
                             fillMode: Image.PreserveAspectCrop
                             visible: false
-                            onStatusChanged: if (status === Image.Ready) faceMask.visible = true
+                            onStatusChanged: {
+                                if (status === Image.Ready) faceMask.visible = true;
+                                else if (status === Image.Error && at < tries.length - 1) at++;
+                            }
                         }
                         MultiEffect { id: faceMask; visible: false; anchors.fill: face; source: face; maskEnabled: true; maskSource: mask; }
                         Item { id: mask; anchors.fill: face; layer.enabled: true; visible: false; Rectangle { anchors.fill: parent; radius: width / 2 } }

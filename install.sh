@@ -62,6 +62,8 @@ chmod 600 "$HOME/.config/rice/.env"
 "$HOME/.local/bin/keyboard-mode" "$KBD" || warn "keyboard-mode failed"
 # larp mode writes its Ctrl+Q bind here while it runs; niri needs the file to exist
 [ -f "$HOME/.config/niri/larp.kdl" ] || : > "$HOME/.config/niri/larp.kdl"
+# profile picture (the lock screen shows it; SDDM gets the same file from deps.sh)
+for f in root/usr/share/sddm/faces/"$USER".face.icon; do [ -f "$f" ] && [ ! -f "$HOME/.face" ] && cp "$f" "$HOME/.face"; done
 # Claude Code hooks -> the bar (island pings when a session finishes or needs you, session list in the usage card)
 python3 - <<'PY' || warn "could not add the Claude Code hooks"
 import json, os
