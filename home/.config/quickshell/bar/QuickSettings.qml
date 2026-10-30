@@ -43,12 +43,6 @@ PanelWindow {
 
     function back() { UiState.quickPage = "main"; askSsid = ""; }
 
-    property bool restoreOn: true
-    FileView {
-        path: Quickshell.env("HOME") + "/.config/rice/session.json"
-        onLoaded: { try { win.restoreOn = JSON.parse(text()).restore !== false; } catch (e) {} }
-    }
-
     // ---- per-app audio ----
     // playback streams (Quickshell counts an app stream that plays into a sink as isSink)
     readonly property var streams: Pipewire.nodes.values.filter(n => n.isStream && n.isSink && n.audio)
@@ -1018,19 +1012,6 @@ PanelWindow {
                         model: [["keep", "Keep"],["balanced", "Balanced"],["power-saver", "Power saver"]]
                         delegate: Controls.Chip { required property var modelData; label: modelData[1]; on: Power.onBattery === modelData[0]; onClicked: Power.set("onBattery", modelData[0]) }
                     }
-                }
-
-                // reopen the windows after a reboot (~/.local/bin/session-restore)
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 6
-                    Text { text: "Reopen windows after a reboot"; font.family: Theme.font; font.pixelSize: 12; color: Theme.text; Layout.fillWidth: true }
-                    Controls.Switch { on: win.restoreOn; onToggled: { win.restoreOn = !win.restoreOn; Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/session-restore", win.restoreOn ? "on" : "off"]); } }
-                }
-                Text {
-                    Layout.fillWidth: true; wrapMode: Text.Wrap
-                    text: "Apps and terminals come back on the workspaces they were on (terminals in the same folder)."
-                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
             }
 

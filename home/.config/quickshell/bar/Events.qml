@@ -239,9 +239,6 @@ Scope {
         }
     }
 
-    // ---- snapshot the open windows for session-restore ----
-    Timer { interval: 60000; running: true; repeat: true; onTriggered: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/session-restore", "save"]) }
-
     // ---- toggles ----
     property bool togReady: false
     Connections {
