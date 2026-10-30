@@ -31,8 +31,6 @@ Variants {
 
         SystemClock { id: clock; precision: SystemClock.Seconds }
 
-        Process { id: launcher; command: ["fuzzel"] }
-
         Item {
             id: content
             // room for the left row before it would touch the island; the window title shrinks first, the weather chip steps aside last
@@ -59,7 +57,7 @@ Variants {
                     overlay: MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: launcher.running = true
+                        onClicked: UiState.launcher = true
                     }
                 }
                 Workspaces { id: wsPill; screenName: win.modelData.name }
@@ -93,6 +91,8 @@ Variants {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.top
                 anchors.verticalCenterOffset: Theme.islandHeight / 2
+                // never under the right row (or the launcher button and workspaces on the left); the window title gives way instead
+                maxW: content.width - 2 * (Math.max(rightRow.width, content.leftFixed) + 14)
             }
 
             // ---- right ----

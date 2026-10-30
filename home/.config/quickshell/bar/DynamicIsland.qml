@@ -8,6 +8,9 @@ Rectangle {
     readonly property real idleW: clockRow.implicitWidth + 32
     readonly property bool songShown: Song.shown
     readonly property real eventW: Math.max(idleW, evRow.implicitWidth + 36)
+    // set by the bar: the room between the left and right rows; long titles elide to stay inside it
+    property real maxW: 9999
+    readonly property real chipsW: (Focus.active ? tRow.implicitWidth + 10 : 0) + (Focus.openCount > 0 ? dRow.implicitWidth + 10 : 0)
 
     width: active ? eventW : idleW
     height: Theme.islandHeight + (active ? 4 : 0)
@@ -51,8 +54,11 @@ Rectangle {
                 width: 22; height: 22; radius: 7; clip: true; color: Theme.surfaceHigh
                 Image { anchors.fill: parent; source: Song.artUrl; fillMode: Image.PreserveAspectCrop; asynchronous: true }
             }
-            Equalizer { anchors.verticalCenter: parent.verticalCenter; active: Song.anyPlaying; barColor: Song.playing ? Theme.primary : Theme.tertiary }
-            Label { text: Song.nowText; elide: Text.ElideRight; width: Math.min(implicitWidth, 260); font.weight: Font.Bold }
+            Equalizer { id: eq; anchors.verticalCenter: parent.verticalCenter; active: Song.anyPlaying; barColor: Song.playing ? Theme.primary : Theme.tertiary }
+            Label {
+                text: Song.nowText; elide: Text.ElideRight; font.weight: Font.Bold
+                width: Math.max(40, Math.min(implicitWidth, 300, root.maxW - 32 - (Song.artUrl !== "" ? 32 : 0) - eq.width - 10 - root.chipsW))
+            }
         }
 
         // timer chip (running timer: remaining time, red in the last minute)
@@ -92,6 +98,7 @@ Rectangle {
         Behavior on opacity { NumberAnimation { duration: 220 } }
 
         Glyph {
+            id: evGlyph
             text: UiState.islandIcon
             color: UiState.islandColor
             font.pixelSize: 16
@@ -112,7 +119,7 @@ Rectangle {
         Label {
             text: UiState.islandText
             elide: Text.ElideRight
-            width: Math.min(implicitWidth, 320)
+            width: Math.max(40, Math.min(implicitWidth, 420, root.maxW - 36 - evGlyph.width - 10 - (UiState.islandValue >= 0 ? 120 : 0)))
         }
     }
 

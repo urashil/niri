@@ -18,7 +18,7 @@ FILES=(
   .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userContent.css
   .config/librewolf/librewolf/6yv4qbnb.default-release/user.js
   .local/bin/lock .local/bin/lid-close .local/bin/rec .local/bin/notify-me .local/bin/caffeine-off .local/bin/theme-mode .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
-  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login .local/bin/pia-killswitch .local/bin/still-film .local/bin/still-fetch .local/bin/song .local/bin/still .local/bin/film .local/bin/spotify .local/bin/spicetify-fetch .local/bin/spotify-theme .local/bin/claude-usage .local/bin/keyboard-mode .local/bin/explain-shot .local/bin/colorpick .local/bin/claude-island .local/bin/awake .local/bin/lid-open .local/bin/download-watch .local/bin/session-restore .local/bin/rice-remote
+  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login .local/bin/pia-killswitch .local/bin/still-film .local/bin/still-fetch .local/bin/song .local/bin/still .local/bin/film .local/bin/spotify .local/bin/spicetify-fetch .local/bin/spotify-theme .local/bin/claude-usage .local/bin/keyboard-mode .local/bin/explain-shot .local/bin/colorpick .local/bin/claude-island .local/bin/awake .local/bin/lid-open .local/bin/download-watch .local/bin/session-restore .local/bin/rice-remote .local/bin/larp
   .config/quickshell/bootpreview
   .config/rice/wallpaper-modes.json
   .config/rice/network-login.sh .config/spotify-launcher.conf .config/spicetify/Themes/rice/user.css .config/spicetify/Extensions/rice-live.js .config/spicetify/config-xpui.ini .local/share/applications/spotify-launcher.desktop
@@ -34,7 +34,7 @@ done
 rm -f home/.config/quickshell/bar/colors.json
 # absolute home paths become a placeholder that install.sh fills in for whoever installs it
 grep -rIl "$HOME" home 2>/dev/null | xargs -r sed -i "s|$HOME|@HOME@|g"
-cp -a ~/deps.sh deps.sh
+[ -f ~/deps.sh ] && cp -a ~/deps.sh deps.sh
 # wallpapers (generated placeholders named *.ai are left out), the GTK theme archive, the display manager config
 rm -rf wallpapers && mkdir -p wallpapers
 find -L "$HOME/Pictures/Wallpapers" -maxdepth 1 -type f ! -name '*.ai' -exec cp -p {} wallpapers/ \;

@@ -5,8 +5,9 @@ import Quickshell.Widgets
 import QtQuick
 import QtQuick.Layouts
 
-// Mod+Space. Apps (and matching open windows) by default; "w " windows, "c " clipboard, "e " emoji, "f " files, "> " run,
-// "s " web search, "? " ask Claude; maths and unit conversions ("5 km in mi") evaluate inline.
+// Mod+Space. Apps, actions (lock, screenshot, larp mode, dark mode, VPN…) and open windows, ranked by match and by how often
+// you pick them (~/.local/state/rice/launcher.json); empty, it shows your most used first. Prefixes: "w " windows, "c " clipboard,
+// "e " emoji, "f " files, "> " run, "s " web search, "? " ask Claude, "t " timer, "todo "; maths and unit conversions evaluate inline.
 PanelWindow {
     id: win
     visible: UiState.launcher
@@ -20,12 +21,14 @@ PanelWindow {
 
     property string query: ""
     property var clip: []
-    readonly property var results: build(query)
+    readonly property var results: tag(build(query))
 
     onVisibleChanged: {
         if (visible) { clipProc.running = true; input.text = UiState.launcherText; UiState.launcherText = ""; input.forceActiveFocus(); list.currentIndex = 0; Niri.refresh(); }
     }
     function close() { UiState.launcher = false; }
+    // `launcher open <text>` while it is already up
+    Connections { target: UiState; function onLauncherTextChanged() { if (win.visible && UiState.launcherText !== "") { input.text = UiState.launcherText; UiState.launcherText = ""; } } }
 
     Process {
         id: clipProc
@@ -172,40 +175,118 @@ PanelWindow {
             return out;
         }
         const v = calc(q);
-        if (v !== null) out.push({ title: "= " + (Number.isInteger(v) ? v : +v.toFixed(8)), sub: "press Enter to copy", icon: iconFor("accessories-calculator"), go: () => run(["wl-copy", String(v)]) });
-        const q1 = q.toLowerCase().trim();
-        if (Song.installed && q1.length >= 2 && ["still@server", "song", "film", "music"].some(w => w.startsWith(q1)))
-            out.push({ title: "Play " + Song.name, sub: "the animated music film · opens in the island", icon: iconFor("multimedia-audio-player"), go: () => Song.open() });
+        if (v !== null) out.push({ title: "= " + (Number.isInteger(v) ? v : +v.toFixed(8)), sub: "press Enter to copy", icon: iconFor("accessories-calculator"), kind: "maths", go: () => run(["wl-copy", String(v)]) });
         const cv = convert(q);
-        if (cv) out.push({ title: "= " + cv.text, sub: "press Enter to copy", icon: iconFor("accessories-calculator"), go: () => run(["wl-copy", String(+cv.v.toPrecision(8))]) });
+        if (cv) out.push({ title: "= " + cv.text, sub: "press Enter to copy", icon: iconFor("accessories-calculator"), kind: "convert", go: () => run(["wl-copy", String(+cv.v.toPrecision(8))]) });
         const q2 = q.toLowerCase().trim();
-        const tools = [
-            [["pick", "colour", "color", "picker", "eyedropper"], "Pick a colour from the screen", "copies the hex", "color-select", [Quickshell.env("HOME") + "/.local/bin/colorpick"]],
-            [["explain", "ask", "claude"], "Explain a part of the screen", "select a region, Claude explains it", "applets-screenshooter", [Quickshell.env("HOME") + "/.local/bin/explain-shot"]],
-            [["memorize", "password", "practice", "digits"], "Memorize", "learn a password or long number in chunks, then review it", "dialog-password", null]
-        ];
-        if (q2.length >= 3) for (const t of tools) if (t[0].some(w => w.startsWith(q2))) {
-            const cmd = t[4];
-            out.push({ title: t[1], sub: t[2], icon: iconFor(t[3]), go: cmd ? () => run(cmd) : () => { UiState.drill = true; } });
-        }
-        if (q2.length >= 2) for (const w of Niri.windows) {
-            if ((w.title + " " + w.app_id).toLowerCase().indexOf(q2) < 0) continue;
-            out.push({ title: w.title || w.app_id, sub: "window · " + w.app_id, icon: iconFor(w.app_id), go: () => run(["niri", "msg", "action", "focus-window", "--id", String(w.id)]) });
-            if (out.length >= 6) break;
-        }
         const apps = DesktopEntries.applications.values.filter(e => !e.noDisplay);
-        const scored = q2 === "" ? apps.map(e => ({ e: e, s: 1 })) : apps.map(e => ({ e: e, s: score(e, q2) })).filter(x => x.s > 0);
-        scored.sort((a, b) => b.s - a.s || a.e.name.localeCompare(b.e.name));
-        for (const x of scored.slice(0, 40)) out.push({ title: x.e.name, sub: x.e.comment || x.e.genericName || "", icon: iconFor(x.e.icon), go: () => x.e.execute() });
+        const appRow = e => ({ title: e.name, sub: e.comment || e.genericName || "", icon: iconFor(e.icon), kind: "app", key: "app:" + e.id, go: () => e.execute() });
+        const winRow = w => ({ title: w.title || w.app_id, sub: w.app_id + (w.is_focused ? " · focused" : ""), icon: iconFor(w.app_id), kind: "window", go: () => run(["niri", "msg", "action", "focus-window", "--id", String(w.id)]) });
+
+        // nothing typed: what you use most, a few actions, then everything A to Z
+        if (q2 === "") {
+            const top = apps.filter(e => used("app:" + e.id) > 0).sort((a, b) => used("app:" + b.id) - used("app:" + a.id)).slice(0, 5);
+            for (const e of top) out.push(Object.assign(appRow(e), { kind: "frequent" }));
+            const acts = actions().filter(a => used(a.key) > 0).sort((a, b) => used(b.key) - used(a.key)).slice(0, 3);
+            for (const a of acts) out.push(a);
+            const seen = top.map(e => e.id);
+            for (const e of apps.slice().sort((a, b) => a.name.localeCompare(b.name))) if (seen.indexOf(e.id) < 0) out.push(appRow(e));
+            return out.slice(0, 60);
+        }
+
+        // everything else is ranked together: match quality, plus how often you picked it
+        const ranked = [];
+        for (const e of apps) { const s = score(e, q2); if (s > 0) ranked.push({ r: appRow(e), s: s + boost("app:" + e.id) }); }
+        for (const a of actions()) {
+            const s = a.words.some(w => w === q2) ? 150 : a.words.some(w => w.startsWith(q2)) && q2.length >= 2 ? 80 : a.title.toLowerCase().indexOf(q2) >= 0 && q2.length >= 3 ? 50 : 0;
+            if (s > 0) ranked.push({ r: a, s: s + boost(a.key) });
+        }
+        if (q2.length >= 2) for (const w of Niri.windows)
+            if ((w.title + " " + w.app_id).toLowerCase().indexOf(q2) >= 0) ranked.push({ r: winRow(w), s: 40 });
+        ranked.sort((a, b) => b.s - a.s || a.r.title.localeCompare(b.r.title));
+        for (const x of ranked.slice(0, 40)) out.push(x.r);
         // a question-looking query: offer Claude
-        if (q2.indexOf(" ") > 0 && q2.length >= 8) out.push({ title: "Ask Claude:  " + q.trim(), sub: "or start with ?", icon: iconFor("help-about"), go: () => UiState.askClaude(q.trim(), "") });
+        if (q2.indexOf(" ") > 0 && q2.length >= 8) out.push({ title: "Ask Claude:  " + q.trim(), sub: "or start with ?", icon: iconFor("help-about"), kind: "claude", go: () => UiState.askClaude(q.trim(), "") });
+        if (out.length === 0 && q2.length >= 2) out.push({ title: "Search the web for “" + q.trim() + "”", sub: "DuckDuckGo · or start with s", icon: iconFor("web-browser"), kind: "web", go: () => run(["xdg-open", "https://duckduckgo.com/?q=" + encodeURIComponent(q.trim())]) });
         return out;
     }
+
+    // ---- actions: things the shell can do, found by name like apps ----
+    readonly property string bin: Quickshell.env("HOME") + "/.local/bin/"
+    function actions() {
+        const run = (cmd) => Quickshell.execDetached(cmd);
+        const a = (key, words, title, sub, icon, go) => ({ key: "act:" + key, words: words, title: title, sub: sub, icon: iconFor(icon), kind: "action", go: go });
+        const l = [
+            a("larp", ["larp", "matrix", "cmatrix", "terminals"], "Larp mode", "a wall of terminals that rearranges itself · Ctrl+Q leaves", "utilities-terminal", () => run([bin + "larp", "start"])),
+            a("lock", ["lock"], "Lock", "lock the screen", "system-lock-screen", () => run([bin + "lock"])),
+            a("sleep", ["sleep", "suspend"], "Sleep", "suspend", "system-suspend", () => run(["systemctl", "suspend"])),
+            a("power", ["shutdown", "shut down", "power off", "restart", "reboot", "log out", "logout"], "Power menu", "shut down, restart, log out", "system-shutdown", () => { UiState.power = true; }),
+            a("shot", ["screenshot", "shot", "capture"], "Screenshot an area", "select, annotate, copy · Mod+Shift+S", "applets-screenshooter", () => run([bin + "shot", "region"])),
+            a("shotfull", ["screenshot", "screen"], "Screenshot the screen", "whole screen to clipboard and file", "applets-screenshooter", () => run([bin + "shot", "screen"])),
+            UiState.recording
+                ? a("recstop", ["record", "recording", "stop"], "Stop recording", "save the screen recording", "media-playback-stop", () => run([bin + "rec", "stop"]))
+                : a("rec", ["record", "recording", "screencast"], "Record the screen", "click the red timer in the bar to stop", "media-record", () => run([bin + "rec", "screen"])),
+            a("colour", ["pick", "colour", "color", "picker", "eyedropper"], "Pick a colour", "from anywhere on screen · copies the hex", "color-select", () => run([bin + "colorpick"])),
+            a("explain", ["explain", "claude"], "Explain a part of the screen", "select a region, Claude explains it · Mod+Alt+S", "help-about", () => run([bin + "explain-shot"])),
+            a("memorize", ["memorize", "password", "practice", "digits"], "Memorize", "learn a password or long number in chunks", "dialog-password", () => { UiState.drill = true; }),
+            a("theme", ["dark", "light", "theme", "mode"], UiState.mode === "dark" ? "Switch to light mode" : "Switch to dark mode", "every app follows", "preferences-desktop-theme", () => run([bin + "theme-mode", "toggle"])),
+            a("wallpaper", ["wallpaper", "background"], "Change wallpaper", "the picker", "preferences-desktop-wallpaper", () => { UiState.wallpaper = true; }),
+            a("dnd", ["quiet", "dnd", "do not disturb", "notifications"], UiState.dnd ? "Quiet mode off" : "Quiet mode on", "notifications", "notifications", () => { UiState.dnd = !UiState.dnd; }),
+            a("caffeine", ["caffeine", "awake", "stay awake"], UiState.caffeine ? "Caffeine off" : "Caffeine on", "keep the screen on", "preferences-desktop-screensaver", () => { UiState.caffeine = !UiState.caffeine; }),
+            a("night", ["night", "night light", "blue light", "warm"], "Night light: " + (NightLight.mode === "off" ? "turn on" : NightLight.mode === "auto" ? "always on" : "off"), "now " + NightLight.mode, "weather-clear-night", () => NightLight.cycle()),
+            a("vpn", ["vpn", "pia"], Vpn.connected || Vpn.busy ? "Disconnect VPN" : "Connect VPN", Vpn.label, "network-vpn", () => Vpn.toggle()),
+            a("wifi", ["wifi", "wi-fi", "wireless"], Wifi.powered ? "Turn Wi-Fi off" : "Turn Wi-Fi on", Wifi.connected ? Wifi.ssid : "not connected", "network-wireless", () => Wifi.setPowered(!Wifi.powered)),
+            a("quick", ["settings", "quick settings", "volume", "brightness", "bluetooth"], "Quick settings", "", "preferences-system", () => UiState.openQuick("main")),
+            a("monitor", ["monitor", "cpu", "memory", "ram", "processes", "task manager"], "System monitor", "CPU, memory, processes", "utilities-system-monitor", () => UiState.openMonitor("cpu")),
+            a("history", ["notifications", "history"], "Notifications", UiState.unread + " unread", "preferences-system-notifications", () => { UiState.history = true; }),
+            a("usage", ["usage", "claude", "limits"], "Claude usage", "5 hour and weekly limits", "help-about", () => { UiState.claude = true; }),
+            a("todo", ["todo", "tasks", "focus", "pomodoro", "timer"], "Focus", Focus.openCount + " open tasks · timers", "task-new", () => UiState.openFocus("todo"))
+        ];
+        if (Song.installed) l.push(a("song", ["still@server", "song", "film", "music"], "Play " + Song.name, "the animated music film · opens in the island", "multimedia-audio-player", () => Song.open()));
+        return l;
+    }
+
+    // ---- how often things get picked (ranks results, fills the empty view) ----
+    property var usage: ({})
+    FileView {
+        id: usageFile
+        path: Quickshell.env("HOME") + "/.local/state/rice/launcher.json"
+        printErrors: false
+        onLoaded: { try { win.usage = JSON.parse(text()); } catch (e) {} }
+    }
+    // picks, fading with a two week half-life
+    function used(key) {
+        const u = usage[key];
+        return u ? u.n * Math.pow(0.5, (Date.now() - u.t) / (14 * 86400000)) : 0;
+    }
+    function boost(key) { return Math.min(60, used(key) * 8); }
+    function remember(key) {
+        if (!key) return;
+        const u = Object.assign({}, usage);
+        u[key] = { n: used(key) + 1, t: Date.now() };
+        usage = u;
+        save.command = ["sh", "-c", "mkdir -p \"$(dirname \"$1\")\" && printf '%s' \"$2\" > \"$1\"", "_", usageFile.path, JSON.stringify(u)];
+        save.running = true;
+    }
+    Process { id: save }
+
     function accept() {
         const r = results[list.currentIndex];
         if (!r) return;
         close();
+        remember(r.key);
         r.go();
+    }
+    // prefixes: [typed, label, tag on their rows]
+    readonly property var modes: [["w", "windows", "window"], ["c", "clipboard", "clipboard"], ["e", "emoji", "emoji"], ["f", "files", "file"], [">", "run", "shell"],
+                                  ["s", "web", "web"], ["?", "claude", "claude"], ["t", "timer", "timer"], ["todo", "task", "todo"]]
+    readonly property var mode: {
+        for (const m of modes) if (query === m[0] || query.startsWith(m[0] + " ") || ("?>".indexOf(m[0]) >= 0 && query.startsWith(m[0]))) return m;
+        return null;
+    }
+    function tag(rows) {
+        if (mode) for (const r of rows) if (!r.kind) r.kind = mode[2];
+        return rows;
     }
 
     MouseArea { anchors.fill: parent; onClicked: win.close() }
@@ -215,7 +296,7 @@ PanelWindow {
         anchors.horizontalCenter: parent.horizontalCenter
         y: parent.height * 0.16
         width: 640
-        height: 74 + (win.query === "" || results.length === 0 ? 40 : 0) + Math.min(results.length, 8) * 54 + (results.length > 0 ? 14 : 0)
+        height: 74 + 34 + Math.min(results.length, 8) * 54 + (results.length > 0 ? 12 : 0) + 30
         radius: Theme.radius + 8
         color: Qt.alpha(Theme.surface, 0.84)
         border.width: 1
@@ -237,32 +318,71 @@ PanelWindow {
             color: Theme.text
             selectionColor: Theme.primary; selectedTextColor: Theme.fgPrimary
             onTextChanged: { win.query = text; if (text.startsWith("f ")) fileDelay.restart(); else if (win.files.length) win.files = []; list.currentIndex = 0; if (text.startsWith("c ") && win.clip.length === 0) clipProc.running = true; if (text === "c") clipProc.running = true; }
-            Keys.onEscapePressed: win.close()
+            function step(d) { list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d)); }
+            Keys.onEscapePressed: { if (text !== "") text = ""; else win.close(); }
             Keys.onReturnPressed: win.accept()
             Keys.onEnterPressed: win.accept()
-            Keys.onDownPressed: list.currentIndex = Math.min(list.count - 1, list.currentIndex + 1)
-            Keys.onUpPressed: list.currentIndex = Math.max(0, list.currentIndex - 1)
-            Keys.onTabPressed: list.currentIndex = Math.min(list.count - 1, list.currentIndex + 1)
-            Text { visible: !input.text; text: "Search apps…"; font: input.font; color: Theme.outline; anchors.verticalCenter: parent.verticalCenter }
+            Keys.onDownPressed: step(1)
+            Keys.onUpPressed: step(-1)
+            Keys.onTabPressed: step(1)
+            Keys.onBacktabPressed: step(-1)
+            Keys.onPressed: e => {
+                if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_N || e.key === Qt.Key_J)) { step(1); e.accepted = true; }
+                else if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_P || e.key === Qt.Key_K)) { step(-1); e.accepted = true; }
+                else if (e.key === Qt.Key_PageDown) { step(8); e.accepted = true; }
+                else if (e.key === Qt.Key_PageUp) { step(-8); e.accepted = true; }
+            }
+            Text { visible: !input.text; text: "Search apps, actions, windows…"; font: input.font; color: Theme.outline; anchors.verticalCenter: parent.verticalCenter }
         }
 
+        // modes: click one to start typing in it; the one in use is lit
         Row {
-            visible: win.query === "" || results.length === 0
-            anchors { left: parent.left; leftMargin: 24; top: parent.top; topMargin: 66 }
-            spacing: 14
+            id: modeRow
+            anchors { left: parent.left; leftMargin: 20; top: parent.top; topMargin: 64 }
+            spacing: 6
             Repeater {
-                model: [["w", "windows"], ["c", "clipboard"], ["e", "emoji"], ["f", "files"], [">", "run"], ["s", "web"], ["?", "claude"], ["t", "timer"], ["todo", "task"], ["5 km in mi", "convert"]]
-                delegate: Text {
+                model: win.modes
+                delegate: Rectangle {
+                    id: chip
                     required property var modelData
-                    text: modelData[0] + "  " + modelData[1]
-                    font.family: Theme.font; font.pixelSize: 11; color: Theme.outline
+                    readonly property bool on: win.mode === modelData
+                    height: 22; radius: 11
+                    width: chipText.implicitWidth + 18
+                    color: on ? Theme.primaryContainer : chipHover.hovered ? Theme.surfaceHigh : "transparent"
+                    border.width: 1
+                    border.color: on ? Qt.alpha(Theme.primary, 0.6) : Qt.alpha(Theme.outlineVariant, 0.8)
+                    Text {
+                        id: chipText
+                        anchors.centerIn: parent
+                        textFormat: Text.StyledText
+                        text: "<b>" + chip.modelData[0] + "</b>  " + chip.modelData[1]
+                        font.family: Theme.font; font.pixelSize: 10
+                        color: chip.on ? Theme.fgContainer : Theme.textDim
+                    }
+                    HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: { input.text = chip.on ? "" : chip.modelData[0] + ("?>".indexOf(chip.modelData[0]) >= 0 ? "" : " "); input.forceActiveFocus(); } }
                 }
+            }
+        }
+
+        Item {
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 24; rightMargin: 24; bottomMargin: 10 }
+            height: 16
+            Text {
+                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                text: win.results.length === 0 ? (win.query === "" ? "" : "Nothing found") : win.results.length + (win.results.length === 1 ? " result" : " results")
+                font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
+            }
+            Text {
+                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                text: "↑↓  move     Enter  open     Esc  " + (win.query === "" ? "close" : "clear") + "     5 km in mi · 2^10 · sqrt(2)"
+                font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
             }
         }
 
         ListView {
             id: list
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 12 }
+            anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 98; leftMargin: 12; rightMargin: 12 }
             height: Math.min(results.length, 8) * 54
             clip: true
             model: win.results
@@ -276,8 +396,15 @@ PanelWindow {
                 color: ListView.isCurrentItem ? Theme.primaryContainer : "transparent"
                 IconImage { id: ic; visible: !row.modelData.glyph; implicitSize: 30; anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter } source: row.modelData.icon || "" }
                 Text { visible: !!row.modelData.glyph; width: 30; horizontalAlignment: Text.AlignHCenter; anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter } text: row.modelData.glyph || ""; font.pixelSize: 24 }
+                Text {
+                    id: kindTag
+                    anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
+                    text: row.modelData.kind || ""
+                    font.family: Theme.font; font.pixelSize: 10
+                    color: row.ListView.isCurrentItem ? Qt.alpha(Theme.fgContainer, 0.7) : Theme.outline
+                }
                 Column {
-                    anchors { left: ic.right; leftMargin: 14; right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                    anchors { left: ic.right; leftMargin: 14; right: kindTag.left; rightMargin: 14; verticalCenter: parent.verticalCenter }
                     spacing: 1
                     Text { width: parent.width; text: row.modelData.title; elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 13; font.bold: true; color: row.ListView.isCurrentItem ? Theme.fgContainer : Theme.text }
                     Text { width: parent.width; visible: text !== ""; text: row.modelData.sub; elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 10; color: row.ListView.isCurrentItem ? Qt.alpha(Theme.fgContainer, 0.75) : Theme.textDim }

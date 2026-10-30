@@ -60,6 +60,8 @@ fi
 chmod 600 "$HOME/.config/rice/.env"
 # keyboard flavour: Chromebook keyboards get the Alt key as Mod (niri includes the generated keyboard.kdl)
 "$HOME/.local/bin/keyboard-mode" "$KBD" || warn "keyboard-mode failed"
+# larp mode writes its Ctrl+Q bind here while it runs; niri needs the file to exist
+[ -f "$HOME/.config/niri/larp.kdl" ] || : > "$HOME/.config/niri/larp.kdl"
 # Claude Code hooks -> the bar (island pings when a session finishes or needs you, session list in the usage card)
 python3 - <<'PY' || warn "could not add the Claude Code hooks"
 import json, os

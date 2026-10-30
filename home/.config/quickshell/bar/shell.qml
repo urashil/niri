@@ -88,6 +88,8 @@ ShellRoot {
         function next(): void { UiState.switcherStep(1); }
         function prev(): void { UiState.switcherStep(-1); }
     }
+    // scripts: show a line in the island for a few seconds
+    IpcHandler { target: "island"; function pulse(text: string): void { UiState.pulse("ipc", "\uf05a", text, -1, Theme.primary, 4000); } }
     IpcHandler { target: "dnd";       function toggle(): void { UiState.dnd = !UiState.dnd; } }
     IpcHandler {
         target: "caffeine"

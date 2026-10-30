@@ -25,7 +25,8 @@ echo "==> desktop packages"
 for pkg in niri quickshell kitty fuzzel sddm librewolf iwd bluez bluez-utils upower power-profiles-daemon \
            ffmpeg librsvg imagemagick python grub efibootmgr plymouth mkinitcpio \
            ttf-jetbrains-mono-nerd ttf-nerd-fonts-symbols noto-fonts-emoji \
-           qt6-svg nodejs chromium noto-fonts-cjk qt6-virtualkeyboard qt6-multimedia-ffmpeg qt6-imageformats zip jq; do
+           qt6-svg nodejs chromium noto-fonts-cjk qt6-virtualkeyboard qt6-multimedia-ffmpeg qt6-imageformats zip jq \
+           cmatrix cava genact asciiquarium; do
   pacman -S --needed --noconfirm "$pkg" >/dev/null 2>&1 || echo "   (could not install $pkg from the repos: install it yourself if you need it)"
 done
 # AUR packages: PIA is what the VPN controls talk to
@@ -36,6 +37,8 @@ if ! pacman -Q piavpn-bin >/dev/null 2>&1; then
     echo "   (piavpn-bin is an AUR package and yay is not installed: install it yourself for the VPN controls)"
   fi
 fi
+# larp mode extras (it skips whatever is missing)
+command -v yay >/dev/null && sudo -u "$USER_NAME" yay -S --needed --noconfirm tty-clock cbonsai pipes.sh >/dev/null 2>&1 || true
 
 echo "==> network privacy helper (MAC / hostname / PIA transport)"
 SRC="$UHOME/dotfiles/root"
@@ -45,6 +48,8 @@ install -Dm644 "$SRC/usr/share/polkit-1/actions/org.rice.net.policy" /usr/share/
 # USBGuard prompt in the bar: allow a blocked device from a click
 install -Dm755 "$SRC/usr/local/lib/rice/usb-helper" /usr/local/lib/rice/usb-helper
 install -Dm644 "$SRC/usr/share/polkit-1/actions/org.rice.usb.policy" /usr/share/polkit-1/actions/org.rice.usb.policy
+# login screen picture (SDDM reads faces/<user>.face.icon)
+for f in "$SRC"/usr/share/sddm/faces/*.face.icon; do [ -f "$f" ] && install -Dm644 "$f" "/usr/share/sddm/faces/${f##*/}"; done
 # world-readable mirror of the per-network MAC policy (/var/lib/iwd is root-only)
 /usr/local/lib/rice/net-helper sync || true
 

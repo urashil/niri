@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+"""larp [start|stop|toggle]: a wall of terminals on a fresh workspace (cmatrix, fastfetch, tty-clock, btop and friends)
+as real niri windows that keep rearranging themselves. Ctrl+Q ends it (bound only while it runs, via ~/.config/niri/larp.kdl).
+Missing tools are skipped; the matrix and the clock have built-in stand-ins (`larp matrix`, `larp clock`)."""
+import json, os, random, shutil, signal, subprocess, sys, time
+
+HOME = os.path.expanduser("~")
+RUN = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "larp")
+PIDF = os.path.join(RUN, "pid")
+STATEF = os.path.join(RUN, "state.json")
+BINDS = os.path.join(HOME, ".config/niri/larp.kdl")
+SELF = os.path.abspath(__file__)
+
+
+def have(c):
+    return shutil.which(c) is not None
+
+
+def niri(*a, json_out=False):
+    r = subprocess.run(["niri", "msg"] + (["--json"] if json_out else []) + list(a), capture_output=True, text=True)
+    if json_out:
+        try:
+            return json.loads(r.stdout)
+        except ValueError:
+            return []
+    return r.returncode == 0
+
+
+def act(*a):
+    return niri("action", *a)
+
+
+def windows():
+    return [w for w in niri("windows", json_out=True) if (w.get("app_id") or "").startswith("larp-")]
+
+
+def hold(cmd):
+    # one-shot output (fastfetch) stays on screen
+    return cmd + "; printf '\\e[?25l'; exec sleep infinity"
+
+
+def programs():
+    p = [("matrix", "cmatrix -ab -u 3 -C green" if have("cmatrix") else SELF + " matrix")]
+    fetch = "neofetch" if have("neofetch") else "fastfetch" if have("fastfetch") else None
+    if fetch:
+        p.append(("fetch", hold(fetch)))
+    p.append(("clock", "tty-clock -c -s -b -C 6" if have("tty-clock") else SELF + " clock"))
+    if have("btop"):
+        p.append(("top", "btop"))
+    elif have("htop"):
+        p.append(("top", "htop"))
+    extras = []
+    if have("cava"):
+        extras.append(("cava", "cava"))
+    if have("genact"):
+        extras.append(("genact", "genact -s 2"))
+    if have("pipes.sh"):
+        extras.append(("pipes", "pipes.sh -t 1 -r 4000"))
+    if have("cbonsai"):
+        extras.append(("bonsai", "cbonsai -l -i -w 2"))
+    if have("asciiquarium"):
+        extras.append(("aquarium", "asciiquarium"))
+    extras.append(("journal", "journalctl -f -n 60 -o short-precise"))
+    extras.append(("hex", SELF + " hex"))
+    p += extras[:6 - len(p)] if len(p) < 6 else []
+    return p
+
+
+# always dark, whatever the theme mode; btop needs 80x24, so it gets a smaller font
+SIZES = {"top": 6.5}
+
+
+def spawn(name, cmd):
+    # through niri, so the terminals are its children like any window you open
+    act("spawn", "--", "kitty", "--class", "larp-" + name, "--title", name,
+        "-o", "background=#05080a", "-o", "foreground=#b9f6ca", "-o", "background_opacity=0.84",
+        "-o", "font_size=%s" % SIZES.get(name, 8.5), "-o", "confirm_os_window_close=0",
+        "-o", "window_padding_width=8", "-o", "cursor_blink_interval=0", "sh", "-c", cmd)
+
+
+def running():
+    try:
+        pid = int(open(PIDF).read())
+        os.kill(pid, 0)
+        return pid
+    except (OSError, ValueError):
+        return None
+
+
+def write_binds(on):
+    os.makedirs(os.path.dirname(BINDS), exist_ok=True)
+    with open(BINDS, "w") as f:
+        f.write('binds {\n    Ctrl+Q hotkey-overlay-title="Leave larp mode" { spawn "%s" "stop"; }\n}\n' % SELF if on else "")
+
+
+def start():
+    if running():
+        return
+    os.makedirs(RUN, exist_ok=True)
+    ws = niri("workspaces", json_out=True)
+    cur = next((w for w in ws if w.get("is_focused")), None)
+    # the empty workspace niri keeps at the end of this output
+    empty = [w for w in ws if cur and w["output"] == cur["output"] and w.get("active_window_id") is None]
+    empty.sort(key=lambda w: w["idx"])
+    if empty and empty[-1]["id"] != (cur or {}).get("id"):
+        act("focus-workspace", str(empty[-1]["idx"]))
+    json.dump({"prev": cur["idx"] if cur else None}, open(STATEF, "w"))
+    write_binds(True)
+
+    progs = programs()
+    # all at once (each kitty takes a moment to map), then three columns of two: pull every second window into the column on its left
+    for name, cmd in progs:
+        spawn(name, cmd)
+    end = time.time() + 8
+    while time.time() < end and len(windows()) < len(progs):
+        time.sleep(0.1)
+    ws = windows()
+    ws.sort(key=lambda w: (w.get("layout") or {}).get("pos_in_scrolling_layout") or [0, 0])
+    for i, w in enumerate(ws):
+        act("focus-window", "--id", str(w["id"]))
+        if i % 2 == 1:
+            act("consume-or-expel-window-left")
+        else:
+            act("set-column-width", "33.333%")
+    act("focus-column-first")
+
+    pid = os.fork()
+    if pid:
+        open(PIDF, "w").write(str(pid))
+        return
+    os.setsid()
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    dance()
+
+
+def focused_is_larp():
+    w = niri("focused-window", json_out=True)
+    return isinstance(w, dict) and (w.get("app_id") or "").startswith("larp-")
+
+
+def dance():
+    moves = [
+        lambda: act("move-column-left"), lambda: act("move-column-right"),
+        lambda: act("swap-window-left"), lambda: act("swap-window-right"),
+        lambda: act("move-window-up"), lambda: act("move-window-down"),
+        lambda: act("consume-or-expel-window-left"), lambda: act("consume-or-expel-window-right"),
+        lambda: act("set-column-width", random.choice(["25%", "33.333%", "40%", "50%"])),
+        lambda: act("set-window-height", random.choice(["35%", "50%", "65%"])),
+        lambda: act("center-column"),
+    ]
+    idle = 0
+    while True:
+        time.sleep(random.uniform(1.2, 2.6))
+        ws = windows()
+        if not ws:
+            idle += 1
+            if idle > 3:        # every window got closed by hand: tidy up
+                stop(from_dance=True)
+            continue
+        idle = 0
+        # only ever touch the larp workspace: if you went somewhere else, wait
+        if not focused_is_larp():
+            continue
+        if random.random() < 0.45:
+            act("focus-window", "--id", str(random.choice(ws)["id"]))
+        else:
+            random.choice(moves)()
+
+
+def stop(from_dance=False):
+    pid = running()
+    if pid and not from_dance:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    write_binds(False)
+    for w in windows():
+        act("close-window", "--id", str(w["id"]))
+    try:
+        prev = json.load(open(STATEF)).get("prev")
+    except (OSError, ValueError):
+        prev = None
+    if prev is not None:
+        time.sleep(0.15)
+        act("focus-workspace", str(prev))
+    for f in (PIDF, STATEF):
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+    if from_dance:
+        sys.exit(0)
+
+
+# ---- stand-ins for missing tools ----
+def matrix():
+    import curses
+
+    def run(s):
+        curses.curs_set(0)
+        curses.start_color(); curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_GREEN, -1); curses.init_pair(2, curses.COLOR_WHITE, -1)
+        s.nodelay(True)
+        chars = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄ0123456789abcdef<>/*+=$#"
+        h, w = s.getmaxyx()
+        drops = [random.randint(-h, 0) for _ in range(w)]
+        while True:
+            if s.getch() == curses.KEY_RESIZE:
+                h, w = s.getmaxyx(); drops = [random.randint(-h, 0) for _ in range(w)]; s.clear()
+            for x in range(0, w - 1, 2):
+                y = drops[x]
+                try:
+                    if 0 <= y < h:
+                        s.addstr(y, x, random.choice(chars), curses.color_pair(2) | curses.A_BOLD)
+                    if 0 <= y - 1 < h:
+                        s.addstr(y - 1, x, random.choice(chars), curses.color_pair(1))
+                    if 0 <= y - random.randint(8, 24) < h:
+                        s.addstr(y - random.randint(8, 24), x, " ")
+                except curses.error:
+                    pass
+                drops[x] = y + 1 if y < h + 24 else random.randint(-h // 2, 0)
+            s.refresh()
+            time.sleep(0.05)
+    curses.wrapper(run)
+
+
+DIGITS = {
+    "0": ["███", "█ █", "█ █", "█ █", "███"], "1": ["  █", "  █", "  █", "  █", "  █"],
+    "2": ["███", "  █", "███", "█  ", "███"], "3": ["███", "  █", "███", "  █", "███"],
+    "4": ["█ █", "█ █", "███", "  █", "  █"], "5": ["███", "█  ", "███", "  █", "███"],
+    "6": ["███", "█  ", "███", "█ █", "███"], "7": ["███", "  █", "  █", "  █", "  █"],
+    "8": ["███", "█ █", "███", "█ █", "███"], "9": ["███", "█ █", "███", "  █", "███"],
+    ":": [" ", "█", " ", "█", " "],
+}
+
+
+def clock():
+    import curses
+
+    def run(s):
+        curses.curs_set(0)
+        curses.start_color(); curses.use_default_colors(); curses.init_pair(1, curses.COLOR_CYAN, -1)
+        s.nodelay(True)
+        while True:
+            s.getch()
+            t = time.strftime("%H:%M:%S")
+            rows = [" ".join(DIGITS[c][r] for c in t) for r in range(5)]
+            h, w = s.getmaxyx()
+            s.erase()
+            y0 = max(0, h // 2 - 3)
+            x0 = max(0, (w - 2 * len(rows[0])) // 2)
+            for i, r in enumerate(rows):
+                for j, ch in enumerate(r):
+                    if ch == "█" and x0 + 2 * j + 2 < w:
+                        try:
+                            s.addstr(y0 + i, x0 + 2 * j, "  ", curses.color_pair(1) | curses.A_REVERSE)
+                        except curses.error:
+                            pass
+            d = time.strftime("%A %d %B %Y")
+            try:
+                s.addstr(y0 + 6, max(0, (w - len(d)) // 2), d[:w - 1])
+            except curses.error:
+                pass
+            s.refresh()
+            time.sleep(0.25)
+    curses.wrapper(run)
+
+
+def hexdump():
+    off = 0
+    while True:
+        b = os.urandom(16)
+        hx = " ".join("%02x" % c for c in b)
+        txt = "".join(chr(c) if 32 <= c < 127 else "." for c in b)
+        print("\033[32m%08x\033[0m  %s  \033[2m%s\033[0m" % (off, hx, txt), flush=True)
+        off += 16
+        time.sleep(random.uniform(0.01, 0.08))
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "toggle"
+    try:
+        if cmd == "start":
+            start()
+        elif cmd == "stop":
+            stop()
+        elif cmd == "toggle":
+            stop() if running() else start()
+        elif cmd == "matrix":
+            matrix()
+        elif cmd == "clock":
+            clock()
+        elif cmd == "hex":
+            hexdump()
+        else:
+            print(__doc__); sys.exit(1)
+    except KeyboardInterrupt:
+        pass
