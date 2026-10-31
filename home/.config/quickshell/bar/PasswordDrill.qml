@@ -5,7 +5,8 @@ import QtQuick
 import QtQuick.Layouts
 
 // Memorize (launcher "memorize", Mod+Alt+P): learn a long password / number right now, in one sitting.
-// Learn: it is cut into chunks; study the next chunk, then type everything so far from memory, one more chunk each time.
+// Learn: it is cut into chunks; study the next chunk, then type everything so far from memory, 3 times in a row without
+// looking again (a miss starts the count over), before the next chunk comes.
 // Recall: type it all again after 10 s, 30 s, 1, 2 and 5 minutes (about 9 minutes in all); then it counts as memorized.
 // A miss shows only the chunk that went wrong, steps the gap back and asks again at once. The island says when a recall
 // is due. Typing is hidden. Saved in ~/.local/share/rice/memorize.json (0600), so it can be shown again.
@@ -20,6 +21,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: UiState.drill ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     BackgroundEffect.blurRegion: Region { item: card; radius: Theme.radius + 8 }
 
+    readonly property int need: 3                             // right in a row, from memory, before the next chunk comes
     readonly property var steps: [10, 30, 60, 120, 300]      // seconds between recalls once learned; past the last one it is memorized
     property var items: []               // [{ name, text, chunk, learned, step, due, streak, misses }]
     property int cur: -1
@@ -52,7 +54,8 @@ PanelWindow {
     }
     function pick(i) {
         cur = i; adding = false; reveal = false; result = ""; errAt = -1; answer.text = "";
-        studying = item !== null && learning;
+        // mid-way through the tries for a chunk: straight back to typing, no second look
+        studying = item !== null && learning && !(item.reps > 0);
         focusNow();
     }
     function focusNow() { if (studying) studyKeys.forceActiveFocus(); else answer.forceActiveFocus(); }
@@ -72,8 +75,8 @@ PanelWindow {
         cur = -1; result = "";
         if (items.length) pick(0); else startAdd();
     }
-    function setChunk(n) { update({ chunk: n, learned: 0, step: 0, due: 0, done: false }); pick(cur); }
-    function relearn() { update({ learned: 0, step: 0, due: 0, done: false }); pick(cur); }
+    function setChunk(n) { update({ chunk: n, learned: 0, reps: 0, step: 0, due: 0, done: false }); pick(cur); }
+    function relearn() { update({ learned: 0, reps: 0, step: 0, due: 0, done: false }); pick(cur); }
     // another round of recalls for something already memorized
     function again() { update({ step: 0, due: Date.now(), done: false }); pick(cur); }
     function learned(it) { return it.learned * it.chunk >= it.text.length; }
@@ -97,9 +100,12 @@ PanelWindow {
         if (a === target) {
             errAt = -1;
             if (learning) {
+                // once right is not learned: the same again, from memory, until it is right `need` times in a row
+                const reps = (item.reps || 0) + 1;
+                if (reps < need) { update({ reps: reps }); result = "again"; focusNow(); return; }
                 const done = item.learned + 1 >= chunks;
                 // learned all of it: the first recall comes right away
-                update({ learned: item.learned + 1, due: done ? Date.now() : 0, step: 0, done: false });
+                update({ learned: item.learned + 1, reps: 0, due: done ? Date.now() : 0, step: 0, done: false });
                 result = done ? "learned" : "ok";
                 studying = !done;
                 focusNow();
@@ -114,7 +120,7 @@ PanelWindow {
             while (i < a.length && i < target.length && a[i] === target[i]) i++;
             errAt = i;
             result = "wrong";
-            if (learning) update({ misses: item.misses + 1 });
+            if (learning) update({ misses: item.misses + 1, reps: 0 });
             // a miss: one gap back, and again right now (after looking at the chunk that went wrong)
             else update({ step: Math.max(0, item.step - 1), due: Date.now(), streak: 0, misses: item.misses + 1 });
         }
@@ -268,7 +274,7 @@ PanelWindow {
                     }
                 }
                 Text {
-                    text: !win.item ? "" : win.learning ? "Chunk " + (win.item.learned + 1) + " of " + win.chunks + "  ·  " + win.item.text.length + " characters"
+                    text: !win.item ? "" : win.learning ? "Chunk " + (win.item.learned + 1) + " of " + win.chunks + "  ·  right " + (win.item.reps || 0) + " of " + win.need + " in a row  ·  " + win.item.text.length + " characters"
                         : win.item.done ? "Memorized  ·  " + win.item.text.length + " characters"
                         : "Recall " + Math.min(win.item.step + 1, win.steps.length + 1) + " of " + (win.steps.length + 1) + "  ·  " + win.when(win.item) + (win.item.streak > 0 ? "  ·  " + win.item.streak + " in a row" : "")
                     font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim
@@ -328,12 +334,13 @@ PanelWindow {
                         wrapMode: Text.Wrap
                         text: win.studying ? (win.result === "ok" ? "  Right. " : "") + "Study the bold chunk, then hide it and type everything so far."
                             : win.result === "ok" ? "  Right. Next recall in " + win.secs(win.item.due - win.now) + ": look away, keep it in your head."
+                            : win.result === "again" ? "  Right (" + (win.item.reps || 0) + " of " + win.need + "). Again, from memory."
                             : win.result === "learned" ? "  All of it! Now recall it a few times, with growing gaps."
                             : win.result === "memorized" ? "  Memorized."
                             : win.result === "wrong" ? "  Went wrong at character " + (win.errAt + 1) + ". Look at the bold chunk, then type it all again."
                             : ""
                         font.family: Theme.font; font.pixelSize: 11
-                        color: win.result === "ok" || win.result === "learned" || win.result === "memorized" ? Theme.green : win.result === "wrong" ? Theme.error : Theme.textDim
+                        color: win.result === "ok" || win.result === "again" || win.result === "learned" || win.result === "memorized" ? Theme.green : win.result === "wrong" ? Theme.error : Theme.textDim
                     }
                     Controls.Chip { visible: !(win.item && win.item.done); label: win.studying ? "Hide and type" : "Check"; on: true; onClicked: win.check() }
                     Controls.Chip { visible: win.item !== null && win.item.done === true; label: "Practise again"; on: true; onClicked: win.again() }
