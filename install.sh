@@ -12,6 +12,8 @@ set -euo pipefail
 [ "$(id -u)" -ne 0 ] || { echo "run this as your normal user; it uses sudo where it needs root" >&2; exit 1; }
 cd "$(dirname "$0")"
 REPO=$PWD
+# submodules (ai-container) when the repo was cloned without --recursive
+git submodule update --init --recursive >/dev/null 2>&1 || true
 ROOT=1; BOOT=1; WALL=1; KBD=auto
 for a in "$@"; do
   case $a in
@@ -149,7 +151,14 @@ if command -v nvim >/dev/null; then
   timeout 300 nvim --headless "+Lazy! sync" +qa >/dev/null 2>&1 || warn "Neovim plugin install did not finish (open nvim once with network)"
 fi
 
-# ---------- 8. boot screens (need the colours from step 6) ----------
+# ---------- 8. ai-container: `container`, Alpine boxes for AI agents (its own repo, a submodule) ----------
+if [ -x "$REPO/ai-container/install.sh" ]; then
+  say "ai-container"
+  if [ "$ROOT" = 1 ]; then "$REPO/ai-container/install.sh" || warn "container setup stopped (run ai-container/install.sh again)"
+  else "$REPO/ai-container/install.sh" --no-root; fi
+fi
+
+# ---------- 9. boot screens (need the colours from step 6) ----------
 if [ "$ROOT" = 1 ] && [ "$BOOT" = 1 ]; then
   say "boot screens (GRUB theme + Plymouth entry) - sudo needed"
   sudo bash "$REPO/boot/switch-to-grub.sh" || warn "GRUB check stopped; boot setup unchanged"
