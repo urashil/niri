@@ -32,6 +32,10 @@ mountpoint -q "$ROOT" || die "$ROOT is not mounted (container setup)"
 MAP=(--uidmap "0:$SUB:$MYUID" --uidmap "$MYUID:$MYUID:1" --uidmap "$((MYUID + 1)):$((SUB + MYUID)):$((65535 - MYUID))"
      --gidmap "0:$SUBG:$MYGID" --gidmap "$MYGID:$MYGID:1" --gidmap "$((MYGID + 1)):$((SUBG + MYGID)):$((65535 - MYGID))")
 pod() { podman --root "$BASE/storage" --runroot /run/aibox "$@"; }
+# podman's default sysctls (ping_group_range) cannot be written from the box's user namespace into a network namespace owned
+# by the host: none for these boxes
+printf '[containers]\ndefault_sysctls = []\n' > /run/aibox.containers.conf
+export CONTAINERS_CONF_OVERRIDE=/run/aibox.containers.conf
 
 # network: rootful podman refuses pasta, so pasta is started here into a namespace of our own. No port forwarding,
 # no way to the host's loopback services, DNS forwarded to the host resolver (127.0.0.53 is unreachable from inside).
