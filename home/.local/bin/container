@@ -7,6 +7,7 @@
 # container setup          one-time root setup (podman, user namespaces, the 16 GB image)
 # container reset [--all]  rebuild the shared root from fresh Alpine; keeps /home unless --all
 # container df             space used in the shared root
+# container sync [--host]  copy the Claude Code sign-in from this machine into the box (--host: from the box to this machine)
 set -euo pipefail
 
 BASE=/var/lib/aibox
@@ -85,6 +86,23 @@ populate() {
     touch "$ROOT/.aibox"
 }
 
+# the Claude Code sign-in: the token file, plus the account fields of ~/.claude.json (the rest of each side's settings stays)
+sync_claude() {
+    local box="$ROOT/home/$ME" from to
+    if [ "${1:-}" = --host ]; then from=$box; to=$HOME; else from=$HOME; to=$box; fi
+    [ -f "$from/.claude/.credentials.json" ] || die "not signed in to Claude Code in ${from/#$box/the box}"
+    mkdir -p "$to/.claude"
+    install -m 600 "$from/.claude/.credentials.json" "$to/.claude/.credentials.json"
+    local acct; acct=$(jq '{oauthAccount, hasCompletedOnboarding, lastOnboardingVersion} | with_entries(select(.value != null))' "$from/.claude.json")
+    if [ -f "$to/.claude.json" ]; then
+        jq --argjson a "$acct" '. + $a' "$to/.claude.json" > "$to/.claude.json.tmp"
+    else
+        printf '%s\n' "$acct" > "$to/.claude.json.tmp"
+    fi
+    chmod 600 "$to/.claude.json.tmp" && mv "$to/.claude.json.tmp" "$to/.claude.json"
+    echo "Claude Code sign-in copied $([ "${1:-}" = --host ] && echo 'from the box to this machine' || echo 'into the box')"
+}
+
 check() {
     command -v podman >/dev/null || die "podman is not installed: run 'container setup'"
     [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo 1)" = 1 ] || die "user namespaces are off: run 'container setup'"
@@ -118,6 +136,7 @@ case "${1:-}" in
         printf 'rebuild the shared root%s? [y/N] ' "$([ $all = 1 ] && echo ', including /home (sign-ins)')"
         read -r a; [ "$a" = y ] || exit 1
         if [ $all = 1 ]; then populate 0; else populate 1; fi ;;
+    sync) check; [ -f "$ROOT/.aibox" ] || populate 1; sync_claude "${2:-}" ;;
     df) check; df -h "$ROOT" | tail -1 ;;
     -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' ;;
     *) run "$@" ;;
