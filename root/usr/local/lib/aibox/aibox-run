@@ -41,7 +41,8 @@ netup() {
     [ -e "/run/netns/$NS" ] && return
     ip netns add "$NS"
     trap 'ip netns del "$NS" 2>/dev/null || true' EXIT
-    pasta --quiet --netns-only --config-net --no-map-gw --dns-forward 169.254.1.1 -t none -u none -T none -U none --netns "/run/netns/$NS" \
+    # as root: by default pasta drops to nobody first, which may not enter a namespace owned by root (it sandboxes itself either way)
+    pasta --runas 0:0 --quiet --netns-only --config-net --no-map-gw --dns-forward 169.254.1.1 -t none -u none -T none -U none --netns "/run/netns/$NS" \
         || die "pasta could not start"
 }
 
