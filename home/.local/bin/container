@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# container [command...]   an Alpine box for AI agents, rootless (podman): the current folder is mounted at the same path,
+#                          you are the same uid inside (files keep your ownership) with password-less sudo, and container root
+#                          is an unprivileged host uid, so sudo inside cannot touch the host.
+#                          Every box shares one persistent 16 GB root (/var/lib/aibox/root, an ext4 image): packages you add
+#                          and the Claude / Gemini / Antigravity sign-ins in its home (~/.claude, ~/.claude.json, ~/.gemini) stay.
+# container setup          one-time root setup (podman, user namespaces, the 16 GB image)
+# container reset [--all]  rebuild the shared root from fresh Alpine; keeps /home unless --all
+# container df             space used in the shared root
+set -euo pipefail
+
+BASE=/var/lib/aibox
+IMG=$BASE/root.img
+ROOT=$BASE/root
+BASE_IMAGE=docker.io/library/alpine:latest
+ME=$(id -un); MYUID=$(id -u); MYGID=$(id -g)
+
+# its own image store: rootless overlay mounts are blocked on linux-hardened, so plain copies (vfs). It only holds plain
+# Alpine while the shared root is (re)filled; the boxes run straight from the shared root.
+podman() { command podman --storage-driver vfs --root "$HOME/.local/share/aibox/storage" --runroot "${XDG_RUNTIME_DIR:-/tmp}/aibox" "$@"; }
+
+die() { printf 'container: %s\n' "$*" >&2; exit 1; }
+
+# run a command inside the shared root as <user>: the same way a box runs, without the project folder
+# (--rootfs makes the image argument a path: options first, then "--rootfs ROOT command...")
+inroot() {
+    local u=$1; shift
+    local opts=(); while [ "$1" != -- ]; do opts+=("$1"); shift; done; shift
+    podman run --rm --userns=keep-id --user "$u" -e HOME="$( [ "$u" = 0:0 ] && echo /root || echo "/home/$ME")" "${opts[@]}" --rootfs "$ROOT" "$@"
+}
+
+# packages and the user; safe to run again (also repairs a damaged root)
+PROVISION='
+set -e
+apk update
+apk add --no-cache sudo bash tar bash-completion shadow coreutils findutils procps util-linux less ncurses ncurses-terminfo \
+    git openssh-client curl wget ca-certificates tzdata jq ripgrep fd vim nano \
+    nodejs npm python3 py3-pip build-base libgcc libstdc++
+getent group "$GID" >/dev/null || addgroup -g "$GID" "$NAME"
+getent passwd "$NAME" >/dev/null || adduser -D -H -h "/home/$NAME" -s /bin/bash -u "$UID_" -G "$(getent group "$GID" | cut -d: -f1)" "$NAME"
+mkdir -p "/home/$NAME" && chown "$UID_:$GID" "/home/$NAME"
+printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$NAME" > "/etc/sudoers.d/$NAME" && chmod 440 "/etc/sudoers.d/$NAME"
+# Claude Code bundles a glibc ripgrep: use Alpine'"'"'s
+cat > /etc/profile.d/aibox.sh <<"EOF"
+export USE_BUILTIN_RIPGREP=0
+export PATH="$HOME/.local/bin:$PATH"
+PS1="\[\e[32m\]ai\[\e[0m\] \w \$ "
+EOF
+'
+# the AI tools as the user, so they can update themselves without sudo
+TOOLS='
+set -e
+. /etc/profile.d/aibox.sh
+npm config set prefix "$HOME/.local"
+command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash
+command -v gemini >/dev/null || npm install -g @google/gemini-cli
+'
+
+# (re)fill the shared root from plain Alpine, as container root in the same user namespace the boxes use; keeps /home unless told not to
+populate() {
+    local keep_home=$1
+    echo "==> filling the shared root from $BASE_IMAGE" >&2
+    podman pull -q "$BASE_IMAGE" >/dev/null
+    podman run --rm --userns=keep-id --user 0:0 -v "$ROOT:/target" "$BASE_IMAGE" sh -c '
+        set -e
+        rm -f /target/.aibox
+        cd /target
+        for d in * .[!.]*; do
+            [ -e "$d" ] || continue
+            [ "$d" = lost+found ] && continue
+            [ "$d" = home ] && [ "'"$keep_home"'" = 1 ] && continue
+            rm -rf "/target/$d"
+        done
+        cd /
+        for d in *; do
+            case "$d" in dev|proc|sys|run|tmp|target|home) continue ;; esac
+            tar -cf - "$d" | tar -xpf - -C /target
+        done
+        mkdir -p /target/home /target/dev /target/proc /target/sys /target/run /target/tmp && chmod 1777 /target/tmp'
+    podman image rm -f "$BASE_IMAGE" >/dev/null 2>&1 || true
+    echo "==> installing packages" >&2
+    inroot 0:0 -e NAME="$ME" -e UID_="$MYUID" -e GID="$MYGID" -- sh -c "$PROVISION"
+    echo "==> installing Claude Code and the Gemini CLI" >&2
+    inroot "$MYUID:$MYGID" -w "/home/$ME" -- bash -c "$TOOLS"
+    touch "$ROOT/.aibox"
+}
+
+check() {
+    command -v podman >/dev/null || die "podman is not installed: run 'container setup'"
+    [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo 1)" = 1 ] || die "user namespaces are off: run 'container setup'"
+    mountpoint -q "$ROOT" || die "$ROOT is not mounted: run 'container setup'"
+}
+
+run() {
+    check
+    [ -f "$ROOT/.aibox" ] || populate 1
+    local here; here=$(pwd -P)
+    # the folder is shared read-write with something that has sudo: never all of home or the whole disk
+    case "$here" in
+        /|/home|"$HOME"|"$(dirname "$HOME")") die "won't mount $here; cd into a project folder" ;;
+    esac
+    local tty=(-i); [ -t 0 ] && [ -t 1 ] && tty=(-it)
+    [ $# -gt 0 ] || set -- bash -l
+    podman run --rm "${tty[@]}" \
+        --userns=keep-id --user "$MYUID:$MYGID" \
+        --hostname ai --name "ai-$(basename "$here" | tr -cd 'A-Za-z0-9_.-' | cut -c1-40)-$$" \
+        --tmpfs /tmp \
+        -v "$here:$here" -w "$here" \
+        -e TERM="${TERM:-xterm-256color}" -e COLORTERM="${COLORTERM:-}" -e HOME="/home/$ME" -e USER="$ME" -e LANG=C.UTF-8 \
+        --rootfs "$ROOT" bash -lc 'exec "$@"' _ "$@"
+}
+
+case "${1:-}" in
+    setup) setup ;;
+    reset)
+        check
+        all=0; [ "${2:-}" = --all ] && all=1
+        printf 'rebuild the shared root%s? [y/N] ' "$([ $all = 1 ] && echo ', including /home (sign-ins)')"
+        read -r a; [ "$a" = y ] || exit 1
+        if [ $all = 1 ]; then populate 0; else populate 1; fi ;;
+    df) check; df -h "$ROOT" | tail -1 ;;
+    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' ;;
+    *) run "$@" ;;
+esac
