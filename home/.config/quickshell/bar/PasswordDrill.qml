@@ -4,10 +4,11 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Layouts
 
-// Memorize (launcher "memorize", Mod+Alt+P): learn a long password / number in one sitting.
+// Memorize (launcher "memorize", Mod+Alt+P): learn a long password / number right now, in one sitting.
 // Learn: it is cut into chunks; study the next chunk, then type everything so far from memory, one more chunk each time.
-// Recall: type it all; reviews come back after 1, 3, 8, 15, 30, 60 minutes (a miss starts over at 1), and the island
-// says when one is due. Saved in ~/.local/share/rice/memorize.json (0600), so it can be shown again.
+// Recall: type it all again after 10 s, 30 s, 1, 2 and 5 minutes (about 9 minutes in all); then it counts as memorized.
+// A miss shows only the chunk that went wrong, steps the gap back and asks again at once. The island says when a recall
+// is due. Typing is hidden. Saved in ~/.local/share/rice/memorize.json (0600), so it can be shown again.
 PanelWindow {
     id: win
     visible: UiState.drill
@@ -19,7 +20,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: UiState.drill ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     BackgroundEffect.blurRegion: Region { item: card; radius: Theme.radius + 8 }
 
-    readonly property var steps: [1, 3, 8, 15, 30, 60]       // minutes between reviews
+    readonly property var steps: [10, 30, 60, 120, 300]      // seconds between recalls once learned; past the last one it is memorized
     property var items: []               // [{ name, text, chunk, learned, step, due, streak, misses }]
     property int cur: -1
     property bool adding: false
@@ -28,6 +29,7 @@ PanelWindow {
     property string result: ""           // "ok" | "wrong" | "learned"
     property int errAt: -1               // where the last wrong answer first went wrong
     property string lastTry: ""
+    property bool showTyping: false      // typing is dots unless this is on
     property real now: Date.now()
     readonly property var item: cur >= 0 && cur < items.length ? items[cur] : null
     readonly property int chunks: item ? Math.ceil(item.text.length / item.chunk) : 0
@@ -70,15 +72,20 @@ PanelWindow {
         cur = -1; result = "";
         if (items.length) pick(0); else startAdd();
     }
-    function setChunk(n) { update({ chunk: n, learned: 0, step: 0, due: 0 }); pick(cur); }
-    function relearn() { update({ learned: 0, step: 0, due: 0 }); pick(cur); }
+    function setChunk(n) { update({ chunk: n, learned: 0, step: 0, due: 0, done: false }); pick(cur); }
+    function relearn() { update({ learned: 0, step: 0, due: 0, done: false }); pick(cur); }
+    // another round of recalls for something already memorized
+    function again() { update({ step: 0, due: Date.now(), done: false }); pick(cur); }
     function learned(it) { return it.learned * it.chunk >= it.text.length; }
-    function due(it) { return learned(it) && it.due > 0 && it.due <= now; }
+    function due(it) { return learned(it) && !it.done && it.due > 0 && it.due <= now; }
+    function secs(ms) { const t = Math.max(0, Math.ceil(ms / 1000)); return t < 60 ? t + "s" : Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); }
     function when(it) {
         if (!learned(it)) return Math.round(100 * it.learned * it.chunk / it.text.length) + "% learned";
-        const m = Math.round((it.due - now) / 60000);
-        return it.due <= now ? "review now" : "review in " + (m < 1 ? "<1" : m) + "m";
+        if (it.done) return "memorized";
+        return it.due <= now ? "recall now" : "recall in " + secs(it.due - now);
     }
+    // which chunk a wrong answer went wrong in (shown again to study)
+    readonly property int errChunk: result === "wrong" && errAt >= 0 && item ? Math.floor(errAt / item.chunk) : -1
 
     function check() {
         if (!item) return;
@@ -91,14 +98,16 @@ PanelWindow {
             errAt = -1;
             if (learning) {
                 const done = item.learned + 1 >= chunks;
-                update({ learned: item.learned + 1, due: done ? Date.now() + steps[0] * 60000 : 0, step: 0 });
+                // learned all of it: the first recall comes right away
+                update({ learned: item.learned + 1, due: done ? Date.now() : 0, step: 0, done: false });
                 result = done ? "learned" : "ok";
                 studying = !done;
                 focusNow();
                 return;
             } else {
-                update({ step: Math.min(item.step + 1, steps.length - 1), due: Date.now() + steps[item.step] * 60000, streak: item.streak + 1 });
-                result = "ok";
+                const fin = item.step >= steps.length;
+                update({ step: item.step + 1, due: fin ? 0 : Date.now() + steps[item.step] * 1000, streak: item.streak + 1, done: fin });
+                result = fin ? "memorized" : "ok";
             }
         } else {
             let i = 0;
@@ -106,13 +115,14 @@ PanelWindow {
             errAt = i;
             result = "wrong";
             if (learning) update({ misses: item.misses + 1 });
-            else update({ step: 0, due: Date.now() + steps[0] * 60000, streak: 0, misses: item.misses + 1 });
+            // a miss: one gap back, and again right now (after looking at the chunk that went wrong)
+            else update({ step: Math.max(0, item.step - 1), due: Date.now(), streak: 0, misses: item.misses + 1 });
         }
         answer.forceActiveFocus();
     }
 
     onVisibleChanged: {
-        if (!visible) { reveal = false; answer.text = ""; textIn.text = ""; return; }
+        if (!visible) { reveal = false; showTyping = false; answer.text = ""; textIn.text = ""; return; }
         now = Date.now();
         if (items.length === 0) startAdd();
         else if (cur < 0) { const d = items.findIndex(it => win.due(it)); pick(d >= 0 ? d : 0); }
@@ -128,14 +138,14 @@ PanelWindow {
     // a review is due: say so in the island, once per review
     property var nudged: ({})
     Timer {
-        interval: 20000; running: win.items.length > 0; repeat: true; triggeredOnStart: true
+        interval: 5000; running: win.items.length > 0; repeat: true; triggeredOnStart: true
         onTriggered: {
             win.now = Date.now();
             if (win.visible) return;
             const d = win.items.filter(it => win.due(it) && win.nudged[it.name] !== it.due);
             if (d.length === 0) return;
             for (const it of d) win.nudged[it.name] = it.due;
-            UiState.pulse("drill", "", "Review " + d.map(it => it.name).join(", ") + " from memory", -1, Theme.primary, 6000);
+            UiState.pulse("drill", "", "Recall " + d.map(it => it.name).join(", ") + " now (Mod+Alt+P)", -1, Theme.primary, 8000);
         }
     }
     Timer { interval: 1000; running: win.visible; repeat: true; onTriggered: win.now = Date.now() }
@@ -146,6 +156,7 @@ PanelWindow {
         property alias input: ti
         property string hint
         property bool mono: false
+        property bool secret: false
         Layout.fillWidth: true
         height: 44; radius: 12
         color: Theme.surfaceHigh
@@ -156,7 +167,9 @@ PanelWindow {
             anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
             verticalAlignment: TextInput.AlignVCenter
             activeFocusOnTab: true
-            inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
+            inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhHiddenText
+            echoMode: parent.secret && !win.showTyping ? TextInput.Password : TextInput.Normal
+            passwordCharacter: "•"
             font.family: Theme.font; font.pixelSize: parent.mono ? 17 : 14; font.letterSpacing: parent.mono ? 1.5 : 0
             color: Theme.text
             selectionColor: Theme.primary; selectedTextColor: Theme.fgPrimary
@@ -225,7 +238,7 @@ PanelWindow {
 
             // ---- add ----
             Field { id: nameF; visible: win.adding; hint: "Name (e.g. pi, Bitwarden)" }
-            Field { id: textF; visible: win.adding; mono: true; hint: "What to memorize (digits, a password…)" }
+            Field { id: textF; visible: win.adding; mono: true; secret: true; hint: "What to memorize (digits, a password…)" }
             Connections { target: win.textIn; function onAccepted() { win.add(); } }
             RowLayout {
                 visible: win.adding
@@ -256,13 +269,14 @@ PanelWindow {
                 }
                 Text {
                     text: !win.item ? "" : win.learning ? "Chunk " + (win.item.learned + 1) + " of " + win.chunks + "  ·  " + win.item.text.length + " characters"
-                        : "Learned  ·  " + win.when(win.item) + (win.item.streak > 0 ? "  ·  " + win.item.streak + " in a row" : "")
+                        : win.item.done ? "Memorized  ·  " + win.item.text.length + " characters"
+                        : "Recall " + Math.min(win.item.step + 1, win.steps.length + 1) + " of " + (win.steps.length + 1) + "  ·  " + win.when(win.item) + (win.item.streak > 0 ? "  ·  " + win.item.streak + " in a row" : "")
                     font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim
                 }
 
                 // what to study: everything so far with the new chunk bold, or all of it while shown
                 Rectangle {
-                    visible: win.studying || win.reveal
+                    visible: win.studying || win.reveal || win.errChunk >= 0
                     Layout.fillWidth: true
                     implicitHeight: study.implicitHeight + 24
                     radius: 12
@@ -278,6 +292,8 @@ PanelWindow {
                             if (!win.item) return "";
                             const g = win.groups(win.item.text, win.item.chunk);
                             if (win.reveal) return g.map(win.esc).join("  ");
+                            // after a miss: the chunk that went wrong, the ones before it as dots
+                            if (win.errChunk >= 0) return g.slice(0, win.errChunk + 1).map((c, i) => i === win.errChunk ? "<font color='" + Theme.text + "'><b>" + win.esc(c) + "</b></font>" : "•".repeat(c.length)).join("  ");
                             return g.slice(0, win.item.learned + 1).map((c, i) => i === win.item.learned ? "<font color='" + Theme.text + "'><b>" + win.esc(c) + "</b></font>" : win.esc(c)).join("  ");
                         }
                     }
@@ -285,9 +301,11 @@ PanelWindow {
 
                 Field {
                     id: answerF
-                    visible: !win.studying
+                    visible: !win.studying && !(win.item && win.item.done)
                     mono: true
-                    hint: !win.item ? "" : win.learning ? "Type the first " + Math.min(win.item.text.length, (win.item.learned + 1) * win.item.chunk) + " from memory" : "Type all of it from memory"
+                    secret: true
+                    hint: !win.item ? "" : win.learning ? "Type the first " + Math.min(win.item.text.length, (win.item.learned + 1) * win.item.chunk) + " from memory"
+                        : win.item.due > win.now ? "Next recall in " + win.secs(win.item.due - win.now) + " (waiting helps; you can type now)" : "Type all of it from memory"
                 }
                 Connections { target: win.answer; function onAccepted() { win.check(); } }
                 Item { id: studyKeys; Keys.onReturnPressed: win.check(); Keys.onEnterPressed: win.check(); Keys.onEscapePressed: win.close() }
@@ -299,7 +317,7 @@ PanelWindow {
                     wrapMode: Text.WrapAnywhere
                     textFormat: Text.StyledText
                     font.family: Theme.font; font.pixelSize: 15; font.letterSpacing: 1.5
-                    text: "<font color='" + Theme.green + "'>" + win.esc(win.lastTry.slice(0, win.errAt)) + "</font><font color='" + Theme.error + "'><u>" + win.esc(win.lastTry.slice(win.errAt) || "…") + "</u></font>"
+                    text: "<font color='" + Theme.green + "'>" + "•".repeat(win.errAt) + "</font><font color='" + Theme.error + "'><u>" + "•".repeat(Math.max(1, win.lastTry.length - win.errAt)) + "</u></font>"
                 }
 
                 RowLayout {
@@ -309,14 +327,16 @@ PanelWindow {
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
                         text: win.studying ? (win.result === "ok" ? "  Right. " : "") + "Study the bold chunk, then hide it and type everything so far."
-                            : win.result === "ok" ? "  Right"
-                            : win.result === "learned" ? "  All of it! First review in 1 minute."
-                            : win.result === "wrong" ? "  Went wrong at character " + (win.errAt + 1) + "."
+                            : win.result === "ok" ? "  Right. Next recall in " + win.secs(win.item.due - win.now) + ": look away, keep it in your head."
+                            : win.result === "learned" ? "  All of it! Now recall it a few times, with growing gaps."
+                            : win.result === "memorized" ? "  Memorized."
+                            : win.result === "wrong" ? "  Went wrong at character " + (win.errAt + 1) + ". Look at the bold chunk, then type it all again."
                             : ""
                         font.family: Theme.font; font.pixelSize: 11
-                        color: win.result === "ok" || win.result === "learned" ? Theme.green : win.result === "wrong" ? Theme.error : Theme.textDim
+                        color: win.result === "ok" || win.result === "learned" || win.result === "memorized" ? Theme.green : win.result === "wrong" ? Theme.error : Theme.textDim
                     }
-                    Controls.Chip { label: win.studying ? "Hide and type" : "Check"; on: true; onClicked: win.check() }
+                    Controls.Chip { visible: !(win.item && win.item.done); label: win.studying ? "Hide and type" : "Check"; on: true; onClicked: win.check() }
+                    Controls.Chip { visible: win.item !== null && win.item.done === true; label: "Practise again"; on: true; onClicked: win.again() }
                 }
 
                 // tools: show it, start over, remove; chunk size on its own row
@@ -324,6 +344,7 @@ PanelWindow {
                     Layout.fillWidth: true
                     spacing: 6
                     Controls.Chip { label: win.reveal ? "\uf070  Hide" : "\uf06e  Show"; onClicked: win.reveal = !win.reveal }
+                    Controls.Chip { label: win.showTyping ? "\uf070  Hide typing" : "\uf06e  Show typing"; on: win.showTyping; onClicked: { win.showTyping = !win.showTyping; win.focusNow(); } }
                     Controls.Chip { label: "Restart"; onClicked: win.relearn() }
                     Item { Layout.fillWidth: true }
                     Controls.Chip { label: "\uf1f8  Remove"; accent: Theme.error; onClicked: win.remove(win.cur) }

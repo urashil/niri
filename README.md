@@ -51,7 +51,7 @@ one to jump to its terminal); the island pings when a session finishes or needs 
 selected part of the screen.
 
 More: `Mod+Alt+C` colour picker (copies the hex), `Mod+Alt+P` memorize (learn a password or 50 digits in one sitting:
-chunk by chunk, then reviews at 1/3/8/15/30/60 min with island nudges; Show and Remove buttons), `Mod+Y` clipboard search in the launcher (`c `), open
+chunk by chunk, then recalls after 10 s/30 s/1/2/5 min with island nudges, typing hidden; Show and Remove buttons), `Mod+Y` clipboard search in the launcher (`c `), open
 windows show up in the normal launcher search, night light (quick settings: sunset to sunrise at the weather location,
 or always; wlsunset), per-app volume under the master slider and in Mixer (plus microphone), data used per Wi-Fi network
 (Wi-Fi page), and a USBGuard prompt (bottom right) when a device gets blocked: allow once / always / later / never.
