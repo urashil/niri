@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# container [command...]   an Alpine box for AI agents, rootless (podman): the current folder is mounted at the same path,
-#                          you are the same uid inside (files keep your ownership) with password-less sudo, and container root
-#                          is an unprivileged host uid, so sudo inside cannot touch the host.
+# container [command...]   an Alpine box for AI agents (podman): the current folder is mounted at the same path, you are the same
+#                          uid inside (files keep your ownership) with password-less sudo, and container root is an unprivileged
+#                          host uid (your /etc/subuid range), so sudo inside cannot touch the host. Podman itself is started
+#                          through sudo (asks for your password), so unprivileged user namespaces can stay off in the kernel.
 #                          Every box shares one persistent 16 GB root (/var/lib/aibox/root, an ext4 image): packages you add
 #                          and the Claude / Gemini / Antigravity sign-ins in its home (~/.claude, ~/.claude.json, ~/.gemini) stay.
-# container setup          one-time root setup (podman, user namespaces, the 16 GB image)
+# container setup          one-time root setup (podman, the uid range, the 16 GB image)
 # container reset [--all]  rebuild the shared root from fresh Alpine; keeps /home unless --all
 # container df             space used in the shared root
 # container sync [--host]  copy the Claude Code sign-in from this machine into the box (--host: from the box to this machine)
@@ -16,9 +17,15 @@ ROOT=$BASE/root
 BASE_IMAGE=docker.io/library/alpine:latest
 ME=$(id -un); MYUID=$(id -u); MYGID=$(id -g)
 
-# its own image store: rootless overlay mounts are blocked on linux-hardened, so plain copies (vfs). It only holds plain
-# Alpine while the shared root is (re)filled; the boxes run straight from the shared root.
-podman() { command podman --storage-driver vfs --root "$HOME/.local/share/aibox/storage" --runroot "${XDG_RUNTIME_DIR:-/tmp}/aibox" "$@"; }
+# podman runs as root (sudo) with its own store; each box gets an explicit uid map instead of a rootless user namespace:
+#   container 0-(uid-1) -> subuid range, container uid -> you, the rest -> the rest of the range
+podman() { sudo podman --root "$BASE/storage" --runroot /run/aibox "$@"; }
+SUB=$(awk -F: -v u="$ME" '$1 == u { print $2; exit }' /etc/subuid 2>/dev/null)
+SUBG=$(awk -F: -v u="$ME" '$1 == u { print $2; exit }' /etc/subgid 2>/dev/null)
+idmap() {
+    printf -- '--uidmap=0:%s:%s --uidmap=%s:%s:1 --uidmap=%s:%s:%s ' "$SUB" "$MYUID" "$MYUID" "$MYUID" $((MYUID + 1)) $((SUB + MYUID)) $((65536 - MYUID))
+    printf -- '--gidmap=0:%s:%s --gidmap=%s:%s:1 --gidmap=%s:%s:%s' "$SUBG" "$MYGID" "$MYGID" "$MYGID" $((MYGID + 1)) $((SUBG + MYGID)) $((65536 - MYGID))
+}
 
 die() { printf 'container: %s\n' "$*" >&2; exit 1; }
 
@@ -27,7 +34,8 @@ die() { printf 'container: %s\n' "$*" >&2; exit 1; }
 inroot() {
     local u=$1; shift
     local opts=(); while [ "$1" != -- ]; do opts+=("$1"); shift; done; shift
-    podman run --rm --userns=keep-id --user "$u" -e HOME="$( [ "$u" = 0:0 ] && echo /root || echo "/home/$ME")" "${opts[@]}" --rootfs "$ROOT" "$@"
+    # shellcheck disable=SC2046
+    podman run --rm --network pasta $(idmap) --user "$u" -e HOME="$( [ "$u" = 0:0 ] && echo /root || echo "/home/$ME")" "${opts[@]}" --rootfs "$ROOT" "$@"
 }
 
 # packages and the user; safe to run again (also repairs a damaged root)
@@ -62,7 +70,8 @@ populate() {
     local keep_home=$1
     echo "==> filling the shared root from $BASE_IMAGE" >&2
     podman pull -q "$BASE_IMAGE" >/dev/null
-    podman run --rm --userns=keep-id --user 0:0 -v "$ROOT:/target" "$BASE_IMAGE" sh -c '
+    # shellcheck disable=SC2046
+    podman run --rm --network pasta $(idmap) --user 0:0 -v "$ROOT:/target" "$BASE_IMAGE" sh -c '
         set -e
         rm -f /target/.aibox
         cd /target
@@ -103,9 +112,49 @@ sync_claude() {
     echo "Claude Code sign-in copied $([ "${1:-}" = --host ] && echo 'from the box to this machine' || echo 'into the box')"
 }
 
+setup() {
+    [ "$(id -u)" -ne 0 ] || die "run setup as yourself (it uses sudo)"
+    echo "==> podman"
+    sudo pacman -S --needed --noconfirm podman crun netavark aardvark-dns
+    # an earlier version turned unprivileged user namespaces on for rootless podman: not needed any more
+    if [ -f /etc/sysctl.d/60-aibox-userns.conf ]; then
+        echo "==> unprivileged user namespaces back off"
+        sudo rm -f /etc/sysctl.d/60-aibox-userns.conf
+        sudo sysctl -q -w kernel.unprivileged_userns_clone=0
+    fi
+    if ! grep -q "^$ME:" /etc/subuid; then
+        # past every range already handed out
+        start=$(awk -F: '{e=$2+$3; if (e>m) m=e} END {print (m>165536?m:165536)}' /etc/subuid /etc/subgid)
+        sudo usermod --add-subuids "$start-$((start + 65535))" --add-subgids "$start-$((start + 65535))" "$ME"
+    fi
+    echo "==> 16 GB shared root ($IMG)"
+    sudo install -d -m 755 "$BASE" "$ROOT"
+    if [ ! -f "$IMG" ]; then
+        sudo truncate -s 16G "$IMG"
+        sudo mkfs.ext4 -q -L aibox -m 0 "$IMG"
+    fi
+    sudo tee /etc/systemd/system/var-lib-aibox-root.mount >/dev/null <<UNIT
+[Unit]
+Description=Shared root for the container command
+
+[Mount]
+What=$IMG
+Where=$ROOT
+Type=ext4
+Options=loop,noatime,nodev
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now var-lib-aibox-root.mount
+    sudo chown "$MYUID:$MYGID" "$ROOT"
+    echo "done: run 'container' in a project folder (the first run fills the shared root, a few minutes)"
+}
+
 check() {
     command -v podman >/dev/null || die "podman is not installed: run 'container setup'"
-    [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo 1)" = 1 ] || die "user namespaces are off: run 'container setup'"
+    [ -n "$SUB" ] && [ -n "$SUBG" ] || die "no uid range for $ME in /etc/subuid: run 'container setup'"
     mountpoint -q "$ROOT" || die "$ROOT is not mounted: run 'container setup'"
 }
 
@@ -119,8 +168,9 @@ run() {
     esac
     local tty=(-i); [ -t 0 ] && [ -t 1 ] && tty=(-it)
     [ $# -gt 0 ] || set -- bash -l
-    podman run --rm "${tty[@]}" \
-        --userns=keep-id --user "$MYUID:$MYGID" \
+    # shellcheck disable=SC2046
+    podman run --rm "${tty[@]}" --network pasta $(idmap) \
+        --user "$MYUID:$MYGID" \
         --hostname ai --name "ai-$(basename "$here" | tr -cd 'A-Za-z0-9_.-' | cut -c1-40)-$$" \
         --tmpfs /tmp \
         -v "$here:$here" -w "$here" \
