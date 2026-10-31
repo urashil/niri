@@ -1,0 +1,117 @@
+#!/bin/bash
+# aibox-run: the root half of `container` (~/.local/bin/container). Run through sudo without a password (/etc/sudoers.d/aibox),
+# so it trusts nothing from the caller but its uid and working folder: it builds every podman command itself, and every
+# box gets the same uid map (container root and every other uid -> the caller's /etc/subuid range, the caller's own uid -> the caller).
+#   aibox-run box [command...]      a box in the current folder (refuses /, /home and the caller's home)
+#   aibox-run fill [keep|all]       (re)fill the shared root from plain Alpine; "keep" leaves /home alone
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin
+umask 022
+
+BASE=/var/lib/aibox
+ROOT=$BASE/root
+BASE_IMAGE=docker.io/library/alpine:latest
+
+die() { printf 'aibox-run: %s\n' "$*" >&2; exit 1; }
+[ "$(id -u)" = 0 ] || die "run through sudo"
+[[ "${SUDO_UID:-}" =~ ^[0-9]+$ ]] && [[ "${SUDO_GID:-}" =~ ^[0-9]+$ ]] && [ "$SUDO_UID" != 0 ] || die "run through sudo as a normal user"
+ME=$(getent passwd "$SUDO_UID" | cut -d: -f1); [ -n "$ME" ] || die "unknown user"
+UHOME=$(getent passwd "$SUDO_UID" | cut -d: -f6)
+MYUID=$SUDO_UID; MYGID=$SUDO_GID
+SUB=$(awk -F: -v u="$ME" '$1 == u { print $2; exit }' /etc/subuid)
+SUBG=$(awk -F: -v u="$ME" '$1 == u { print $2; exit }' /etc/subgid)
+[[ "$SUB" =~ ^[0-9]+$ ]] && [[ "$SUBG" =~ ^[0-9]+$ ]] || die "no uid range for $ME in /etc/subuid"
+(( MYUID < 65536 && MYGID < 65536 )) || die "uid too large for the map"
+mountpoint -q "$ROOT" || die "$ROOT is not mounted (container setup)"
+# the shared root's top level belongs to container root, so the caller cannot swap /etc etc. for links before podman writes there
+[ "$(stat -c %u "$ROOT")" = "$SUB" ] || chown "$SUB:$SUBG" "$ROOT"
+
+MAP=(--uidmap "0:$SUB:$MYUID" --uidmap "$MYUID:$MYUID:1" --uidmap "$((MYUID + 1)):$((SUB + MYUID)):$((65535 - MYUID))"
+     --gidmap "0:$SUBG:$MYGID" --gidmap "$MYGID:$MYGID:1" --gidmap "$((MYGID + 1)):$((SUBG + MYGID)):$((65535 - MYGID))")
+pod() { podman --root "$BASE/storage" --runroot /run/aibox "$@"; }
+# pasta: the network without host firewall rules (they would fight the VPN kill switch)
+inroot() {   # inroot <uid:gid> <home> <command...>
+    local u=$1 h=$2; shift 2
+    pod run --rm --network pasta "${MAP[@]}" --user "$u" -e HOME="$h" -e NAME="$ME" -e UID_="$MYUID" -e GID="$MYGID" -w "$h" --rootfs "$ROOT" "$@"
+}
+
+PROVISION='
+set -e
+apk update
+apk add --no-cache sudo bash tar bash-completion shadow coreutils findutils procps util-linux less ncurses ncurses-terminfo \
+    git openssh-client curl wget ca-certificates tzdata jq ripgrep fd vim nano \
+    nodejs npm python3 py3-pip build-base libgcc libstdc++
+getent group "$GID" >/dev/null || addgroup -g "$GID" "$NAME"
+getent passwd "$NAME" >/dev/null || adduser -D -H -h "/home/$NAME" -s /bin/bash -u "$UID_" -G "$(getent group "$GID" | cut -d: -f1)" "$NAME"
+mkdir -p "/home/$NAME" && chown "$UID_:$GID" "/home/$NAME"
+printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$NAME" > "/etc/sudoers.d/$NAME" && chmod 440 "/etc/sudoers.d/$NAME"
+# Claude Code bundles a glibc ripgrep: use the Alpine one
+cat > /etc/profile.d/aibox.sh <<"EOF"
+export USE_BUILTIN_RIPGREP=0
+export PATH="$HOME/.local/bin:$PATH"
+PS1="\[\e[32m\]ai\[\e[0m\] \w \$ "
+EOF
+'
+# the AI tools as the user, so they can update themselves without sudo
+TOOLS='
+set -e
+. /etc/profile.d/aibox.sh
+npm config set prefix "$HOME/.local"
+command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash
+command -v gemini >/dev/null || npm install -g @google/gemini-cli
+'
+
+fill() {
+    local keep=0; [ "${1:-keep}" = keep ] && keep=1
+    echo "==> filling the shared root from $BASE_IMAGE" >&2
+    pod pull -q "$BASE_IMAGE" >/dev/null
+    pod run --rm --network none "${MAP[@]}" --user 0:0 -v "$ROOT:/target" -e KEEP="$keep" "$BASE_IMAGE" sh -c '
+        set -e
+        rm -f /target/.aibox
+        cd /target
+        for d in * .[!.]*; do
+            [ -e "$d" ] || [ -L "$d" ] || continue
+            [ "$d" = lost+found ] && continue
+            [ "$d" = home ] && [ "$KEEP" = 1 ] && [ -d home ] && [ ! -L home ] && continue
+            rm -rf "/target/$d"
+        done
+        cd /
+        for d in *; do
+            case "$d" in dev|proc|sys|run|tmp|target|home) continue ;; esac
+            tar -cf - "$d" | tar -xpf - -C /target
+        done
+        mkdir -p /target/home /target/dev /target/proc /target/sys /target/run /target/tmp && chmod 1777 /target/tmp'
+    pod image rm -f "$BASE_IMAGE" >/dev/null 2>&1 || true
+    echo "==> installing packages" >&2
+    inroot 0:0 /root sh -c "$PROVISION"
+    echo "==> installing Claude Code and the Gemini CLI" >&2
+    inroot "$MYUID:$MYGID" "/home/$ME" bash -c "$TOOLS"
+    inroot 0:0 /root touch /.aibox
+}
+
+box() {
+    [ -f "$ROOT/.aibox" ] || fill keep
+    local here; here=$(pwd -P)
+    case "$here" in
+        /|/home|"$UHOME"|"$(dirname "$UHOME")") die "won't mount $here; cd into a project folder" ;;
+        *[:,$'\n']*) die "can't mount a path with : , or a newline in it" ;;
+    esac
+    # only a folder the caller can already use (inside, it is the caller's uid that touches it anyway)
+    setpriv --reuid="$MYUID" --regid="$MYGID" --init-groups test -r "$here" -a -x "$here" || die "you cannot open $here"
+    local term=${TERM:-xterm-256color}; [[ "$term" =~ ^[A-Za-z0-9._+-]+$ ]] || term=xterm-256color
+    local tty=(-i); [ -t 0 ] && [ -t 1 ] && tty=(-it)
+    [ $# -gt 0 ] || set -- bash -l
+    exec podman --root "$BASE/storage" --runroot /run/aibox run --rm "${tty[@]}" --network pasta "${MAP[@]}" \
+        --user "$MYUID:$MYGID" \
+        --hostname ai --name "ai-$(basename "$here" | tr -cd 'A-Za-z0-9_.-' | cut -c1-40)-$$" \
+        --tmpfs /tmp \
+        --mount "type=bind,src=$here,dst=$here" -w "$here" \
+        -e TERM="$term" -e COLORTERM=truecolor -e HOME="/home/$ME" -e USER="$ME" -e LANG=C.UTF-8 \
+        --rootfs "$ROOT" bash -lc 'exec "$@"' _ "$@"
+}
+
+case "${1:-}" in
+    box) shift; box "$@" ;;
+    fill) fill "${2:-keep}" ;;
+    *) die "usage: aibox-run box [command...] | fill [keep|all]" ;;
+esac

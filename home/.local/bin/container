@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # container [command...]   an Alpine box for AI agents (podman): the current folder is mounted at the same path, you are the same
 #                          uid inside (files keep your ownership) with password-less sudo, and container root is an unprivileged
-#                          host uid (your /etc/subuid range), so sudo inside cannot touch the host. Podman itself is started
-#                          through sudo (asks for your password), so unprivileged user namespaces can stay off in the kernel.
+#                          host uid (your /etc/subuid range), so sudo inside cannot touch the host.
+#                          Podman runs as root through a small fixed helper (/usr/local/lib/aibox/aibox-run, allowed without a
+#                          password by /etc/sudoers.d/aibox), so unprivileged user namespaces stay off in the kernel.
 #                          Every box shares one persistent 16 GB root (/var/lib/aibox/root, an ext4 image): packages you add
 #                          and the Claude / Gemini / Antigravity sign-ins in its home (~/.claude, ~/.claude.json, ~/.gemini) stay.
-# container setup          one-time root setup (podman, the uid range, the 16 GB image)
+# container setup          one-time root setup (podman, the helper, the uid range, the 16 GB image)
 # container reset [--all]  rebuild the shared root from fresh Alpine; keeps /home unless --all
 # container df             space used in the shared root
 # container sync [--host]  copy the Claude Code sign-in from this machine into the box (--host: from the box to this machine)
@@ -14,121 +15,36 @@ set -euo pipefail
 BASE=/var/lib/aibox
 IMG=$BASE/root.img
 ROOT=$BASE/root
-BASE_IMAGE=docker.io/library/alpine:latest
-ME=$(id -un); MYUID=$(id -u); MYGID=$(id -g)
-
-# podman runs as root (sudo) with its own store; each box gets an explicit uid map instead of a rootless user namespace:
-#   container 0-(uid-1) -> subuid range, container uid -> you, the rest -> the rest of the range
-podman() { sudo podman --root "$BASE/storage" --runroot /run/aibox "$@"; }
-SUB=$(awk -F: -v u="$ME" '$1 == u { print $2; exit }' /etc/subuid 2>/dev/null)
-SUBG=$(awk -F: -v u="$ME" '$1 == u { print $2; exit }' /etc/subgid 2>/dev/null)
-idmap() {
-    printf -- '--uidmap=0:%s:%s --uidmap=%s:%s:1 --uidmap=%s:%s:%s ' "$SUB" "$MYUID" "$MYUID" "$MYUID" $((MYUID + 1)) $((SUB + MYUID)) $((65536 - MYUID))
-    printf -- '--gidmap=0:%s:%s --gidmap=%s:%s:1 --gidmap=%s:%s:%s' "$SUBG" "$MYGID" "$MYGID" "$MYGID" $((MYGID + 1)) $((SUBG + MYGID)) $((65536 - MYGID))
-}
+HELPER=/usr/local/lib/aibox/aibox-run
+HELPER_SRC="$HOME/dotfiles/root$HELPER"
+ME=$(id -un)
 
 die() { printf 'container: %s\n' "$*" >&2; exit 1; }
 
-# run a command inside the shared root as <user>: the same way a box runs, without the project folder
-# (--rootfs makes the image argument a path: options first, then "--rootfs ROOT command...")
-inroot() {
-    local u=$1; shift
-    local opts=(); while [ "$1" != -- ]; do opts+=("$1"); shift; done; shift
-    # shellcheck disable=SC2046
-    podman run --rm --network pasta $(idmap) --user "$u" -e HOME="$( [ "$u" = 0:0 ] && echo /root || echo "/home/$ME")" "${opts[@]}" --rootfs "$ROOT" "$@"
-}
-
-# packages and the user; safe to run again (also repairs a damaged root)
-PROVISION='
-set -e
-apk update
-apk add --no-cache sudo bash tar bash-completion shadow coreutils findutils procps util-linux less ncurses ncurses-terminfo \
-    git openssh-client curl wget ca-certificates tzdata jq ripgrep fd vim nano \
-    nodejs npm python3 py3-pip build-base libgcc libstdc++
-getent group "$GID" >/dev/null || addgroup -g "$GID" "$NAME"
-getent passwd "$NAME" >/dev/null || adduser -D -H -h "/home/$NAME" -s /bin/bash -u "$UID_" -G "$(getent group "$GID" | cut -d: -f1)" "$NAME"
-mkdir -p "/home/$NAME" && chown "$UID_:$GID" "/home/$NAME"
-printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$NAME" > "/etc/sudoers.d/$NAME" && chmod 440 "/etc/sudoers.d/$NAME"
-# Claude Code bundles a glibc ripgrep: use Alpine'"'"'s
-cat > /etc/profile.d/aibox.sh <<"EOF"
-export USE_BUILTIN_RIPGREP=0
-export PATH="$HOME/.local/bin:$PATH"
-PS1="\[\e[32m\]ai\[\e[0m\] \w \$ "
-EOF
-'
-# the AI tools as the user, so they can update themselves without sudo
-TOOLS='
-set -e
-. /etc/profile.d/aibox.sh
-npm config set prefix "$HOME/.local"
-command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash
-command -v gemini >/dev/null || npm install -g @google/gemini-cli
-'
-
-# (re)fill the shared root from plain Alpine, as container root in the same user namespace the boxes use; keeps /home unless told not to
-populate() {
-    local keep_home=$1
-    echo "==> filling the shared root from $BASE_IMAGE" >&2
-    podman pull -q "$BASE_IMAGE" >/dev/null
-    # shellcheck disable=SC2046
-    podman run --rm --network pasta $(idmap) --user 0:0 -v "$ROOT:/target" "$BASE_IMAGE" sh -c '
-        set -e
-        rm -f /target/.aibox
-        cd /target
-        for d in * .[!.]*; do
-            [ -e "$d" ] || continue
-            [ "$d" = lost+found ] && continue
-            [ "$d" = home ] && [ "'"$keep_home"'" = 1 ] && continue
-            rm -rf "/target/$d"
-        done
-        cd /
-        for d in *; do
-            case "$d" in dev|proc|sys|run|tmp|target|home) continue ;; esac
-            tar -cf - "$d" | tar -xpf - -C /target
-        done
-        mkdir -p /target/home /target/dev /target/proc /target/sys /target/run /target/tmp && chmod 1777 /target/tmp'
-    podman image rm -f "$BASE_IMAGE" >/dev/null 2>&1 || true
-    echo "==> installing packages" >&2
-    inroot 0:0 -e NAME="$ME" -e UID_="$MYUID" -e GID="$MYGID" -- sh -c "$PROVISION"
-    echo "==> installing Claude Code and the Gemini CLI" >&2
-    inroot "$MYUID:$MYGID" -w "/home/$ME" -- bash -c "$TOOLS"
-    touch "$ROOT/.aibox"
-}
-
-# the Claude Code sign-in: the token file, plus the account fields of ~/.claude.json (the rest of each side's settings stays)
-sync_claude() {
-    local box="$ROOT/home/$ME" from to
-    if [ "${1:-}" = --host ]; then from=$box; to=$HOME; else from=$HOME; to=$box; fi
-    [ -f "$from/.claude/.credentials.json" ] || die "not signed in to Claude Code in ${from/#$box/the box}"
-    mkdir -p "$to/.claude"
-    install -m 600 "$from/.claude/.credentials.json" "$to/.claude/.credentials.json"
-    local acct; acct=$(jq '{oauthAccount, hasCompletedOnboarding, lastOnboardingVersion} | with_entries(select(.value != null))' "$from/.claude.json")
-    if [ -f "$to/.claude.json" ]; then
-        jq --argjson a "$acct" '. + $a' "$to/.claude.json" > "$to/.claude.json.tmp"
-    else
-        printf '%s\n' "$acct" > "$to/.claude.json.tmp"
-    fi
-    chmod 600 "$to/.claude.json.tmp" && mv "$to/.claude.json.tmp" "$to/.claude.json"
-    echo "Claude Code sign-in copied $([ "${1:-}" = --host ] && echo 'from the box to this machine' || echo 'into the box')"
-}
-
 setup() {
     [ "$(id -u)" -ne 0 ] || die "run setup as yourself (it uses sudo)"
+    [ -f "$HELPER_SRC" ] || die "missing $HELPER_SRC"
     echo "==> podman"
-    sudo pacman -S --needed --noconfirm podman crun netavark aardvark-dns
-    # an earlier version turned unprivileged user namespaces on for rootless podman: not needed any more
+    sudo pacman -S --needed --noconfirm podman crun passt
+    # an earlier version turned unprivileged user namespaces on for rootless podman: not needed
     if [ -f /etc/sysctl.d/60-aibox-userns.conf ]; then
         echo "==> unprivileged user namespaces back off"
         sudo rm -f /etc/sysctl.d/60-aibox-userns.conf
         sudo sysctl -q -w kernel.unprivileged_userns_clone=0
     fi
-    if ! grep -q "^$ME:" /etc/subuid; then
+    if ! grep -q "^$ME:" /etc/subuid || ! grep -q "^$ME:" /etc/subgid; then
         # past every range already handed out
         start=$(awk -F: '{e=$2+$3; if (e>m) m=e} END {print (m>165536?m:165536)}' /etc/subuid /etc/subgid)
         sudo usermod --add-subuids "$start-$((start + 65535))" --add-subgids "$start-$((start + 65535))" "$ME"
     fi
+    echo "==> helper, allowed without a password for $ME"
+    sudo install -Dm755 -o root -g root "$HELPER_SRC" "$HELPER"
+    printf '%s ALL=(root) NOPASSWD: %s\n' "$ME" "$HELPER" | sudo tee /etc/sudoers.d/aibox.new >/dev/null
+    sudo chmod 440 /etc/sudoers.d/aibox.new
+    sudo visudo -cqf /etc/sudoers.d/aibox.new && sudo mv /etc/sudoers.d/aibox.new /etc/sudoers.d/aibox
     echo "==> 16 GB shared root ($IMG)"
-    sudo install -d -m 755 "$BASE" "$ROOT"
+    sudo install -d -m 755 "$BASE"
+    sudo install -d -m 755 "$ROOT"
     if [ ! -f "$IMG" ]; then
         sudo truncate -s 16G "$IMG"
         sudo mkfs.ext4 -q -L aibox -m 0 "$IMG"
@@ -148,34 +64,31 @@ WantedBy=multi-user.target
 UNIT
     sudo systemctl daemon-reload
     sudo systemctl enable --now var-lib-aibox-root.mount
-    sudo chown "$MYUID:$MYGID" "$ROOT"
     echo "done: run 'container' in a project folder (the first run fills the shared root, a few minutes)"
 }
 
 check() {
     command -v podman >/dev/null || die "podman is not installed: run 'container setup'"
-    [ -n "$SUB" ] && [ -n "$SUBG" ] || die "no uid range for $ME in /etc/subuid: run 'container setup'"
+    [ -x "$HELPER" ] || die "the helper is not installed: run 'container setup'"
     mountpoint -q "$ROOT" || die "$ROOT is not mounted: run 'container setup'"
 }
 
-run() {
-    check
-    [ -f "$ROOT/.aibox" ] || populate 1
-    local here; here=$(pwd -P)
-    # the folder is shared read-write with something that has sudo: never all of home or the whole disk
-    case "$here" in
-        /|/home|"$HOME"|"$(dirname "$HOME")") die "won't mount $here; cd into a project folder" ;;
-    esac
-    local tty=(-i); [ -t 0 ] && [ -t 1 ] && tty=(-it)
-    [ $# -gt 0 ] || set -- bash -l
-    # shellcheck disable=SC2046
-    podman run --rm "${tty[@]}" --network pasta $(idmap) \
-        --user "$MYUID:$MYGID" \
-        --hostname ai --name "ai-$(basename "$here" | tr -cd 'A-Za-z0-9_.-' | cut -c1-40)-$$" \
-        --tmpfs /tmp \
-        -v "$here:$here" -w "$here" \
-        -e TERM="${TERM:-xterm-256color}" -e COLORTERM="${COLORTERM:-}" -e HOME="/home/$ME" -e USER="$ME" -e LANG=C.UTF-8 \
-        --rootfs "$ROOT" bash -lc 'exec "$@"' _ "$@"
+# the Claude Code sign-in: the token file, plus the account fields of ~/.claude.json (the rest of each side's settings stays)
+sync_claude() {
+    local box="$ROOT/home/$ME" from to
+    [ -d "$box" ] || die "the box has no home yet: run 'container true' first"
+    if [ "${1:-}" = --host ]; then from=$box; to=$HOME; else from=$HOME; to=$box; fi
+    [ -f "$from/.claude/.credentials.json" ] || die "not signed in to Claude Code in ${from/#$box/the box}"
+    mkdir -p "$to/.claude"
+    install -m 600 "$from/.claude/.credentials.json" "$to/.claude/.credentials.json"
+    local acct; acct=$(jq '{oauthAccount, hasCompletedOnboarding, lastOnboardingVersion} | with_entries(select(.value != null))' "$from/.claude.json")
+    if [ -f "$to/.claude.json" ]; then
+        jq --argjson a "$acct" '. + $a' "$to/.claude.json" > "$to/.claude.json.tmp"
+    else
+        printf '%s\n' "$acct" > "$to/.claude.json.tmp"
+    fi
+    chmod 600 "$to/.claude.json.tmp" && mv "$to/.claude.json.tmp" "$to/.claude.json"
+    echo "Claude Code sign-in copied $([ "${1:-}" = --host ] && echo 'from the box to this machine' || echo 'into the box')"
 }
 
 case "${1:-}" in
@@ -185,9 +98,9 @@ case "${1:-}" in
         all=0; [ "${2:-}" = --all ] && all=1
         printf 'rebuild the shared root%s? [y/N] ' "$([ $all = 1 ] && echo ', including /home (sign-ins)')"
         read -r a; [ "$a" = y ] || exit 1
-        if [ $all = 1 ]; then populate 0; else populate 1; fi ;;
-    sync) check; [ -f "$ROOT/.aibox" ] || populate 1; sync_claude "${2:-}" ;;
+        exec sudo "$HELPER" fill "$([ $all = 1 ] && echo all || echo keep)" ;;
+    sync) check; sync_claude "${2:-}" ;;
     df) check; df -h "$ROOT" | tail -1 ;;
-    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' ;;
-    *) run "$@" ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
+    *) check; exec sudo "$HELPER" box "$@" ;;
 esac
