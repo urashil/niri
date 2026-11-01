@@ -13,6 +13,8 @@ import QtQuick.Layouts
 // LOCK_TEST=1 auto-unlocks after 6 s (used while developing). ~/.local/bin/lock falls back to swaylock if this never engages.
 ShellRoot {
     id: root
+    // never hot-reload: a reload destroys the session lock object while it is held
+    settings.watchFiles: false
 
     readonly property string home: Quickshell.env("HOME")
     readonly property bool test: Quickshell.env("LOCK_TEST") === "1"
@@ -45,6 +47,8 @@ ShellRoot {
         flag.running = true;
         lock.locked = false;
         quit.start();
+        // Qt.quit() sometimes leaves this process running after an unlock, so make sure it goes
+        Quickshell.execDetached(["sh", "-c", "sleep 2; kill " + Quickshell.processId + " 2>/dev/null"]);
     }
     Timer { id: quit; interval: 250; onTriggered: Qt.quit() }
     Timer { running: root.test; interval: 6000; onTriggered: root.unlock() }

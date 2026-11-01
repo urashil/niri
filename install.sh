@@ -46,7 +46,7 @@ while read -r f; do
   fi
   mkdir -p "$HOME/$(dirname "$f")"
   cp -a "home/$f" "$HOME/$f"
-done < <(cd home && find . -type f)
+done < <(cd home && find . \( -type f -o -type l \))   # symlinks too: the lock screen's Theme.qml & co, film/still
 [ "$made_bak" = 1 ] && echo "   replaced files were saved in $bak"
 # absolute paths in the repo are stored as @HOME@ (older commits used /home/nyx): fill in this user's home
 while read -r f; do
@@ -139,6 +139,7 @@ if [ -n "$first" ] && command -v matugen >/dev/null; then
 else
   warn "no wallpaper or matugen yet; run 'wallpaper random' after logging in"
 fi
+[ -f "$HOME/.config/swaylock/config" ] || warn "no swaylock colours yet; run 'wallpaper random' after logging in"
 
 # ---------- 7. user services, Neovim plugins ----------
 say "audio services, Neovim plugins"
