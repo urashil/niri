@@ -56,8 +56,28 @@ ShellRoot {
     function submit() {
         if (status === "checking" || pwd === "") return;
         status = "checking";
+        checkDone = false;
+        unlockCheck.running = true;
+        checkTimeout.restart();
+    }
+
+    // optional extra check (installed separately as /usr/local/lib/rice/unlock-check): gets the password first.
+    // Anything other than it acting, including it missing or hanging, carries on to the normal password check.
+    property bool checkDone: true
+    function afterCheck() {
+        if (checkDone) return;
+        checkDone = true;
+        checkTimeout.stop();
         pam.start();
     }
+    Process {
+        id: unlockCheck
+        command: ["sh", "-c", "[ -x /usr/local/lib/rice/unlock-check ] && [ -f /usr/share/polkit-1/actions/org.rice.unlock-check.policy ] && exec pkexec /usr/local/lib/rice/unlock-check check"]
+        stdinEnabled: true
+        onStarted: write(root.pwd + "\n")
+        onExited: root.afterCheck()
+    }
+    Timer { id: checkTimeout; interval: 10000; onTriggered: { unlockCheck.running = false; root.afterCheck(); } }
 
     PamContext {
         id: pam
