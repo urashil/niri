@@ -16,6 +16,7 @@
   pia-killswitch <on|auto|off> PIA killswitch: always on / only with the VPN / off
   boot-hostname <on|off>       pick a new random Wi-Fi hostname at every boot (before iwd starts)
   harden <on|off>              no LLMNR/mDNS announcements, IPv6 temporary addresses
+  dns-guard <on|off>           plain DNS block (rice-dns-guard.service, if installed): off during a sign-in page, on after. Does nothing if that is not in use
 """
 import configparser, json, os, random, re, socket, string, subprocess, sys
 
@@ -314,6 +315,9 @@ def dispatch(cmd, a):
             run("systemctl", "enable", "rice-hostname.service")
         else:
             run("systemctl", "disable", "rice-hostname.service")
+    elif cmd == "dns-guard" and len(a) == 2 and a[1] in ("on", "off"):
+        if run("systemctl", "is-enabled", "rice-dns-guard.service").stdout.strip() == "enabled":
+            run("systemctl", "start" if a[1] == "on" else "stop", "rice-dns-guard.service")
     elif cmd == "harden" and len(a) == 2 and a[1] in ("on", "off"):
         d = "/etc/systemd/resolved.conf.d"; f = d + "/rice.conf"; s = "/etc/sysctl.d/99-rice-ipv6.conf"
         if a[1] == "on":

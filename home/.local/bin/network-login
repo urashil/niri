@@ -18,6 +18,8 @@ if [ "$login" = 1 ]; then
 step "Turning VPN and kill switch off"
 timeout 10 piactl disconnect >/dev/null 2>&1
 pia-killswitch off >>"$log" 2>&1
+# a DNS guard (rice-dns-guard.service, if installed) blocks plain DNS, and the sign-in page needs it
+pkexec /usr/local/lib/rice/net-helper dns-guard off >>"$log" 2>&1
 for _ in 1 2 3 4 5 6 7 8; do
   [ "$(timeout 5 piactl get connectionstate 2>/dev/null)" = Disconnected ] && break
   sleep 1
@@ -41,6 +43,7 @@ for try in 1 2 3 4; do
   sleep 3
 done
 [ "$ok" = 1 ] || { step "Sign-in failed"; exit 3; }
+pkexec /usr/local/lib/rice/net-helper dns-guard on >>"$log" 2>&1
 
 fi
 
