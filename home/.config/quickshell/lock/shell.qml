@@ -37,13 +37,14 @@ ShellRoot {
     NumberAnimation { id: introAnim; target: root; property: "intro"; from: 0; to: 1; duration: 900; easing.type: Easing.OutCubic }
 
     function engaged() {
-        flag.command = ["sh", "-c", "touch \"$HOME/.cache/rice/locked\""];
+        gotLock = true;
+        flag.command = ["sh", "-c", "touch \"$HOME/.cache/rice/locked\"; busctl call org.freedesktop.login1 /org/freedesktop/login1/session/auto org.freedesktop.login1.Session SetLockedHint b true >/dev/null 2>&1"];
         flag.running = true;
         introAnim.start();
     }
     function unlock() {
         leaving = true;
-        flag.command = ["sh", "-c", "rm -f \"$HOME/.cache/rice/locked\""];
+        flag.command = ["sh", "-c", "rm -f \"$HOME/.cache/rice/locked\"; busctl call org.freedesktop.login1 /org/freedesktop/login1/session/auto org.freedesktop.login1.Session SetLockedHint b false >/dev/null 2>&1"];
         flag.running = true;
         lock.locked = false;
         quit.start();
@@ -51,6 +52,12 @@ ShellRoot {
         Quickshell.execDetached(["sh", "-c", "sleep 2; kill " + Quickshell.processId + " 2>/dev/null"]);
     }
     Timer { id: quit; interval: 250; onTriggered: Qt.quit() }
+    // never got the lock (the compositor refuses a second one): nothing to do here, so go
+    property bool gotLock: false
+    Timer {
+        running: !root.preview; interval: 8000
+        onTriggered: if (!root.gotLock) Quickshell.execDetached(["sh", "-c", "kill " + Quickshell.processId])
+    }
     Timer { running: root.test; interval: 6000; onTriggered: root.unlock() }
 
     function submit() {

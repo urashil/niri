@@ -24,6 +24,11 @@ Singleton {
     property int tcpPort: 0
     property bool autoTransport: true
     property string killswitch: "auto"
+    // multi-hop: PIA's Shadowsocks proxy in front of the VPN (you -> proxy region -> VPN region). OpenVPN only.
+    property bool multihop: false
+    property string multihopVia: "auto"
+    property bool mace: false
+    property bool obfuscation: false
     readonly property bool schoolConfigured: transport === "tcp" && tcpPort === 443 && !autoTransport
 
     // what the user picked, shown at once; cleared when PIA reports it (or after 25 s)
@@ -79,6 +84,18 @@ Singleton {
         const reconnect = connected || busy;
         run([Quickshell.env("HOME") + "/.local/bin/pia-killswitch", mode].concat(reconnect ? ["reconnect"] : []));
     }
+    // settings only the daemon file holds: the helper restarts the daemon, then reconnect if we were connected
+    function piaSet(args) {
+        const back = (connected || busy) ? "piactl background enable; timeout 20 piactl connect" : "true";
+        run(["sh", "-c", "pkexec /usr/local/lib/rice/net-helper pia-set " + args.join(" ")
+             + " && for i in $(seq 40); do timeout 3 piactl get connectionstate >/dev/null 2>&1 && break; sleep 0.5; done; " + back]);
+    }
+    function setMultihop(on, via) {
+        if (via !== undefined && !/^[a-z0-9-]{1,40}$/.test(via)) return;
+        piaSet(on ? ["multihop", "on", via || multihopVia || "auto"] : ["multihop", "off"]);
+    }
+    function setMace(on) { piaSet(["mace", on ? "on" : "off"]); }
+    function setObfuscation(on) { piaSet(["obfuscation", on ? "on" : "off"]); }
     function pick(c) { pending = c; pendingTimer.restart(); }
     Timer { id: pendingTimer; interval: 25000; onTriggered: { root.pending = ""; root.pendingKs = ""; } }
     onMethodChanged: if (pending !== "" && ((pending === "wireguard") === (method === "wireguard"))) pending = ""
@@ -159,6 +176,10 @@ Singleton {
                 root.region = j.location || "auto";
                 root.allowLan = j.allowLAN === true;
                 root.requestPortForward = j.portForward === true;
+                root.multihop = j.proxyEnabled === true && j.proxyType === "shadowsocks";
+                root.multihopVia = j.proxyShadowsocksLocation || "auto";
+                root.mace = j.enableMACE === true;
+                root.obfuscation = j.wireguardObfuscation === true;
             } catch (e) {}
         }
     }

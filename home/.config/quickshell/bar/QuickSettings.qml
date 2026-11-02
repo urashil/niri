@@ -1021,7 +1021,8 @@ PanelWindow {
                 visible: win.page === "vpn"
                 width: parent.width
                 spacing: 10
-                onVisibleChanged: if (visible) Vpn.loadRegions()
+                property bool pickVia: false          // the region list picks the multi-hop entry instead of the VPN region
+                onVisibleChanged: { if (visible) Vpn.loadRegions(); else pickVia = false; }
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -1090,6 +1091,27 @@ PanelWindow {
                     Controls.Chip { label: "Allow LAN"; on: Vpn.allowLan; onClicked: Vpn.setAllowLan(!Vpn.allowLan) }
                     Controls.Chip { label: "Port forwarding"; on: Vpn.requestPortForward; onClicked: Vpn.setPortForward(!Vpn.requestPortForward) }
                     Controls.Chip { label: "Connect at startup"; on: Vpn.autoConnect; onClicked: Vpn.setAutoConnect(!Vpn.autoConnect) }
+                    Controls.Chip { label: "MACE"; on: Vpn.mace; onClicked: Vpn.setMace(!Vpn.mace) }
+                    Controls.Chip { visible: Vpn.method === "wireguard"; label: "Obfuscation"; on: Vpn.obfuscation; onClicked: Vpn.setObfuscation(!Vpn.obfuscation) }
+                }
+
+                Text { text: "Multi-hop"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "Off"; on: !Vpn.multihop; onClicked: { vpnPage.pickVia = false; if (Vpn.multihop) Vpn.setMultihop(false); } }
+                    Controls.Chip { label: "On"; on: Vpn.multihop; onClicked: if (!Vpn.multihop) Vpn.setMultihop(true) }
+                    Controls.Chip {
+                        visible: Vpn.multihop
+                        label: vpnPage.pickVia ? "Pick the entry below…" : "Entry: " + Vpn.pretty(Vpn.multihopVia)
+                        on: vpnPage.pickVia
+                        onClicked: vpnPage.pickVia = !vpnPage.pickVia
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true; wrapMode: Text.Wrap
+                    text: Vpn.multihop ? "You → " + Vpn.pretty(Vpn.multihopVia) + " (proxy) → " + Vpn.pretty(Vpn.region) + " (VPN) → internet. Each change restarts PIA briefly."
+                                       : "Adds a proxy hop in front of the VPN. Uses OpenVPN (switches from WireGuard)."
+                    font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
 
                 Text { text: "Killswitch"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
@@ -1105,7 +1127,7 @@ PanelWindow {
                     font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
                 }
 
-                Text { text: "Region"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                Text { text: vpnPage.pickVia ? "Multi-hop entry" : "Region"; font.family: Theme.font; font.pixelSize: 10; color: vpnPage.pickVia ? Theme.primary : Theme.textDim }
                 Rectangle {
                     Layout.fillWidth: true; height: 30; radius: 10; color: Theme.surfaceHigh
                     TextInput {
@@ -1125,9 +1147,11 @@ PanelWindow {
                     delegate: Rectangle {
                         required property string modelData
                         width: ListView.view.width; height: 34; radius: 10
-                        color: Vpn.region === modelData ? Theme.primaryContainer : Theme.surfaceContainer
-                        Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter } text: Vpn.pretty(modelData); font.family: Theme.font; font.pixelSize: 11; color: Vpn.region === modelData ? Theme.fgContainer : Theme.text }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Vpn.setRegion(modelData) }
+                        readonly property bool chosen: vpnPage.pickVia ? Vpn.multihopVia === modelData : Vpn.region === modelData
+                        color: chosen ? Theme.primaryContainer : Theme.surfaceContainer
+                        Text { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter } text: Vpn.pretty(modelData); font.family: Theme.font; font.pixelSize: 11; color: parent.chosen ? Theme.fgContainer : Theme.text }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { if (vpnPage.pickVia) { vpnPage.pickVia = false; Vpn.setMultihop(true, modelData); } else Vpn.setRegion(modelData); } }
                     }
                 }
             }
