@@ -16,6 +16,8 @@
   pia-killswitch <on|auto|off> PIA killswitch: always on / only with the VPN / off
   boot-hostname <on|off>       pick a new random Wi-Fi hostname at every boot (before iwd starts)
   harden <on|off>              no LLMNR/mDNS announcements, IPv6 temporary addresses
+  pia-set <option> <value>     multihop on [region]|off (Shadowsocks proxy in front, OpenVPN only), mace on|off,
+                               obfuscation on|off (WireGuard), ipv6block on|off. Restarts the PIA daemon.
   dns-guard <on|off>           plain DNS block (rice-dns-guard.service, if installed): off during a sign-in page, on after. Does nothing if that is not in use
 """
 import configparser, json, os, random, re, socket, string, subprocess, sys
@@ -315,9 +317,33 @@ def dispatch(cmd, a):
             run("systemctl", "enable", "rice-hostname.service")
         else:
             run("systemctl", "disable", "rice-hostname.service")
+    elif cmd == "pia-set" and len(a) >= 3:
+        opt, val = a[1], a[2]
+        onoff = {"on": True, "off": False}
+        if opt == "multihop" and val in onoff and len(a) <= 4:
+            loc = a[3] if len(a) == 4 else "auto"
+            if not re.fullmatch(r"[a-z0-9-]{1,40}", loc):
+                sys.exit("bad region")
+            ch = {"proxyEnabled": onoff[val], "proxyType": "shadowsocks"}
+            if onoff[val]:
+                ch.update({"proxyShadowsocksLocation": loc, "method": "openvpn"})   # PIA only proxies OpenVPN
+            pia_settings(ch)
+        elif opt in ("mace", "obfuscation", "ipv6block") and val in onoff and len(a) == 3:
+            pia_settings({{"mace": "enableMACE", "obfuscation": "wireguardObfuscation", "ipv6block": "blockIPv6"}[opt]: onoff[val]})
+        else:
+            sys.exit(__doc__)
     elif cmd == "dns-guard" and len(a) == 2 and a[1] in ("on", "off"):
         if run("systemctl", "is-enabled", "rice-dns-guard.service").stdout.strip() == "enabled":
             run("systemctl", "start" if a[1] == "on" else "stop", "rice-dns-guard.service")
+        # local DNSSEC validation (if turned on) fails on most sign-in pages' own DNS: off while signing in
+        portal = "/run/systemd/resolved.conf.d/zz-rice-portal.conf"
+        if os.path.exists("/etc/systemd/resolved.conf.d/rice-dnssec.conf") or os.path.exists(portal):
+            if a[1] == "off":
+                os.makedirs(os.path.dirname(portal), exist_ok=True)
+                open(portal, "w").write("[Resolve]\nDNSSEC=no\n")
+            elif os.path.exists(portal):
+                os.remove(portal)
+            run("systemctl", "restart", "systemd-resolved")
     elif cmd == "harden" and len(a) == 2 and a[1] in ("on", "off"):
         d = "/etc/systemd/resolved.conf.d"; f = d + "/rice.conf"; s = "/etc/sysctl.d/99-rice-ipv6.conf"
         if a[1] == "on":
