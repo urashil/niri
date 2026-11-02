@@ -29,6 +29,7 @@ stop() { echo; echo "GRUB switch STOPPED: $*" >&2; echo "The firmware boot order
 warn() { echo "   note: $*"; }
 
 [ "${SKIP_GRUB:-0}" = 1 ] && skip "SKIP_GRUB=1, leaving it alone"
+[ -e /var/lib/rice-security/systemd-boot ] && skip "moved to systemd-boot for Secure Boot, leaving it alone"
 if [ "$DRY" = 0 ] && [ "$(id -u)" -ne 0 ]; then echo "run with sudo (or add --dry-run)" >&2; exit 1; fi
 
 # ---------- which loader is running now? ----------
