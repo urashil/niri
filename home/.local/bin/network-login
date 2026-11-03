@@ -42,15 +42,16 @@ for try in 1 2 3 4; do
   say "not online after attempt $try (script exit $rc)"
   sleep 3
 done
-[ "$ok" = 1 ] || { step "Sign-in failed"; exit 3; }
-pkexec /usr/local/lib/rice/net-helper dns-guard on >>"$log" 2>&1
-
+[ "$ok" = 1 ] || { step "Sign-in failed"; pkexec /usr/local/lib/rice/net-helper dns-guard on >>"$log" 2>&1; exit 3; }
 fi
 
 step "Kill switch $ks"
 pia-killswitch "$ks" >>"$log" 2>&1
 case "$vpn" in
   off) say "vpn stays off" ;;
-  *)   [ "$vpn" = 443 ] && vpn=school; step "Connecting VPN ($( case $vpn in wg|wireguard) echo WireGuard ;; school) echo OpenVPN 443 ;; *) echo $vpn ;; esac))"; qs -c bar ipc call vpn "$vpn" >>"$log" 2>&1 ;;
+  *)   [ "$vpn" = 443 ] && vpn=school; step "Connecting VPN ($( case $vpn in wg|wireguard) echo WireGuard ;; school) echo OpenVPN 443 ;; *) echo $vpn ;; esac))"; qs -c bar ipc call vpn "$vpn" >>"$log" 2>&1
+       # DoH back only once the VPN carries it: networks that block DoH cannot see it inside the tunnel
+       for _ in $(seq 45); do [ "$(timeout 5 piactl get connectionstate 2>/dev/null)" = Connected ] && break; sleep 1; done ;;
 esac
+[ "$login" = 1 ] && { step "DNS back to DoH"; pkexec /usr/local/lib/rice/net-helper dns-guard on >>"$log" 2>&1; }
 exit 0

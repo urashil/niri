@@ -18,7 +18,8 @@
   harden <on|off>              no LLMNR/mDNS announcements, IPv6 temporary addresses
   pia-set <option> <value>     multihop on [region]|off (Shadowsocks proxy in front, OpenVPN only), mace on|off,
                                obfuscation on|off (WireGuard), ipv6block on|off. Restarts the PIA daemon.
-  dns-guard <on|off>           plain DNS block (rice-dns-guard.service, if installed): off during a sign-in page, on after. Does nothing if that is not in use
+  dns-guard <on|off>           sign-in page mode: off = the network's own DNS (no DoH, no local DNSSEC check, plain
+                               DNS allowed), on = back to DoH and the plain DNS block
 """
 import configparser, json, os, random, re, socket, string, subprocess, sys
 
@@ -335,12 +336,15 @@ def dispatch(cmd, a):
     elif cmd == "dns-guard" and len(a) == 2 and a[1] in ("on", "off"):
         if run("systemctl", "is-enabled", "rice-dns-guard.service").stdout.strip() == "enabled":
             run("systemctl", "start" if a[1] == "on" else "stop", "rice-dns-guard.service")
-        # local DNSSEC validation (if turned on) fails on most sign-in pages' own DNS: off while signing in
+        # while signing in, the network's own DNS answers everything: sign-in pages work by rewriting DNS, and
+        # many networks (schools) block DoH until you are signed in, or for good. DNS= / Domains= empty drop the
+        # DoH server (and its ~. catch-all) for now; local DNSSEC validation (if on) fails on rewritten answers
         portal = "/run/systemd/resolved.conf.d/zz-rice-portal.conf"
-        if os.path.exists("/etc/systemd/resolved.conf.d/rice-dnssec.conf") or os.path.exists(portal):
+        doh = os.path.exists("/etc/systemd/resolved.conf.d/rice-doh.conf")
+        if doh or os.path.exists("/etc/systemd/resolved.conf.d/rice-dnssec.conf") or os.path.exists(portal):
             if a[1] == "off":
                 os.makedirs(os.path.dirname(portal), exist_ok=True)
-                open(portal, "w").write("[Resolve]\nDNSSEC=no\n")
+                open(portal, "w").write("[Resolve]\n" + ("DNS=\nDomains=\n" if doh else "") + "DNSSEC=no\n")
             elif os.path.exists(portal):
                 os.remove(portal)
             run("systemctl", "restart", "systemd-resolved")
