@@ -22,7 +22,9 @@ pgrep -x swaylock >/dev/null && exit 0
 if [ -f "$STATE/locked" ] && pgrep -f '^quickshell -c lock' >/dev/null; then exit 0; fi
 
 rm -f "$STATE/locked"
-setsid -f quickshell -c lock >"$STATE/lock.log" 2>&1 </dev/null
+# 9>&-: the lock screen must not inherit the flock. It used to hold it for as long as it was up, so every
+# other lock request queued behind it and, the moment you unlocked, started a brand-new lock
+setsid -f quickshell -c lock >"$STATE/lock.log" 2>&1 </dev/null 9>&-
 
 for _ in $(seq 40); do
   [ -f "$STATE/locked" ] && exit 0
@@ -31,4 +33,4 @@ done
 
 # the fancy lock did not come up: never leave the session open
 pkill -f '^quickshell -c lock' 2>/dev/null
-pgrep -x swaylock >/dev/null || exec swaylock -f
+pgrep -x swaylock >/dev/null || exec swaylock -f 9>&-
