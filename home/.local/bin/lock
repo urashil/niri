@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 # Lock the session with the quickshell lock; fall back to swaylock if it never engages.
+
+# Started under no_new_privs (a hardened service such as rice-remote or btlock)? A lock started from there could
+# never check a password: the setuid helper that reads /etc/shadow loses its setuid, so every password is
+# "wrong". Have niri start it the way the keybind does, or else the user's systemd (a fresh process either way).
+if grep -q '^NoNewPrivs:[[:space:]]*1' /proc/self/status 2>/dev/null; then
+  self=$(realpath "$0")
+  sock=${NIRI_SOCKET:-$(ls "/run/user/$(id -u)"/niri.*.sock 2>/dev/null | head -1)}
+  if [ -n "$sock" ] && NIRI_SOCKET=$sock niri msg action spawn -- "$self" 2>/dev/null; then exit 0; fi
+  exec systemd-run --user --quiet --collect --unit="rice-lock-$$" "$self"
+fi
+
 STATE="$HOME/.cache/rice"; mkdir -p "$STATE"
 # one at a time: two triggers at once (lock + before-sleep) used to start two locks, and the second one,
 # refused by the compositor, stayed behind forever
