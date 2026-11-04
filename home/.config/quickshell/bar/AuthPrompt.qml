@@ -69,6 +69,7 @@ PanelWindow {
             Text {
                 width: parent.width
                 text: win.flow ? win.flow.message : ""
+                textFormat: Text.PlainText   // the message can carry a program path someone else chose
                 wrapMode: Text.WordWrap
                 font.family: Theme.font; font.pixelSize: 12; color: Theme.text
             }

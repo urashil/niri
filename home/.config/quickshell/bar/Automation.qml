@@ -30,9 +30,10 @@ Singleton {
     Process {
         id: signin
         property string ssid: ""
+        property string lastStep: ""
         // each step network-login prints stays in the island until the next one
-        stdout: SplitParser { onRead: line => { if (line.trim() !== "") UiState.pulse("auto", "", signin.ssid + " · " + line.trim() + "…", -1, Theme.primary, 30000); } }
-        onExited: code => UiState.pulse("auto", "", signin.ssid + (code === 0 ? " · done" : code === 3 ? " · sign-in failed, VPN left off" : " · sign-in script missing"),
+        stdout: SplitParser { onRead: line => { if (line.trim() !== "") signin.lastStep = line.trim(); if (line.trim() !== "") UiState.pulse("auto", "", signin.ssid + " · " + line.trim() + "…", -1, Theme.primary, 30000); } }
+        onExited: code => UiState.pulse("auto", "", signin.ssid + (code === 0 ? " · done" : code === 3 ? " · sign-in failed, VPN left off" : code === 4 ? " · " + (signin.lastStep || "something could not be turned back on") : code === 2 ? " · sign-in script missing" : " · stopped, protections back on"),
                                          -1, code === 0 ? Theme.primary : Theme.red, code === 0 ? 3500 : 6000)
     }
     function startSignin(ssid, r) {
@@ -41,6 +42,7 @@ Singleton {
         const was = Vpn.connected || Vpn.busy ? (Vpn.choice === "wireguard" ? "wg" : Vpn.choice === "school" ? "443" : "auto") : "off";
         const vpn = r.vpn || was;
         signin.ssid = ssid;
+        signin.lastStep = "";
         signin.command = ["network-login", vpn, r.ks || Vpn.killswitch, Wifi.dev, r.login ? "1" : "0"];
         signin.running = true;
     }

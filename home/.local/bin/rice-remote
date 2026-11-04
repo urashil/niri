@@ -165,6 +165,24 @@ def locked_out(key):
         fails[key] = [t for t in fails.get(key, []) if now - t < 900]
         return len(fails[key]) >= 5 or len(global_fails) >= 20
 
+def reserve(key):
+    """count a password try BEFORE checking it, in the same step as the lockout test: a burst of parallel requests
+    used to pass the test together and all be checked. Returns a token to cancel the count on success, or None."""
+    now = time.time()
+    with lock:
+        global_fails[:] = [t for t in global_fails if now - t < 3600]
+        fails[key] = [t for t in fails.get(key, []) if now - t < 900]
+        if len(fails[key]) >= 5 or len(global_fails) >= 20:
+            return None
+        fails[key].append(now); global_fails.append(now)
+        return now
+
+def unreserve(key, t):
+    with lock:
+        for lst in (fails.get(key, []), global_fails):
+            if t in lst:
+                lst.remove(t)
+
 def note_fail(key):
     with lock:
         now = time.time()
@@ -507,8 +525,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return urllib.parse.urlparse(o).netloc == host.split(",")[0].strip()
 
     def body(self, limit=4096):
-        n = int(self.headers.get("Content-Length") or 0)
-        if n > limit: return None
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return None
+        if n < 0 or n > limit: return None
         return self.rfile.read(n)
 
     def do_HEAD(self): self.do_GET()
@@ -560,14 +581,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/login":
             key = client_key(self)
             if not c.get("password_login", True) and load_keys(): return self.send(403, login_page("Password sign-in is off; use a passkey.", c))
-            if locked_out(key): return self.send(429, login_page("Too many tries. Wait a while.", c))
+            t = reserve(key)
+            if t is None: return self.send(429, login_page("Too many tries. Wait a while.", c))
             raw = self.body()
             if raw is None: return self.send(413, "too big", "text/plain")
             pw = urllib.parse.parse_qs(raw.decode(errors="replace")).get("password", [""])[0]
-            with kdf_lock:
+            # one check at a time, and no long queue of them
+            if not kdf_lock.acquire(timeout=10): return self.send(503, login_page("Busy. Try again.", c))
+            try:
                 ok = bool(pw) and hmac.compare_digest(kdf(pw, bytes.fromhex(c["salt"]), c["n"], c["r"], c["p"]).hex(), c["hash"])
-            if not ok:
-                note_fail(key)
+            finally:
+                kdf_lock.release()
+            if ok:
+                unreserve(key, t)
+            else:
                 print(f"rice-remote: failed login from {key}", file=sys.stderr, flush=True)
                 time.sleep(1)
                 return self.send(401, login_page("Wrong password.", c))

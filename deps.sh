@@ -48,6 +48,7 @@ install -Dm644 "$SRC/usr/share/polkit-1/actions/org.rice.net.policy" /usr/share/
 # USBGuard prompt in the bar: allow a blocked device from a click
 install -Dm755 "$SRC/usr/local/lib/rice/usb-helper" /usr/local/lib/rice/usb-helper
 install -Dm644 "$SRC/usr/share/polkit-1/actions/org.rice.usb.policy" /usr/share/polkit-1/actions/org.rice.usb.policy
+install -Dm644 "$SRC/etc/polkit-1/rules.d/50-rice-usb.rules" /etc/polkit-1/rules.d/50-rice-usb.rules   # "always allow" asks for your password
 # login screen picture (SDDM reads faces/<user>.face.icon)
 for f in "$SRC"/usr/share/sddm/faces/*.face.icon; do [ -f "$f" ] && install -Dm644 "$f" "/usr/share/sddm/faces/${f##*/}"; done
 # world-readable mirror of the per-network MAC policy (/var/lib/iwd is root-only)

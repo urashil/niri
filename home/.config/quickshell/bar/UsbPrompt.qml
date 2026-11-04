@@ -46,17 +46,21 @@ PanelWindow {
     Process {
         id: scan
         command: ["sh", "-c", "for d in /sys/bus/usb/devices/*; do [ -f \"$d/idVendor\" ] && [ \"$(cat \"$d/authorized\" 2>/dev/null)\" = 0 ] || continue; "
-            + "printf '%s\\t%s:%s\\t%s\\t%s\\t%s\\t%s\\n' \"${d##*/}\" \"$(cat $d/idVendor)\" \"$(cat $d/idProduct)\" \"$(cat $d/manufacturer 2>/dev/null)\" \"$(cat $d/product 2>/dev/null)\" \"$(cat $d/serial 2>/dev/null)\" "
-            + "\"$(cat $d/bDeviceClass 2>/dev/null) $(cat $d/*:*/bInterfaceClass 2>/dev/null | tr '\\n' ' ')\"; done"]
+            // the names come from the device itself: tabs and newlines in them would shift the columns (and could
+            // hide the keyboard warning), so control characters go, and the classes (from the kernel) come first
+            + "s() { tr -d '[:cntrl:]' < \"$1\" 2>/dev/null; }; "
+            + "printf '%s\\t%s:%s\\t%s\\t%s\\t%s\\t%s\\n' \"${d##*/}\" \"$(s $d/idVendor)\" \"$(s $d/idProduct)\" "
+            + "\"$(cat $d/bDeviceClass 2>/dev/null) $(cat $d/*:*/bInterfaceClass 2>/dev/null | tr '\\n' ' ')\" "
+            + "\"$(s $d/manufacturer)\" \"$(s $d/product)\" \"$(s $d/serial)\"; done"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const q = win.queue.slice();
                 for (const l of text.split("\n")) {
                     const f = l.split("\t");
-                    if (f.length < 6) continue;
-                    const key = f[1] + " " + f[4];
+                    if (f.length !== 6) continue;
+                    const key = f[1] + " " + f[5];
                     if (win.answered[f[0]] || win.ignored.indexOf(key) >= 0 || q.some(d => d.port === f[0])) continue;
-                    q.push({ port: f[0], id: f[1], name: ((f[2] + " " + f[3]).trim()) || "Unknown device", kinds: win.kinds(f[5].trim().split(/\s+/)), key: key });
+                    q.push({ port: f[0], id: f[1], name: ((f[3] + " " + f[4]).trim()) || "Unknown device", kinds: win.kinds(f[2].trim().split(/\s+/)), key: key });
                 }
                 // devices that were allowed or unplugged meanwhile drop out
                 const now = text.split("\n").map(l => l.split("\t")[0]);
@@ -115,7 +119,7 @@ PanelWindow {
                 Text { text: ""; font.family: Theme.font; font.pixelSize: 16; color: Theme.primary }
                 Text { Layout.fillWidth: true; text: "USB device blocked" + (win.queue.length > 1 ? "  (" + win.queue.length + ")" : ""); font.family: Theme.font; font.pixelSize: 13; font.bold: true; color: Theme.text }
             }
-            Text { Layout.fillWidth: true; elide: Text.ElideRight; text: win.dev ? win.dev.name : ""; font.family: Theme.font; font.pixelSize: 12; color: Theme.text }
+            Text { Layout.fillWidth: true; elide: Text.ElideRight; textFormat: Text.PlainText; text: win.dev ? win.dev.name : ""; font.family: Theme.font; font.pixelSize: 12; color: Theme.text }
             Text {
                 Layout.fillWidth: true; wrapMode: Text.Wrap
                 text: win.dev ? win.dev.id + "  ·  port " + win.dev.port + (win.dev.kinds.length ? "  ·  " + win.dev.kinds.join(", ") : "") : ""

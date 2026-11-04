@@ -1,0 +1,9 @@
+// "Always allow" for a USB device the bar's prompt shows (usb-helper allow PORT permanent) writes a rule into
+// USBGuard that lasts: that asks for your password, so a program running as you cannot quietly whitelist a
+// device someone plugged in. A one-time allow stays prompt-free (the prompt in the bar is the check for that).
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.rice.usb" && subject.local && subject.active) {
+        var cmd = action.lookup("command_line") || "";
+        if (/ permanent$/.test(cmd)) return polkit.Result.AUTH_SELF_KEEP;
+    }
+});

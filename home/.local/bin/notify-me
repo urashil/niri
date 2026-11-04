@@ -28,15 +28,19 @@ url=$(get NTFY_URL); pass=$(get NTFY_PASSWORD); user=$(get NTFY_USER)
 [ -n "$url" ]  || { echo "notify-me: NTFY_URL is not set in $ENV" >&2; exit 2; }
 [ -n "$pass" ] || { echo "notify-me: NTFY_PASSWORD is not set in $ENV" >&2; exit 2; }
 
-args=(-sS --fail-with-body --max-time 15 -X POST)
+args=(-sS --fail-with-body --max-time 15 -X POST -K -)
+# the address and the password go to curl on stdin (a curl config), never on its command line: other accounts on
+# this machine can read every process's command line
+q() { local v=${1//\\/\\\\}; printf '"%s"' "${v//\"/\\\"}"; }
+cfg="url = $(q "$url")"
 case "$pass" in
-  tk_*) args+=(-H "Authorization: Bearer $pass") ;;
-  *)    args+=(-u "${user}:${pass}") ;;
+  tk_*) cfg+=$'\n'"header = $(q "Authorization: Bearer $pass")" ;;
+  *)    cfg+=$'\n'"user = $(q "${user}:${pass}")" ;;
 esac
 [ -n "$title" ] && args+=(-H "Title: $title")
 [ -n "$prio" ]  && args+=(-H "Priority: $prio")
 [ -n "$tags" ]  && args+=(-H "Tags: $tags")
-args+=(--data-raw "$msg" "$url")
+args+=(--data-raw "$msg")
 
 if [ "$dry" = 1 ]; then
   echo "would POST to: $url"
@@ -44,5 +48,5 @@ if [ "$dry" = 1 ]; then
   echo "message: $msg"
   exit 0
 fi
-out=$(curl "${args[@]}" 2>&1) || { echo "notify-me: failed: $(printf '%s' "$out" | tr -d '\r' | head -c 300)" >&2; exit 1; }
+out=$(printf '%s\n' "$cfg" | curl "${args[@]}" 2>&1) || { echo "notify-me: failed: $(printf '%s' "$out" | tr -d '\r' | head -c 300)" >&2; exit 1; }
 echo "sent"

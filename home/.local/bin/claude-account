@@ -131,6 +131,9 @@ class Lock:
                         continue
                     time.sleep(0.2)
             self.lk = lk
+            if not self.held:   # never touch the live sign-in while Claude Code may be renewing it (a lost refresh token logs you out)
+                os.close(self.fd)
+                raise RuntimeError("Claude Code's sign-in lock stayed busy; try again")
         return self
 
     def __exit__(self, *a):

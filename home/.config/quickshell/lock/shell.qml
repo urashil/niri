@@ -281,6 +281,7 @@ ShellRoot {
                             anchors.verticalCenter: parent.verticalCenter
                             width: Math.min(implicitWidth, 380)
                             elide: Text.ElideRight
+                            textFormat: Text.PlainText   // track names come from whatever plays (a web page)
                             text: root.player ? (root.player.trackArtist ? root.player.trackArtist + " – " : "") + root.player.trackTitle : ""
                             font.family: Theme.font; font.pixelSize: 13; color: Theme.text
                         }
@@ -304,7 +305,7 @@ ShellRoot {
                             anchors.centerIn: parent
                             spacing: 8
                             Text { anchors.verticalCenter: parent.verticalCenter; text: icon; font.family: Theme.font; font.pixelSize: 15; color: accent }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: label; font.family: Theme.font; font.pixelSize: 13; color: Theme.text }
+                            Text { anchors.verticalCenter: parent.verticalCenter; textFormat: Text.PlainText; text: label; font.family: Theme.font; font.pixelSize: 13; color: Theme.text }
                         }
                     }
                     Chip { visible: Weather.configured && Weather.loaded; icon: Weather.icon; label: Weather.tempText; accent: Weather.color }

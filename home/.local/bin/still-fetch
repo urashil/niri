@@ -1,17 +1,54 @@
 #!/bin/sh
 # Mirror song.tylerium.pro (the "still@server" animated music film) into ~/.local/share/rice/still-at-server for the island player.
 # The page/frame code (frame.html, frame.js) is ours and comes with the dotfiles; the song and the film's code are downloaded.
+# It is someone else's site, and node runs its timeline.js: every file must match the hash pinned here (the versions
+# mirrored on 27 Oct 2026, read through before pinning). A changed file is refused; update the list on purpose.
 set -e
 dir="$HOME/.local/share/rice/still-at-server"
 site=https://song.tylerium.pro
 mkdir -p "$dir/assets/addons/environments" "$dir/assets/addons/postprocessing" "$dir/assets/addons/shaders" "$dir/assets/addons/geometries" "$dir/assets/addons/utils"
-for f in style.css app.js opening.js terminal-script.js terminals.js film.js timeline.js characters.js dialogue.js sets.js storyboard.js visuals.js \
-         assets/still-at-server.mp3 assets/three.module.js assets/three.core.min.js \
-         assets/addons/environments/RoomEnvironment.js assets/addons/geometries/RoundedBoxGeometry.js assets/addons/utils/BufferGeometryUtils.js \
-         assets/addons/postprocessing/EffectComposer.js assets/addons/postprocessing/OutputPass.js assets/addons/postprocessing/RenderPass.js \
-         assets/addons/postprocessing/ShaderPass.js assets/addons/postprocessing/UnrealBloomPass.js assets/addons/postprocessing/MaskPass.js assets/addons/postprocessing/Pass.js \
-         assets/addons/shaders/CopyShader.js assets/addons/shaders/LuminosityHighPassShader.js assets/addons/shaders/OutputShader.js; do
-  [ -s "$dir/$f" ] || { echo "fetching $f"; curl -sfL -m 180 -o "$dir/$f" "$site/$f"; }
+sums=$(cat <<'EOF'
+ad136bcb7f54cfceb9214940835d0d29ded5372517d2a6d4e98b6a7743d90fb3  style.css
+441e53406a78cc406f5c2b12063272fbb980b570101948d50ae52c623c43a88b  app.js
+1a57d08c613abd4d238f4bebaf7b2dca0da4a0c62a1d73f228cf472a8937010e  opening.js
+119e6d983b6eb83261c902900f62760e9af6900e4321342d329006bec177bac0  terminal-script.js
+2b6ff0dd171531c55bdfb9bdd9fa49646917577dbdcdf0594c20a7db30f0d0eb  terminals.js
+0756e58e7d52eeeb52b48dbbb88e3c86ff448af2716eded6e7218ea090723149  film.js
+d2bde8bf9a05b8cb24113fd14959e0f6608730ee3d6ca1edde20953ce6021221  timeline.js
+e060ab8d89438b628bdad28eb9bf8b554cfcdc124304314db75889fa370aa70d  characters.js
+75bb158be775fe0487be5d7738abd27d5c8a71ab8c22de53b7a0c16dd6b6781c  dialogue.js
+0f82adda2693dd65128df91f52cb471123ba4ac0d8fa64edd33dc4c7ffd85eb0  sets.js
+fcdc6aa85a360fc71583bc411d9840e89e13d9f0a6cbc4f2d9f067adafef3cb9  storyboard.js
+4b153c0b6a51ab15be9b74282cb9056b2daff15fb6f217b4506d71e0368ced5c  visuals.js
+d5593d8aff3b199e549d41aea47071725801c38c1f34f4f5ec7de1895b5703e9  assets/still-at-server.mp3
+e2b5ee6bccd38fd6d8a2428546b83c5f2426d84b152ef82be8055556e3b40eb6  assets/three.module.js
+61ba0df005b05991361d040d8ff670e1aadfd0ce7aeebd1fdb0725957a8957de  assets/three.core.min.js
+c20f0b4677f6128a138d7152b85cbef9091f4f45cdfa05adca04d40c1697c7ae  assets/addons/environments/RoomEnvironment.js
+c1b7c9bd2cddff2e3f3a0723f618a3d364a47450e3d25771d21faed88410bec8  assets/addons/geometries/RoundedBoxGeometry.js
+fda7e946b8e0b5ab39b779206589e7a1079a22eb24efb89d7223e03fdfb1f751  assets/addons/utils/BufferGeometryUtils.js
+4b8c855f28eed2570bed898adc0ab89c585a8a281ecb6d905c09d00697f9f50a  assets/addons/postprocessing/EffectComposer.js
+f5b81c96e76b6b28b4b3ba8c41c4aeb982b1e03f3d82883242d951b2ab082fa2  assets/addons/postprocessing/OutputPass.js
+fd91229aacc5830e3984b0f2bdefcf566163ea028f4c1f1ab233fa6665a133ac  assets/addons/postprocessing/RenderPass.js
+e2500a5913b26bbf5148ceaae644c6edcff06a18b01494ee37bf856353d2ab9d  assets/addons/postprocessing/ShaderPass.js
+d92742959879b461f25348b2abddc7ca0d48527e7718340bcfa29fa771e2799a  assets/addons/postprocessing/UnrealBloomPass.js
+7cd08eee9d5d6f5578beaddbdcbe9c384f6873810af27f22ab7db3ceeb127aa3  assets/addons/postprocessing/MaskPass.js
+444b409c235ead986893c472e720da1b779a56985c7d10b279c7944b52bd61c5  assets/addons/postprocessing/Pass.js
+a33057d5ac91c43304c186ac0e8816e62bb2ed471d3a00ff3018dfd5c0389718  assets/addons/shaders/CopyShader.js
+5044f780b6e6cf863947f64c36fe1587132f7fbe395ada863cd1e5f0388dcf1e  assets/addons/shaders/LuminosityHighPassShader.js
+353479f77a8d7e2629d49ccac9fc2f5dbfdda5442e0adf867b00377a2fcb0cb2  assets/addons/shaders/OutputShader.js
+EOF
+)
+ok() { [ "$(sha256sum < "$1" | cut -c1-64)" = "$2" ]; }
+printf '%s\n' "$sums" | while read -r sum f; do
+  have="$dir/$f"; [ "$f" = film.js ] && [ -s "$dir/film.orig.js" ] && have="$dir/film.orig.js"   # film.js is edited below
+  if [ -s "$have" ]; then
+    ok "$have" "$sum" || { echo "still-fetch: $f does not match its pinned hash; delete it to fetch it again" >&2; exit 1; }
+    continue
+  fi
+  echo "fetching $f"
+  curl -sfL --proto '=https' -m 180 -o "$dir/$f.part" "$site/$f"
+  ok "$dir/$f.part" "$sum" || { rm -f "$dir/$f.part"; echo "still-fetch: $site/$f changed since it was pinned; not using it" >&2; exit 1; }
+  mv "$dir/$f.part" "$dir/$f"
 done
 # a cheaper renderer for a small island (no MSAA, hard shadows, pixel ratio 1)
 cp -n "$dir/film.js" "$dir/film.orig.js"
