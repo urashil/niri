@@ -1,0 +1,537 @@
+#!/usr/bin/env python3
+"""claude-account: several Claude subscriptions for Claude Code, here and in `container` boxes.
+
+  claude-account                  the accounts, their 5-hour / weekly use, which one is on
+  claude-account add NAME         sign in to another account (a browser opens) and keep it as NAME
+  claude-account import NAME      keep the account Claude Code is signed in to now as NAME
+  claude-account use NAME|next    switch to it (running sessions follow within seconds)
+  claude-account auto [on|off]    switch by itself when the account in use hits its 5-hour (or weekly) limit (default on)
+  claude-account order A B ...    which account auto switching tries first
+  claude-account remove NAME      forget it (it stays signed in on Anthropic's side until it expires)
+
+Auto switching moves to the first account in the order that is under both limits, and never back by itself; when
+every account is at its limit it stays put. The background part is the user service claude-account.service.
+Boxes never get a refresh token: only the short-lived access token of the account in use, kept fresh from here, so a
+box can neither keep an account signed in on its own nor log this machine out by renewing a token.
+Accounts live in ~/.config/claude-accounts (0700): they are sign-ins, keep that folder private.
+"""
+import fcntl, json, os, subprocess, sys, tempfile, time, urllib.error, urllib.request
+
+HOME = os.path.expanduser("~")
+DIR = os.path.join(HOME, ".config/claude-accounts")
+ACC = os.path.join(DIR, "accounts")
+SETTINGS = os.path.join(DIR, "settings.json")
+CLAUDE = os.path.join(HOME, ".claude")
+LIVE = os.path.join(CLAUDE, ".credentials.json")
+GLOBAL = os.path.join(HOME, ".claude.json")
+RUN = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+STATE = os.path.join(RUN, "claude-account.json")     # last usage seen per account, for the status and the bar
+
+API = "https://api.anthropic.com"
+TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
+CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"   # Claude Code's own
+HDR = {"anthropic-beta": "oauth-2025-04-20", "User-Agent": "claude-code", "Content-Type": "application/json"}
+ACTIVE_EVERY, OTHER_EVERY, TICK = 60, 600, 20
+
+
+def die(msg):
+    sys.exit(f"claude-account: {msg}")
+
+
+def say(msg):
+    print(msg, flush=True)
+
+
+def load(path, default=None):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def save(path, data, mode=0o600):
+    """atomic: a reader (Claude Code) sees the old file or the new one, never half of it"""
+    d = os.path.dirname(path)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".ca-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def setup_dirs():
+    os.makedirs(ACC, mode=0o700, exist_ok=True)
+    os.chmod(DIR, 0o700)
+    os.chmod(ACC, 0o700)
+
+
+def settings():
+    s = load(SETTINGS, {}) or {}
+    s.setdefault("auto", True)
+    s.setdefault("order", [])
+    s.setdefault("active", None)
+    return s
+
+
+def names():
+    try:
+        have = sorted(f[:-5] for f in os.listdir(ACC) if f.endswith(".json"))
+    except OSError:
+        return []
+    order = [n for n in settings()["order"] if n in have]
+    return order + [n for n in have if n not in order]
+
+
+def acc_path(name):
+    if not name or not all(c.isalnum() or c in "-_." for c in name) or name.startswith("."):
+        die(f"bad account name {name!r} (letters, digits, - _ .)")
+    return os.path.join(ACC, name + ".json")
+
+
+def get(name):
+    return load(acc_path(name))
+
+
+class Lock:
+    """ours (one switch / refresh at a time), plus Claude Code's own refresh lock while the live file is touched"""
+    def __init__(self, claude_too=True):
+        self.claude_too = claude_too
+
+    def __enter__(self):
+        setup_dirs()
+        self.fd = os.open(os.path.join(DIR, ".lock"), os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        self.held = False
+        if self.claude_too:
+            # Claude Code's lock is a directory (proper-lockfile): stale after 60 s without an update
+            lk = os.path.join(CLAUDE, ".oauth_refresh.lock")
+            os.makedirs(CLAUDE, exist_ok=True)
+            for _ in range(150):
+                try:
+                    os.mkdir(lk)
+                    self.held = True
+                    break
+                except FileExistsError:
+                    try:
+                        if time.time() - os.stat(lk).st_mtime > 60:
+                            os.rmdir(lk)
+                            continue
+                    except OSError:
+                        continue
+                    time.sleep(0.2)
+            self.lk = lk
+        return self
+
+    def __exit__(self, *a):
+        if self.held:
+            try:
+                os.rmdir(self.lk)
+            except OSError:
+                pass
+        os.close(self.fd)
+
+
+def http(method, url, token=None, body=None, timeout=15):
+    h = dict(HDR)
+    if token:
+        h["Authorization"] = "Bearer " + token
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, headers=h, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+
+def profile(token):
+    p = http("GET", API + "/api/oauth/profile", token)
+    a, o = p.get("account") or {}, p.get("organization") or {}
+    return {
+        "accountUuid": a.get("uuid"), "emailAddress": a.get("email"), "displayName": a.get("display_name"),
+        "fullName": a.get("full_name"), "organizationUuid": o.get("uuid"), "organizationName": o.get("name"),
+        "organizationType": o.get("organization_type"), "billingType": o.get("billing_type"),
+        "organizationRateLimitTier": o.get("rate_limit_tier"), "hasExtraUsageEnabled": o.get("has_extra_usage_enabled"),
+    }
+
+
+def usage(token):
+    u = http("GET", API + "/api/oauth/usage", token)
+    pick = lambda k: {"used": (u.get(k) or {}).get("utilization"), "resets": (u.get(k) or {}).get("resets_at")}
+    return {"five_hour": pick("five_hour"), "seven_day": pick("seven_day"), "at": time.time()}
+
+
+def expiring(oauth, within):
+    return not oauth.get("expiresAt") or oauth["expiresAt"] / 1000 < time.time() + within
+
+
+def refresh(oauth):
+    """renew the access token the way Claude Code does; the new refresh token replaces the old one"""
+    r = http("POST", TOKEN_URL, body={
+        "grant_type": "refresh_token", "refresh_token": oauth["refreshToken"], "client_id": CLIENT_ID,
+        "scope": " ".join(oauth.get("scopes") or []),
+    }, timeout=30)
+    new = dict(oauth)
+    new["accessToken"] = r["access_token"]
+    new["refreshToken"] = r.get("refresh_token") or oauth["refreshToken"]
+    new["expiresAt"] = int((time.time() + int(r["expires_in"])) * 1000)
+    if r.get("refresh_token_expires_in"):
+        new["refreshTokenExpiresAt"] = int((time.time() + int(r["refresh_token_expires_in"])) * 1000)
+    if r.get("scope"):
+        new["scopes"] = r["scope"].split()
+    return new
+
+
+# ---------- the live sign-in (~/.claude/.credentials.json) ----------
+
+def live_oauth():
+    return (load(LIVE, {}) or {}).get("claudeAiOauth")
+
+
+def write_live(oauth, account):
+    creds = load(LIVE, {}) or {}            # other keys (MCP servers' sign-ins) stay
+    creds["claudeAiOauth"] = oauth
+    save(LIVE, creds)
+    if account:
+        g = load(GLOBAL)
+        if isinstance(g, dict):
+            g["oauthAccount"] = {**(g.get("oauthAccount") or {}), **{k: v for k, v in account.items() if v is not None}}
+            save(GLOBAL, g)
+
+
+def whose(oauth):
+    """which stored account a sign-in belongs to: by token, else by asking Anthropic who it is"""
+    if not oauth:
+        return None
+    for n in names():
+        a = get(n) or {}
+        o = a.get("claudeAiOauth") or {}
+        if oauth.get("refreshToken") and o.get("refreshToken") == oauth.get("refreshToken"):
+            return n
+        if o.get("accessToken") == oauth.get("accessToken"):
+            return n
+    try:
+        uuid = profile(oauth["accessToken"]).get("accountUuid")
+    except Exception:
+        return None
+    for n in names():
+        if (get(n) or {}).get("account", {}).get("accountUuid") == uuid:
+            return n
+    return None
+
+
+def sync_live():
+    """the live file is the newest copy of the account in use (Claude Code renews it): keep the store in step.
+    Returns the account it belongs to (None: one that was never added, e.g. a /login inside Claude Code)."""
+    oauth = live_oauth()
+    n = whose(oauth)
+    if n:
+        a = get(n)
+        if a.get("claudeAiOauth") != oauth:
+            a["claudeAiOauth"] = oauth
+            save(acc_path(n), a)
+        s = settings()
+        if s["active"] != n:
+            s["active"] = n
+            save(SETTINGS, s)
+    return n
+
+
+def fresh(name, within=300):
+    """an account's oauth with a usable access token; renews a stored (not live) one if needed"""
+    a = get(name)
+    o = a["claudeAiOauth"]
+    if expiring(o, within) and o.get("refreshToken"):
+        o = refresh(o)
+        a["claudeAiOauth"] = o
+        save(acc_path(name), a)
+    return o
+
+
+def use(name, why=""):
+    a = get(name)
+    if not a:
+        die(f"no account {name} (claude-account)")
+    with Lock():
+        cur = sync_live()
+        if cur == name and live_oauth():
+            settings_set(active=name)
+            boxes_update()
+            return False
+        o = fresh(name, 600)
+        write_live(o, a.get("account"))
+        settings_set(active=name)
+    boxes_update()
+    msg = f"Claude: now on {name}" + (f" ({why})" if why else "")
+    subprocess.run(["logger", "-t", "claude-account", msg], check=False)
+    return True
+
+
+def settings_set(**kw):
+    setup_dirs()
+    s = settings()
+    s.update(kw)
+    save(SETTINGS, s)
+
+
+# ---------- boxes ----------
+
+def box_dirs():
+    try:
+        return [os.path.join(RUN, d) for d in os.listdir(RUN)
+                if d.startswith("aibox-") and d[6:].isdigit() and os.path.isdir(os.path.join(RUN, d))
+                and not os.path.islink(os.path.join(RUN, d))]
+    except OSError:
+        return []
+
+
+def box_creds():
+    """what a box gets: the access token of the account in use, no refresh token"""
+    o = live_oauth()
+    n = settings()["active"]
+    if not o or not n:
+        return None
+    a = get(n) or {}
+    keep = ("accessToken", "expiresAt", "scopes", "subscriptionType", "rateLimitTier")
+    return {"claudeAiOauth": {**{k: o.get(k) for k in keep}, "refreshToken": None},
+            "oauthAccount": {k: v for k, v in (a.get("account") or {}).items() if v is not None}, "name": n}
+
+
+def boxes_update():
+    c = box_creds()
+    if not c:
+        return
+    for d in box_dirs():
+        p = os.path.join(d, "claude-creds.json")
+        if load(p) != c:
+            try:
+                save(p, c)
+            except OSError:
+                pass
+
+
+# ---------- commands ----------
+
+def cmd_add(name, login=True):
+    setup_dirs()
+    p = acc_path(name)
+    if os.path.exists(p):
+        die(f"{name} is already added (claude-account remove {name} first)")
+    if login:
+        tmp = tempfile.mkdtemp(prefix="claude-login-", dir=RUN)
+        try:
+            say(f"signing in the account to keep as {name}: a browser opens; sign in with that account there")
+            r = subprocess.run(["claude", "auth", "login", "--claudeai"], env={**os.environ, "CLAUDE_CONFIG_DIR": tmp})
+            oauth = (load(os.path.join(tmp, ".credentials.json"), {}) or {}).get("claudeAiOauth")
+            if r.returncode != 0 or not oauth:
+                die("the sign-in did not finish; nothing kept")
+        finally:
+            subprocess.run(["rm", "-rf", tmp], check=False)
+    else:
+        oauth = live_oauth()
+        if not oauth:
+            die("Claude Code is not signed in here")
+    acct = profile(oauth["accessToken"])
+    for n in names():
+        if (get(n) or {}).get("account", {}).get("accountUuid") == acct["accountUuid"]:
+            die(f"that is the same account as {n} ({acct['emailAddress']})")
+    save(p, {"account": acct, "claudeAiOauth": oauth, "added": int(time.time())})
+    s = settings()
+    if name not in s["order"]:
+        s["order"].append(name)
+    if not login:
+        s["active"] = name
+    save(SETTINGS, s)
+    say(f"kept {acct['emailAddress']} as {name}")
+    if login and not live_oauth():
+        use(name)
+
+
+def fmt(u):
+    if not u:
+        return "?"
+    f, w = u.get("five_hour") or {}, u.get("seven_day") or {}
+    def one(x):
+        if x.get("used") is None:
+            return "?"
+        s = f"{x['used']:.0f}%"
+        if x.get("resets") and x["used"] >= 100:
+            try:
+                from datetime import datetime
+                s += " until " + datetime.fromisoformat(x["resets"]).astimezone().strftime("%a %H:%M")
+            except ValueError:
+                pass
+        return s
+    return f"5 h {one(f):<16} week {one(w)}"
+
+
+def cmd_status():
+    ns = names()
+    if not ns:
+        say("no accounts yet: claude-account import NAME keeps the one you are signed in to; claude-account add NAME adds another")
+        return
+    s = settings()
+    st = load(STATE, {}) or {}
+    with Lock(claude_too=False):
+        cur = whose(live_oauth())
+    for n in ns:
+        a = get(n) or {}
+        u = (st.get("usage") or {}).get(n)
+        if not u or time.time() - u.get("at", 0) > 120:
+            try:
+                with Lock(claude_too=False):
+                    tok = live_oauth()["accessToken"] if n == cur else fresh(n)["accessToken"]
+                u = usage(tok)
+            except Exception:
+                pass
+        mark = "*" if n == cur else " "
+        say(f"{mark} {n:<12} {(a.get('account') or {}).get('emailAddress', '?'):<32} {fmt(u)}")
+    if cur is None and live_oauth():
+        say("  (Claude Code is signed in to an account that was never added: claude-account import NAME)")
+    up = subprocess.run(["systemctl", "--user", "is-active", "-q", "claude-account"]).returncode == 0
+    say(f"auto switching: {'on' if s['auto'] else 'off'}{'' if up or not s['auto'] else ' (but the service is not running: claude-account auto on)'}"
+        f"; order: {' '.join(ns)}")
+
+
+def limited(u):
+    if not u:
+        return False
+    f, w = (u.get("five_hour") or {}).get("used"), (u.get("seven_day") or {}).get("used")
+    return (f is not None and f >= 100) or (w is not None and w >= 100)
+
+
+def notify(msg):
+    subprocess.run(["notify-send", "-a", "Claude", "Claude account", msg], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def daemon():
+    st = load(STATE, {}) or {}
+    st.setdefault("usage", {})
+    last_check = {}
+    while True:
+        try:
+            ns = names()
+            if ns:
+                with Lock(claude_too=False):
+                    cur = sync_live()
+                o = live_oauth()
+                # boxes cannot renew their token: renew the live one ahead of time (with Claude Code's lock)
+                if cur and o and o.get("refreshToken") and expiring(o, 1800) and box_dirs():
+                    with Lock():
+                        o = live_oauth()
+                        if whose(o) == cur and expiring(o, 1800):
+                            o = refresh(o)
+                            a = get(cur)
+                            a["claudeAiOauth"] = o
+                            save(acc_path(cur), a)          # first: never lose a rotated refresh token
+                            write_live(o, None)
+                boxes_update()
+                now = time.time()
+                for n in ns:
+                    every = ACTIVE_EVERY if n == cur else OTHER_EVERY
+                    if now - last_check.get(n, 0) < every:
+                        continue
+                    last_check[n] = now
+                    try:
+                        if n == cur:
+                            tok = o["accessToken"]
+                        else:
+                            with Lock(claude_too=False):
+                                tok = fresh(n)["accessToken"]
+                        st["usage"][n] = usage(tok)
+                    except urllib.error.HTTPError as e:
+                        if e.code == 429:
+                            last_check[n] = now + 120
+                    except Exception:
+                        pass
+                st["active"] = cur
+                save(STATE, st, 0o600)
+                s = settings()
+                if s["auto"] and cur and limited(st["usage"].get(cur)):
+                    for n in ns:
+                        if n == cur:
+                            continue
+                        u = st["usage"].get(n)
+                        if u and now - u.get("at", 0) > 300:   # stale: look again before moving there
+                            try:
+                                with Lock(claude_too=False):
+                                    tok = fresh(n)["accessToken"]
+                                u = st["usage"][n] = usage(tok)
+                            except Exception:
+                                pass
+                        if u and not limited(u):
+                            f = st["usage"][cur].get("five_hour") or {}
+                            why = f"{cur} hit its {'5-hour' if (f.get('used') or 0) >= 100 else 'weekly'} limit"
+                            if use(n, why):
+                                notify(f"Switched to {n}: {why}")
+                                last_check[n] = 0
+                            break
+        except Exception as e:
+            print(f"claude-account: {e}", file=sys.stderr, flush=True)
+        time.sleep(TICK)
+
+
+def main(a):
+    c = a[0] if a else "status"
+    if c in ("status", "list", "ls"):
+        cmd_status()
+    elif c == "add" and len(a) == 2:
+        cmd_add(a[1])
+    elif c == "import" and len(a) == 2:
+        cmd_add(a[1], login=False)
+    elif c == "use" and len(a) == 2:
+        ns = names()
+        if not ns:
+            die("no accounts yet")
+        t = a[1]
+        if t == "next":
+            cur = settings()["active"]
+            t = ns[(ns.index(cur) + 1) % len(ns)] if cur in ns else ns[0]
+        say(f"now on {t}" if use(t) else f"already on {t}")
+    elif c == "auto":
+        if len(a) > 1:
+            if a[1] not in ("on", "off"):
+                die("auto on|off")
+            settings_set(auto=a[1] == "on")
+        on = settings()["auto"]
+        subprocess.run(["systemctl", "--user", "enable" if on else "disable", "--now", "claude-account"],
+                       check=False, stderr=subprocess.DEVNULL)
+        say(f"auto switching: {'on' if on else 'off'}")
+    elif c == "order" and len(a) > 1:
+        ns = names()
+        bad = [n for n in a[1:] if n not in ns]
+        if bad:
+            die(f"no account {' '.join(bad)}")
+        settings_set(order=a[1:] + [n for n in ns if n not in a[1:]])
+        say("order: " + " ".join(names()))
+    elif c == "remove" and len(a) == 2:
+        p = acc_path(a[1])
+        if not os.path.exists(p):
+            die(f"no account {a[1]}")
+        if settings()["active"] == a[1]:
+            die(f"{a[1]} is in use: claude-account use another first")
+        os.unlink(p)
+        settings_set(order=[n for n in settings()["order"] if n != a[1]])
+        say(f"removed {a[1]}")
+    elif c == "box-creds":           # internal (container): what a new box starts with
+        c = box_creds()
+        if not c:
+            sys.exit(1)
+        print(json.dumps(c))
+    elif c == "daemon":
+        daemon()
+    else:
+        print(__doc__.strip())
+        sys.exit(0 if c in ("-h", "--help", "help") else 1)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

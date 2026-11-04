@@ -148,6 +148,7 @@ say "audio services, Neovim plugins"
 # Spotify theme: spicetify from the official release (checksum-verified); start Spotify with `spotify` afterwards
 "$HOME/.local/bin/spicetify-fetch" || warn "could not install spicetify (run ~/.local/bin/spicetify-fetch with network)"
 systemctl --user enable --now pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || warn "could not enable pipewire for this session (do it after logging in)"
+systemctl --user enable claude-account >/dev/null 2>&1 || true   # claude-account: does nothing until an account is added
 if command -v nvim >/dev/null; then
   timeout 300 nvim --headless "+Lazy! sync" +qa >/dev/null 2>&1 || warn "Neovim plugin install did not finish (open nvim once with network)"
 fi

@@ -1,0 +1,11 @@
+[Unit]
+Description=Claude accounts: switch when the one in use hits its limit, keep boxes signed in
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/claude-account daemon
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
