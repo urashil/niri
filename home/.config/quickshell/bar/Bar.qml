@@ -202,7 +202,8 @@ Variants {
                         MouseArea {
                             anchors.fill: parent; anchors.margins: -4
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: UiState.claude = !UiState.claude
+                            // where the button is right now: the row around it moves without this item's own x changing
+                            onClicked: { claudeGlyph.publish(); UiState.claude = !UiState.claude; }
                         }
                     }
 
