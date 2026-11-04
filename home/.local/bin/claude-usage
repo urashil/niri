@@ -3,22 +3,32 @@
 import json, os, glob, urllib.request, time, sys
 home = os.path.expanduser('~')
 out = {}
-try:
-    tok = json.load(open(f'{home}/.claude/.credentials.json'))['claudeAiOauth']
-    req = urllib.request.Request('https://api.anthropic.com/api/oauth/usage', headers={
-        'Authorization': 'Bearer ' + tok['accessToken'], 'anthropic-beta': 'oauth-2025-04-20', 'User-Agent': 'claude-code'})
-    out['limits'] = json.load(urllib.request.urlopen(req, timeout=10))
-    out['plan'] = tok.get('subscriptionType')
-except Exception as e:
-    out['error'] = str(e)
-# several accounts (claude-account): each one's limits, and which is in use
+# several accounts (claude-account): its service is the only caller of the usage endpoint (which rate-limits hard);
+# the bar shows what it last saw, the account in use first
+acc = None
 try:
     import subprocess
     r = subprocess.run([f'{home}/.local/bin/claude-account', 'json'], capture_output=True, text=True, timeout=40)
     if r.returncode == 0:
-        out['accounts'] = json.loads(r.stdout)
+        acc = json.loads(r.stdout)
+        out['accounts'] = acc
 except Exception:
     pass
+act = next((a for a in (acc or {}).get('accounts', []) if a.get('active')), None)
+if act and act.get('five_hour'):
+    out['limits'] = {'five_hour': {'utilization': act['five_hour'].get('used'), 'resets_at': act['five_hour'].get('resets')},
+                     'seven_day': {'utilization': (act.get('seven_day') or {}).get('used'), 'resets_at': (act.get('seven_day') or {}).get('resets')}}
+    try: out['plan'] = json.load(open(f'{home}/.claude/.credentials.json'))['claudeAiOauth'].get('subscriptionType')
+    except Exception: pass
+else:
+    try:
+        tok = json.load(open(f'{home}/.claude/.credentials.json'))['claudeAiOauth']
+        req = urllib.request.Request('https://api.anthropic.com/api/oauth/usage', headers={
+            'Authorization': 'Bearer ' + tok['accessToken'], 'anthropic-beta': 'oauth-2025-04-20', 'User-Agent': 'claude-code'})
+        out['limits'] = json.load(urllib.request.urlopen(req, timeout=10))
+        out['plan'] = tok.get('subscriptionType')
+    except Exception as e:
+        out['error'] = str(e)
 cache = f'{home}/.cache/rice/claude-usage-all.json'
 try: c = json.load(open(cache))
 except Exception: c = {'files': {}}

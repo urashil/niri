@@ -78,6 +78,10 @@ for ev in ("SessionStart", "UserPromptSubmit", "Stop", "Notification", "SessionE
     lst = hooks.setdefault(ev, [])
     if not any("claude-island" in h.get("command", "") for e in lst for h in e.get("hooks", [])):
         lst.append({"hooks": [cmd]})
+# claude-account: switch accounts the moment Claude Code is refused for a usage limit
+lst = hooks.setdefault("StopFailure", [])
+if not any("claude-account" in h.get("command", "") for e in lst for h in e.get("hooks", [])):
+    lst.append({"matcher": "rate_limit", "hooks": [{"type": "command", "command": os.path.expanduser("~/.local/bin/claude-account limit-hit"), "timeout": 60}]})
 os.makedirs(os.path.dirname(p), exist_ok=True)
 json.dump(d, open(p, "w"), indent=2)
 PY

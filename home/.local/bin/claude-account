@@ -32,7 +32,7 @@ API = "https://api.anthropic.com"
 TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"   # Claude Code's own
 HDR = {"anthropic-beta": "oauth-2025-04-20", "User-Agent": "claude-code", "Content-Type": "application/json"}
-ACTIVE_EVERY, OTHER_EVERY, TICK = 60, 600, 20
+ACTIVE_EVERY, OTHER_EVERY, TICK = 60, 900, 20
 
 
 def die(msg):
@@ -373,8 +373,15 @@ def fmt(u):
     return f"5 h {one(f):<16} week {one(w)}"
 
 
-def all_usage(max_age=120):
-    """[(name, account, usage or None, in use?)], from the service's last look when recent enough"""
+def service_up():
+    return subprocess.run(["systemctl", "--user", "is-active", "-q", "claude-account"]).returncode == 0
+
+
+def all_usage(max_age=None):
+    """[(name, account, usage or None, in use?)]. With the service running this only reads what it last saw: the
+    usage endpoint rate-limits hard, and every extra caller can leave the service blind right when a limit is hit."""
+    if max_age is None:
+        max_age = 10 ** 9 if service_up() else 120
     st = load(STATE, {}) or {}
     with Lock(claude_too=False):
         cur = whose(live_oauth())
@@ -388,13 +395,10 @@ def all_usage(max_age=120):
                     tok = live_oauth()["accessToken"] if n == cur else fresh(n)["accessToken"]
                 u = usage(tok)
                 st.setdefault("usage", {})[n] = u
+                save(STATE, st)
             except Exception:
                 pass
         out.append((n, a.get("account") or {}, u, n == cur))
-    try:
-        save(STATE, st)
-    except OSError:
-        pass
     return out, cur
 
 
@@ -421,11 +425,69 @@ def cmd_json():
          "five_hour": (u or {}).get("five_hour"), "seven_day": (u or {}).get("seven_day")} for n, acct, u, on in rows]}))
 
 
-def limited(u):
+HITS = os.path.join(RUN, "claude-account-hits.json")   # Claude Code said "rate_limit" (StopFailure hook): name -> time
+HIT_FOR = 1800
+
+
+def limited(u, name=None):
+    """at its 5-hour or weekly limit: by the last usage seen, or Claude Code reporting a rate limit since (the usage
+    numbers can lag, and the endpoint itself refuses to answer when asked too often)"""
+    hit = (load(HITS, {}) or {}).get(name) if name else None
+    if hit and time.time() - hit < HIT_FOR and not (u and u.get("at", 0) > hit + 60 and not over(u)):
+        return True
+    return over(u)
+
+
+def over(u):
     if not u:
         return False
     f, w = (u.get("five_hour") or {}).get("used"), (u.get("seven_day") or {}).get("used")
     return (f is not None and f >= 100) or (w is not None and w >= 100)
+
+
+def switch_away(cur, st, refetch=True):
+    """move to the first account (in order) that is not at a limit; an account never seen yet counts as free"""
+    now = time.time()
+    for n in names():
+        if n == cur:
+            continue
+        u = st.get("usage", {}).get(n)
+        if refetch and (not u or now - u.get("at", 0) > 300):   # stale: look again before moving there
+            try:
+                with Lock(claude_too=False):
+                    tok = fresh(n)["accessToken"]
+                u = st.setdefault("usage", {})[n] = usage(tok)
+            except Exception:
+                pass
+        if not limited(u, n):
+            f = ((st.get("usage", {}).get(cur) or {}).get("five_hour") or {})
+            why = f"{cur} hit its {'weekly' if (((st.get('usage', {}).get(cur) or {}).get('seven_day') or {}).get('used') or 0) >= 100 else '5-hour'} limit"
+            if use(n, why):
+                notify(f"Switched to {n}: {why}")
+                return n
+            return None
+    return None
+
+
+def cmd_limit_hit():
+    """StopFailure hook (matcher rate_limit): Claude Code just got refused for a limit. Switch now."""
+    try:
+        d = json.load(sys.stdin)
+    except Exception:
+        d = {}
+    if d.get("error") not in (None, "rate_limit"):
+        return
+    if not settings()["auto"] or len(names()) < 2:
+        return
+    with Lock(claude_too=False):
+        cur = whose(live_oauth())
+    if not cur:
+        return
+    hits = load(HITS, {}) or {}
+    hits[cur] = time.time()
+    save(HITS, hits)
+    st = load(STATE, {}) or {}
+    switch_away(cur, st)
 
 
 def notify(msg):
@@ -436,7 +498,7 @@ def notify(msg):
 def daemon():
     st = load(STATE, {}) or {}
     st.setdefault("usage", {})
-    last_check = {}
+    last_check, backoff = {}, {}
     while True:
         try:
             ns = names()
@@ -457,7 +519,7 @@ def daemon():
                 boxes_update()
                 now = time.time()
                 for n in ns:
-                    every = ACTIVE_EVERY if n == cur else OTHER_EVERY
+                    every = max(ACTIVE_EVERY if n == cur else OTHER_EVERY, backoff.get(n, 0))
                     if now - last_check.get(n, 0) < every:
                         continue
                     last_check[n] = now
@@ -468,33 +530,22 @@ def daemon():
                             with Lock(claude_too=False):
                                 tok = fresh(n)["accessToken"]
                         st["usage"][n] = usage(tok)
+                        backoff.pop(n, None)
                     except urllib.error.HTTPError as e:
-                        if e.code == 429:
-                            last_check[n] = now + 120
+                        if e.code == 429:   # asked too often: wait as told, else double the wait (1 min .. 10 min)
+                            try:
+                                ra = int(e.headers.get("Retry-After") or 0)
+                            except ValueError:
+                                ra = 0
+                            backoff[n] = max(ra, min(600, max(60, backoff.get(n, 30) * 2)))
+                            print(f"claude-account: usage of {n}: rate limited, next look in {backoff[n]} s", file=sys.stderr, flush=True)
                     except Exception:
                         pass
                 st["active"] = cur
                 save(STATE, st, 0o600)
-                s = settings()
-                if s["auto"] and cur and limited(st["usage"].get(cur)):
-                    for n in ns:
-                        if n == cur:
-                            continue
-                        u = st["usage"].get(n)
-                        if u and now - u.get("at", 0) > 300:   # stale: look again before moving there
-                            try:
-                                with Lock(claude_too=False):
-                                    tok = fresh(n)["accessToken"]
-                                u = st["usage"][n] = usage(tok)
-                            except Exception:
-                                pass
-                        if u and not limited(u):
-                            f = st["usage"][cur].get("five_hour") or {}
-                            why = f"{cur} hit its {'5-hour' if (f.get('used') or 0) >= 100 else 'weekly'} limit"
-                            if use(n, why):
-                                notify(f"Switched to {n}: {why}")
-                                last_check[n] = 0
-                            break
+                if settings()["auto"] and cur and limited(st["usage"].get(cur), cur):
+                    if switch_away(cur, st):
+                        last_check.clear()
         except Exception as e:
             print(f"claude-account: {e}", file=sys.stderr, flush=True)
         time.sleep(TICK)
@@ -542,6 +593,8 @@ def main(a):
         os.unlink(p)
         settings_set(order=[n for n in settings()["order"] if n != a[1]])
         say(f"removed {a[1]}")
+    elif c == "limit-hit":           # the StopFailure hook
+        cmd_limit_hit()
     elif c == "json":
         cmd_json()
     elif c == "box-creds":           # internal (container): what a new box starts with
