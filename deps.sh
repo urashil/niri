@@ -26,7 +26,7 @@ for pkg in niri quickshell kitty fuzzel sddm librewolf iwd bluez bluez-utils upo
            ffmpeg librsvg imagemagick python grub efibootmgr plymouth mkinitcpio \
            ttf-jetbrains-mono-nerd ttf-nerd-fonts-symbols noto-fonts-emoji \
            qt6-svg nodejs chromium noto-fonts-cjk qt6-virtualkeyboard qt6-multimedia-ffmpeg qt6-imageformats zip jq \
-           cmatrix cava genact asciiquarium; do
+           cmatrix cava genact asciiquarium sl; do
   pacman -S --needed --noconfirm "$pkg" >/dev/null 2>&1 || echo "   (could not install $pkg from the repos: install it yourself if you need it)"
 done
 # AUR packages: PIA is what the VPN controls talk to
