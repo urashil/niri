@@ -11,6 +11,14 @@ try:
     out['plan'] = tok.get('subscriptionType')
 except Exception as e:
     out['error'] = str(e)
+# several accounts (claude-account): each one's limits, and which is in use
+try:
+    import subprocess
+    r = subprocess.run([f'{home}/.local/bin/claude-account', 'json'], capture_output=True, text=True, timeout=40)
+    if r.returncode == 0:
+        out['accounts'] = json.loads(r.stdout)
+except Exception:
+    pass
 cache = f'{home}/.cache/rice/claude-usage-all.json'
 try: c = json.load(open(cache))
 except Exception: c = {'files': {}}

@@ -7,6 +7,7 @@
   claude-account use NAME|next    switch to it (running sessions follow within seconds)
   claude-account auto [on|off]    switch by itself when the account in use hits its 5-hour (or weekly) limit (default on)
   claude-account order A B ...    which account auto switching tries first
+  claude-account json             the same for the bar
   claude-account remove NAME      forget it (it stays signed in on Anthropic's side until it expires)
 
 Auto switching moves to the first account in the order that is under both limits, and never back by itself; when
@@ -372,32 +373,52 @@ def fmt(u):
     return f"5 h {one(f):<16} week {one(w)}"
 
 
-def cmd_status():
-    ns = names()
-    if not ns:
-        say("no accounts yet: claude-account import NAME keeps the one you are signed in to; claude-account add NAME adds another")
-        return
-    s = settings()
+def all_usage(max_age=120):
+    """[(name, account, usage or None, in use?)], from the service's last look when recent enough"""
     st = load(STATE, {}) or {}
     with Lock(claude_too=False):
         cur = whose(live_oauth())
-    for n in ns:
+    out = []
+    for n in names():
         a = get(n) or {}
         u = (st.get("usage") or {}).get(n)
-        if not u or time.time() - u.get("at", 0) > 120:
+        if not u or time.time() - u.get("at", 0) > max_age:
             try:
                 with Lock(claude_too=False):
                     tok = live_oauth()["accessToken"] if n == cur else fresh(n)["accessToken"]
                 u = usage(tok)
+                st.setdefault("usage", {})[n] = u
             except Exception:
                 pass
-        mark = "*" if n == cur else " "
-        say(f"{mark} {n:<12} {(a.get('account') or {}).get('emailAddress', '?'):<32} {fmt(u)}")
+        out.append((n, a.get("account") or {}, u, n == cur))
+    try:
+        save(STATE, st)
+    except OSError:
+        pass
+    return out, cur
+
+
+def cmd_status():
+    if not names():
+        say("no accounts yet: claude-account import NAME keeps the one you are signed in to; claude-account add NAME adds another")
+        return
+    s = settings()
+    rows, cur = all_usage()
+    for n, acct, u, on in rows:
+        say(f"{'*' if on else ' '} {n:<12} {acct.get('emailAddress', '?'):<32} {fmt(u)}")
     if cur is None and live_oauth():
         say("  (Claude Code is signed in to an account that was never added: claude-account import NAME)")
     up = subprocess.run(["systemctl", "--user", "is-active", "-q", "claude-account"]).returncode == 0
     say(f"auto switching: {'on' if s['auto'] else 'off'}{'' if up or not s['auto'] else ' (but the service is not running: claude-account auto on)'}"
-        f"; order: {' '.join(ns)}")
+        f"; order: {' '.join(names())}")
+
+
+def cmd_json():
+    """for the bar"""
+    rows, cur = all_usage()
+    print(json.dumps({"auto": settings()["auto"], "active": cur, "accounts": [
+        {"name": n, "email": acct.get("emailAddress"), "active": on,
+         "five_hour": (u or {}).get("five_hour"), "seven_day": (u or {}).get("seven_day")} for n, acct, u, on in rows]}))
 
 
 def limited(u):
@@ -521,6 +542,8 @@ def main(a):
         os.unlink(p)
         settings_set(order=[n for n in settings()["order"] if n != a[1]])
         say(f"removed {a[1]}")
+    elif c == "json":
+        cmd_json()
     elif c == "box-creds":           # internal (container): what a new box starts with
         c = box_creds()
         if not c:

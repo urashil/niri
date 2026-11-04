@@ -75,8 +75,45 @@ PanelWindow {
                 wrapMode: Text.Wrap; Layout.fillWidth: true
                 font.family: Theme.font; font.pixelSize: 11; color: Theme.error
             }
-            Meter { visible: ClaudeUsage.loaded; title: "5 hour limit"; pct: ClaudeUsage.session; reset: ClaudeUsage.sessionReset }
-            Meter { visible: ClaudeUsage.loaded; title: "Weekly limit"; pct: ClaudeUsage.weekly; reset: ClaudeUsage.weeklyReset }
+            Meter { visible: ClaudeUsage.loaded && ClaudeUsage.accounts.length === 0; title: "5 hour limit"; pct: ClaudeUsage.session; reset: ClaudeUsage.sessionReset }
+            Meter { visible: ClaudeUsage.loaded && ClaudeUsage.accounts.length === 0; title: "Weekly limit"; pct: ClaudeUsage.weekly; reset: ClaudeUsage.weeklyReset }
+
+            // several accounts (claude-account): each one's limits; click one to switch to it
+            Repeater {
+                model: ClaudeUsage.accounts
+                delegate: Rectangle {
+                    id: arow
+                    required property var modelData
+                    readonly property var f: modelData.five_hour || {}
+                    readonly property var w: modelData.seven_day || {}
+                    Layout.fillWidth: true
+                    implicitHeight: acol.implicitHeight + 20
+                    radius: 10
+                    color: modelData.active ? Qt.alpha(Theme.primary, 0.12) : ahov.hovered ? Theme.surfaceHigh : Theme.surfaceContainer
+                    border.width: modelData.active ? 1 : 0
+                    border.color: Qt.alpha(Theme.primary, 0.5)
+                    HoverHandler { id: ahov; cursorShape: arow.modelData.active ? Qt.ArrowCursor : Qt.PointingHandCursor }
+                    TapHandler { onTapped: if (!arow.modelData.active) ClaudeUsage.use(arow.modelData.name) }
+                    ColumnLayout {
+                        id: acol
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                        spacing: 8
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text { text: arow.modelData.name; font.family: Theme.font; font.pixelSize: 12; font.bold: true; color: arow.modelData.active ? Theme.primary : Theme.text }
+                            Text { Layout.fillWidth: true; elide: Text.ElideRight; text: arow.modelData.email || ""; font.family: Theme.font; font.pixelSize: 9; color: Theme.textDim }
+                            Text { text: arow.modelData.active ? "in use" : "switch"; font.family: Theme.font; font.pixelSize: 9; font.bold: arow.modelData.active; color: arow.modelData.active ? Theme.primary : Theme.outline }
+                        }
+                        Meter { title: "5 hour"; pct: arow.f.used || 0; reset: (arow.f.used || 0) > 0 && arow.f.resets ? arow.f.resets : "" }
+                        Meter { title: "Weekly"; pct: arow.w.used || 0; reset: (arow.w.used || 0) > 0 && arow.w.resets ? arow.w.resets : "" }
+                    }
+                }
+            }
+            Text {
+                visible: ClaudeUsage.accounts.length > 0
+                text: ClaudeUsage.auto ? "Switches by itself when the one in use hits a limit." : "Auto switching is off (claude-account auto on)."
+                font.family: Theme.font; font.pixelSize: 9; color: Theme.outline
+            }
 
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.outlineVariant }
 

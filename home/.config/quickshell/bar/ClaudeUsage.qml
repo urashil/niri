@@ -13,6 +13,11 @@ Singleton {
     property real weekly: 0
     property string weeklyReset: ""
     property string plan: ""
+    // claude-account: every account with its own limits ([{name, email, active, five_hour, seven_day}]); empty with one
+    property var accounts: []
+    property bool auto: true
+    function use(name) { switcher.command = [Quickshell.env("HOME") + "/.local/bin/claude-account", "use", name]; switcher.running = true; }
+    Process { id: switcher; onExited: root.refresh() }
     property var all: ({ in: 0, out: 0, cr: 0, cc: 0, msgs: 0, sessions: 0 })
     readonly property real hot: Math.max(session, weekly)
 
@@ -51,6 +56,8 @@ Singleton {
                     root.all = d.all;
                     root.plan = d.plan || "";
                     root.error = d.error || "";
+                    root.accounts = d.accounts && d.accounts.accounts.length > 1 ? d.accounts.accounts : [];
+                    root.auto = d.accounts ? d.accounts.auto : true;
                     if (d.limits) {
                         root.session = d.limits.five_hour ? d.limits.five_hour.utilization : 0;
                         root.sessionReset = d.limits.five_hour ? d.limits.five_hour.resets_at : "";
