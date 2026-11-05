@@ -6,6 +6,9 @@
   range <full|nic>             iwd AddressRandomizationRange (nic keeps the vendor prefix)
   always <ssid> <on|off>       per-network AlwaysRandomizeAddress (fresh MAC on every connect)
   rotate                       new MAC now: always-random on the current network, reconnect
+  duid                         new DHCP identity now: wipe iwd's stored DUID/client-id, reconnect
+  duid-rotate <on|off>         wipe that DUID on every iwd start, so the DHCP identity (which survives MAC
+                               changes) is fresh on each boot and each reconnect
   hostname <name|random>       the hostname Wi-Fi networks see (DHCP). Only iwd gets it, in a private hostname
                                namespace (systemd ProtectHostname=private:NAME); the system hostname is never changed
   dhcp-hostname <on|off>       announce that name on every saved network (off: iwd sends no hostname at all)
@@ -80,6 +83,27 @@ def random_hostname():
 
 DROPIN_DIR = "/etc/systemd/system/iwd.service.d"
 DROPIN = DROPIN_DIR + "/rice-hostname.conf"
+DUID = IWD_DIR + "/.duid"                       # iwd's stored DHCP DUID / client identifier (stable across MACs)
+DUID_DROPIN = DROPIN_DIR + "/rice-duid.conf"
+
+def wipe_duid():
+    """Remove iwd's stored DUID so it generates a fresh one on the next start. This also rotates the DHCPv4
+    client identifier iwd derives from it, which a captive portal can key on even as the MAC changes."""
+    try:
+        os.remove(DUID)
+    except OSError:
+        pass
+
+def set_duid_rotate(on):
+    """Enable/disable wiping the DUID before every iwd start (an iwd.service ExecStartPre drop-in)."""
+    if on:
+        os.makedirs(DROPIN_DIR, exist_ok=True)
+        with open(DUID_DROPIN, "w") as f:
+            f.write(f"[Service]\nExecStartPre=-/usr/bin/rm -f {DUID}\n")
+        os.chmod(DUID_DROPIN, 0o644)
+    elif os.path.exists(DUID_DROPIN):
+        os.remove(DUID_DROPIN)
+    run("systemctl", "daemon-reload")
 
 def systemd_version():
     m = re.search(r"systemd (\d+)", run("systemctl", "--version").stdout)
@@ -216,6 +240,7 @@ def status():
         "hostname": socket.gethostname(),                 # the real system hostname, never modified
         "wifiHostname": wifi_hostname(),                  # what Wi-Fi networks see ('' = nothing sent)
         "bootHostname": run("systemctl", "is-enabled", "rice-hostname.service").stdout.strip() == "enabled",
+        "duidRotate": os.path.exists(DUID_DROPIN),
         "harden": os.path.exists("/etc/systemd/resolved.conf.d/rice.conf"),
         "dhcpHostname": wifi_hostname() != "",
         "rules": known_rules(),
@@ -259,7 +284,7 @@ def main():
     try:
         dispatch(cmd, a)
     finally:
-        if os.geteuid() == 0 and cmd in ("mode", "always", "rotate", "rule", "dhcp-hostname", "hostname", "sync"):
+        if os.geteuid() == 0 and cmd in ("mode", "always", "rotate", "duid", "duid-rotate", "rule", "dhcp-hostname", "hostname", "sync"):
             write_state()
 
 def dispatch(cmd, a):
@@ -294,6 +319,11 @@ def dispatch(cmd, a):
         if ssid and net_file(ssid):
             set_always(ssid, True)
         restart_iwd()
+    elif cmd == "duid":
+        wipe_duid(); restart_iwd()
+    elif cmd == "duid-rotate" and len(a) == 2 and a[1] in ("on", "off"):
+        set_duid_rotate(a[1] == "on")
+        restart_iwd()     # the ExecStartPre (when on) wipes the DUID now; a plain restart otherwise
     elif cmd == "hostname" and len(a) >= 2:
         name = random_hostname() if a[1] == "random" else a[1]
         if not re.fullmatch(r"[A-Za-z0-9-]{1,63}", name):

@@ -60,7 +60,7 @@ PanelWindow {
     // ---- privacy backend ----
     QtObject {
         id: priv
-        property var s: ({ mode: "disabled", range: "full", mac: "", permanent: "", ssid: null, always: false, hostname: "", bootHostname: false, harden: false })
+        property var s: ({ mode: "disabled", range: "full", mac: "", permanent: "", ssid: null, always: false, hostname: "", bootHostname: false, harden: false, duidRotate: false })
         property bool installed: true
         property string busy: ""
         property string note: ""
@@ -1278,6 +1278,13 @@ PanelWindow {
                     Layout.fillWidth: true; spacing: 8
                     Controls.Chip { label: "Rotate MAC now"; accent: Theme.yellow; onClicked: priv.run("Rotating", ["rotate"]) }
                     Text { Layout.fillWidth: true; text: "reconnects with a fresh address"; font.family: Theme.font; font.pixelSize: 10; color: Theme.outline }
+                }
+
+                Text { text: "DHCP identity (DUID / client-id — stays the same even when the MAC changes)"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 4 }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Controls.Chip { label: "New DUID now"; accent: Theme.yellow; onClicked: priv.run("Rotating DUID", ["duid"]) }
+                    Controls.Chip { label: "New DUID every start"; on: !!priv.s.duidRotate; onClicked: priv.run("Applying", ["duid-rotate", priv.s.duidRotate ? "off" : "on"]) }
                 }
 
                 Text { text: "Hostname shown to Wi-Fi networks (system hostname stays as is)"; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim; Layout.topMargin: 4 }
