@@ -20,6 +20,13 @@ PanelWindow {
     readonly property var p: Mpris.players.values.find(x => x.isPlaying) ?? (Mpris.players.values.length > 0 ? Mpris.players.values[0] : null)
     property bool reveal: false
     Timer { id: revealTimer; interval: 350; onTriggered: win.reveal = false }
+    // reveal stays while the pointer is over EITHER the catcher strip or the card (incl. its
+    // controls — arrows, dots, media buttons); it only closes once both are clear
+    property bool catcherHover: false
+    property bool cardHover: false
+    onCatcherHoverChanged: win.syncReveal()
+    onCardHoverChanged: win.syncReveal()
+    function syncReveal() { if (win.catcherHover || win.cardHover) { revealTimer.stop(); win.reveal = true; } else revealTimer.restart(); }
     readonly property bool pill: UiState.islandActive && !reveal
     property int page: 0 // 0 time, 1 media, 2 system
     function cycle(dir) { page = (page + dir + 3) % 3; }
@@ -105,7 +112,7 @@ PanelWindow {
         x: (win.width - width) / 2
         y: 0
         height: win.reveal ? win.height : 6
-        HoverHandler { id: hov; onHoveredChanged: if (hovered) { revealTimer.stop(); win.reveal = true; } else revealTimer.restart(); }
+        HoverHandler { id: hov; onHoveredChanged: win.catcherHover = hovered; }
     }
 
     // small event pill
@@ -136,6 +143,8 @@ PanelWindow {
         Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
         WheelHandler { onWheel: e => win.cycle(e.angleDelta.y < 0 ? 1 : -1) }
+        // keep the pulldown open while the pointer is anywhere over the card, including its controls
+        HoverHandler { onHoveredChanged: win.cardHover = hovered; }
 
         ColumnLayout {
             id: body
