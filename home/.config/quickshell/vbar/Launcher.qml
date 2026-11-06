@@ -309,123 +309,177 @@ PanelWindow {
 
     Rectangle {
         id: card
-        x: 60
+        x: 56
         y: 16
-        width: 640
-        height: 74 + 34 + Math.min(results.length, 8) * 54 + (results.length > 0 ? 12 : 0) + 30
-        radius: Theme.radius + 8
-        color: Qt.alpha(Theme.surface, 0.84)
+        readonly property int rows: Math.min(results.length, 9)
+        width: 660
+        height: body.implicitHeight + 36
+        radius: Theme.radius + 10
+        color: Qt.alpha(Theme.surface, 0.94)
         border.width: 1
         border.color: Theme.outlineVariant
         Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
         MouseArea { anchors.fill: parent }
 
-        Text {
-            id: glyph
-            anchors { left: parent.left; leftMargin: 24; top: parent.top; topMargin: 25 }
-            text: ""; font.family: Theme.font; font.pixelSize: 18; color: Theme.primary
-        }
-        TextInput {
-            id: input
-            anchors { left: glyph.right; leftMargin: 14; right: parent.right; rightMargin: 24; top: parent.top; topMargin: 20 }
-            height: 30
-            verticalAlignment: TextInput.AlignVCenter
-            font.family: Theme.font; font.pixelSize: 17
-            color: Theme.text
-            selectionColor: Theme.primary; selectedTextColor: Theme.fgPrimary
-            onTextChanged: { win.query = text; if (text.startsWith("f ")) fileDelay.restart(); else if (win.files.length) win.files = []; list.currentIndex = 0; if (text.startsWith("c ") && win.clip.length === 0) clipProc.running = true; if (text === "c") clipProc.running = true; }
-            function step(d) { list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d)); }
-            Keys.onEscapePressed: { if (text !== "") text = ""; else win.close(); }
-            Keys.onReturnPressed: win.accept()
-            Keys.onEnterPressed: win.accept()
-            Keys.onDownPressed: step(1)
-            Keys.onUpPressed: step(-1)
-            Keys.onTabPressed: step(1)
-            Keys.onBacktabPressed: step(-1)
-            Keys.onPressed: e => {
-                if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_N || e.key === Qt.Key_J)) { step(1); e.accepted = true; }
-                else if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_P || e.key === Qt.Key_K)) { step(-1); e.accepted = true; }
-                else if (e.key === Qt.Key_PageDown) { step(8); e.accepted = true; }
-                else if (e.key === Qt.Key_PageUp) { step(-8); e.accepted = true; }
-            }
-            Text { visible: !input.text; text: "Search apps, actions, windows…"; font: input.font; color: Theme.outline; anchors.verticalCenter: parent.verticalCenter }
+        // accent strip down the left edge, so it reads as sliding out of the bar
+        Rectangle {
+            anchors { left: parent.left; top: parent.top; bottom: parent.bottom; topMargin: 16; bottomMargin: 16 }
+            width: 3; radius: 2; color: Theme.primary; opacity: 0.85
         }
 
-        // modes: click one to start typing in it; the one in use is lit
-        Row {
-            id: modeRow
-            anchors { left: parent.left; leftMargin: 20; top: parent.top; topMargin: 64 }
-            spacing: 6
-            Repeater {
-                model: win.modes
-                delegate: Rectangle {
-                    id: chip
-                    required property var modelData
-                    readonly property bool on: win.mode === modelData
-                    height: 22; radius: 11
-                    width: chipText.implicitWidth + 18
-                    color: on ? Theme.primaryContainer : chipHover.hovered ? Theme.surfaceHigh : "transparent"
-                    border.width: 1
-                    border.color: on ? Qt.alpha(Theme.primary, 0.6) : Qt.alpha(Theme.outlineVariant, 0.8)
-                    Text {
-                        id: chipText
-                        anchors.centerIn: parent
-                        textFormat: Text.StyledText
-                        text: "<b>" + chip.modelData[0] + "</b>  " + chip.modelData[1]
-                        font.family: Theme.font; font.pixelSize: 10
-                        color: chip.on ? Theme.fgContainer : Theme.textDim
-                    }
-                    HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: { input.text = chip.on ? "" : chip.modelData[0] + ("?>".indexOf(chip.modelData[0]) >= 0 ? "" : " "); input.forceActiveFocus(); } }
-                }
-            }
-        }
+        ColumnLayout {
+            id: body
+            anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 18; leftMargin: 20; rightMargin: 20 }
+            spacing: 12
 
-        Item {
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 24; rightMargin: 24; bottomMargin: 10 }
-            height: 16
-            Text {
-                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                text: win.results.length === 0 ? (win.query === "" ? "" : "Nothing found") : win.results.length + (win.results.length === 1 ? " result" : " results")
-                font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
-            }
-            Text {
-                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                text: "↑↓  move     Enter  open     Esc  " + (win.query === "" ? "close" : "clear") + "     5 km in mi · 2^10 · sqrt(2)"
-                font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
-            }
-        }
+            // ---- search field ----
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 50
+                radius: 15
+                color: Qt.alpha(Theme.surfaceHigh, 0.6)
+                border.width: 1.5
+                border.color: input.activeFocus ? Qt.alpha(Theme.primary, 0.7) : Qt.alpha(Theme.outlineVariant, 0.9)
+                Behavior on border.color { ColorAnimation { duration: 150 } }
 
-        ListView {
-            id: list
-            anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 98; leftMargin: 12; rightMargin: 12 }
-            height: Math.min(results.length, 8) * 54
-            clip: true
-            model: win.results
-            currentIndex: 0
-            highlightMoveDuration: 90
-            delegate: Rectangle {
-                id: row
-                required property var modelData
-                required property int index
-                width: ListView.view.width; height: 54; radius: 14
-                color: ListView.isCurrentItem ? Theme.primaryContainer : "transparent"
-                IconImage { id: ic; visible: !row.modelData.glyph; implicitSize: 30; anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter } source: row.modelData.icon || "" }
-                Text { visible: !!row.modelData.glyph; width: 30; horizontalAlignment: Text.AlignHCenter; anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter } text: row.modelData.glyph || ""; font.pixelSize: 24 }
                 Text {
-                    id: kindTag
+                    id: glyph
+                    anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
+                    text: ""
+                    font.family: Theme.font; font.pixelSize: 16
+                    color: input.activeFocus ? Theme.primary : Theme.textDim
+                }
+                TextInput {
+                    id: input
+                    anchors { left: glyph.right; leftMargin: 14; right: clearBtn.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                    height: 30
+                    verticalAlignment: TextInput.AlignVCenter
+                    font.family: Theme.font; font.pixelSize: 16
+                    color: Theme.text
+                    selectionColor: Theme.primary; selectedTextColor: Theme.fgPrimary
+                    clip: true
+                    onTextChanged: { win.query = text; if (text.startsWith("f ")) fileDelay.restart(); else if (win.files.length) win.files = []; list.currentIndex = 0; if (text.startsWith("c ") && win.clip.length === 0) clipProc.running = true; if (text === "c") clipProc.running = true; }
+                    function step(d) { list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d)); }
+                    Keys.onEscapePressed: { if (text !== "") text = ""; else win.close(); }
+                    Keys.onReturnPressed: win.accept()
+                    Keys.onEnterPressed: win.accept()
+                    Keys.onDownPressed: step(1)
+                    Keys.onUpPressed: step(-1)
+                    Keys.onTabPressed: step(1)
+                    Keys.onBacktabPressed: step(-1)
+                    Keys.onPressed: e => {
+                        if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_N || e.key === Qt.Key_J)) { step(1); e.accepted = true; }
+                        else if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_P || e.key === Qt.Key_K)) { step(-1); e.accepted = true; }
+                        else if (e.key === Qt.Key_PageDown) { step(8); e.accepted = true; }
+                        else if (e.key === Qt.Key_PageUp) { step(-8); e.accepted = true; }
+                    }
+                    Text { visible: !input.text; text: "Search apps, actions, windows…"; font: input.font; color: Theme.outline; anchors.verticalCenter: parent.verticalCenter }
+                }
+                Text {
+                    id: clearBtn
                     anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-                    text: row.modelData.kind || ""
-                    font.family: Theme.font; font.pixelSize: 10
-                    color: row.ListView.isCurrentItem ? Qt.alpha(Theme.fgContainer, 0.7) : Theme.outline
+                    visible: input.text !== ""
+                    text: ""; font.family: Theme.font; font.pixelSize: 14
+                    color: cbh.hovered ? Theme.text : Theme.outline
+                    HoverHandler { id: cbh; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: { input.text = ""; input.forceActiveFocus(); } }
                 }
-                Column {
-                    anchors { left: ic.right; leftMargin: 14; right: kindTag.left; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                    spacing: 1
-                    Text { width: parent.width; text: row.modelData.title; elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 13; font.bold: true; color: row.ListView.isCurrentItem ? Theme.fgContainer : Theme.text }
-                    Text { width: parent.width; visible: text !== ""; text: row.modelData.sub; elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 10; color: row.ListView.isCurrentItem ? Qt.alpha(Theme.fgContainer, 0.75) : Theme.textDim }
+            }
+
+            // ---- mode chips ----
+            Flow {
+                id: modeRow
+                Layout.fillWidth: true
+                Layout.leftMargin: 2
+                spacing: 7
+                Repeater {
+                    model: win.modes
+                    delegate: Rectangle {
+                        id: chip
+                        required property var modelData
+                        readonly property bool on: win.mode === modelData
+                        height: 24; radius: 12
+                        width: chipText.implicitWidth + 20
+                        color: on ? Theme.primary : chipHover.hovered ? Theme.surfaceHigh : Qt.alpha(Theme.surfaceHigh, 0.4)
+                        border.width: 1
+                        border.color: on ? "transparent" : Qt.alpha(Theme.outlineVariant, 0.8)
+                        Behavior on color { ColorAnimation { duration: 110 } }
+                        Text {
+                            id: chipText
+                            anchors.centerIn: parent
+                            textFormat: Text.StyledText
+                            text: "<b>" + chip.modelData[0] + "</b>  " + chip.modelData[1]
+                            font.family: Theme.font; font.pixelSize: 10
+                            color: chip.on ? Theme.fgPrimary : Theme.textDim
+                        }
+                        HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: { input.text = chip.on ? "" : chip.modelData[0] + ("?>".indexOf(chip.modelData[0]) >= 0 ? "" : " "); input.forceActiveFocus(); } }
+                    }
                 }
-                MouseArea { anchors.fill: parent; hoverEnabled: true; onEntered: list.currentIndex = row.index; onClicked: { list.currentIndex = row.index; win.accept(); } }
+            }
+
+            // ---- results ----
+            ListView {
+                id: list
+                Layout.fillWidth: true
+                Layout.preferredHeight: card.rows * 56
+                clip: true
+                model: win.results
+                currentIndex: 0
+                highlightMoveDuration: 90
+                delegate: Rectangle {
+                    id: row
+                    required property var modelData
+                    required property int index
+                    readonly property bool cur: ListView.isCurrentItem
+                    width: ListView.view.width; height: 56; radius: 14
+                    color: cur ? Theme.primaryContainer : "transparent"
+                    Behavior on color { ColorAnimation { duration: 90 } }
+
+                    Rectangle { visible: row.cur; anchors { left: parent.left; leftMargin: 5; verticalCenter: parent.verticalCenter } width: 3; height: 26; radius: 2; color: Theme.primary }
+
+                    Rectangle {
+                        id: tile
+                        anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                        width: 38; height: 38; radius: 11
+                        color: row.cur ? Qt.alpha(Theme.primary, 0.16) : Qt.alpha(Theme.surfaceHigh, 0.5)
+                        IconImage { visible: !row.modelData.glyph; anchors.centerIn: parent; implicitSize: 24; source: row.modelData.icon || "" }
+                        Text { visible: !!row.modelData.glyph; anchors.centerIn: parent; text: row.modelData.glyph || ""; font.pixelSize: 22 }
+                    }
+                    Rectangle {
+                        id: kindPill
+                        visible: (row.modelData.kind || "") !== ""
+                        anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                        radius: 9; implicitWidth: kindTxt.implicitWidth + 16; implicitHeight: 20
+                        color: row.cur ? Qt.alpha(Theme.fgContainer, 0.14) : Qt.alpha(Theme.surfaceHigh, 0.55)
+                        Text { id: kindTxt; anchors.centerIn: parent; text: row.modelData.kind || ""; font.family: Theme.font; font.pixelSize: 9; color: row.cur ? Theme.fgContainer : Theme.outline }
+                    }
+                    Column {
+                        anchors { left: tile.right; leftMargin: 14; right: kindPill.visible ? kindPill.left : parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                        spacing: 2
+                        Text { width: parent.width; text: row.modelData.title; elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 13; font.bold: true; color: row.cur ? Theme.fgContainer : Theme.text }
+                        Text { width: parent.width; visible: text !== ""; text: row.modelData.sub; elide: Text.ElideRight; font.family: Theme.font; font.pixelSize: 10; color: row.cur ? Qt.alpha(Theme.fgContainer, 0.75) : Theme.textDim }
+                    }
+                    MouseArea { anchors.fill: parent; hoverEnabled: true; onEntered: list.currentIndex = row.index; onClicked: { list.currentIndex = row.index; win.accept(); } }
+                }
+            }
+
+            // ---- footer ----
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 16
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                Text {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    text: win.results.length === 0 ? (win.query === "" ? "" : "Nothing found") : win.results.length + (win.results.length === 1 ? " result" : " results")
+                    font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
+                }
+                Text {
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    text: "↑↓ move    ↵ open    esc " + (win.query === "" ? "close" : "clear") + "    ·  5 km in mi · 2^10"
+                    font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
+                }
             }
         }
     }

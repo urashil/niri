@@ -29,23 +29,56 @@ PanelWindow {
     property int cpu: 0
     property int mem: 0
     property int temp: 0
+    property real memUsed: 0     // GB
+    property real memTotal: 0    // GB
+    property int disk: 0
+    property real diskUsed: 0    // GB
+    property real diskTotal: 0   // GB
+    property real netDown: 0     // bytes/s
+    property real netUp: 0       // bytes/s
+    property int uptimeS: 0
+    property string load: ""
     property var last: null
+    property var lastNet: null
+
+    function fmtRate(b) { return b < 1024 ? Math.round(b) + " B/s" : b < 1048576 ? Math.round(b / 1024) + " KB/s" : (b / 1048576).toFixed(1) + " MB/s"; }
+    function fmtUp(s) { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d > 0 ? d + "d " + h + "h" : h > 0 ? h + "h " + m + "m" : m + "m"; }
+
     Process {
         id: statProc
-        command: ["sh", "-c", "head -1 /proc/stat; awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{printf \"%d\\n\", (t-a)*100/t}' /proc/meminfo; m=0; for z in /sys/class/thermal/thermal_zone*/temp; do v=$(cat $z 2>/dev/null); [ \"${v:-0}\" -gt \"$m\" ] && m=$v; done; echo $((m/1000))"]
+        command: ["sh", "-c",
+            "head -1 /proc/stat; " +
+            "awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{printf \"%d %d %d\\n\",(t-a)*100/t,t-a,t}' /proc/meminfo; " +
+            "m=0; for z in /sys/class/thermal/thermal_zone*/temp; do v=$(cat $z 2>/dev/null); [ \"${v:-0}\" -gt \"$m\" ] && m=$v; done; echo $((m/1000)); " +
+            "df -P / | awk 'NR==2{printf \"%d %d %d\\n\",($3/$2*100),$3,$2}'; " +
+            "awk '{sub(/:/,\" \")} NR>2{if($1!=\"lo\"){rx+=$2;tx+=$10}}END{printf \"%d %d\\n\",rx,tx}' /proc/net/dev; " +
+            "cut -d. -f1 /proc/uptime; " +
+            "cut -d' ' -f1-3 /proc/loadavg"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const l = text.trim().split("\n");
-                if (l.length < 3) return;
+                if (l.length < 7) return;
                 const f = l[0].trim().split(/\s+/).slice(1).map(Number);
                 const idle = f[3] + f[4], total = f.reduce((a, b) => a + b, 0);
                 if (win.last) { const dt = total - win.last.total, di = idle - win.last.idle; if (dt > 0) win.cpu = Math.round(100 * (dt - di) / dt); }
                 win.last = { idle: idle, total: total };
-                win.mem = parseInt(l[1]); win.temp = parseInt(l[2]);
+                const mm = l[1].split(/\s+/).map(Number);
+                win.mem = mm[0]; win.memUsed = mm[1] / 1048576; win.memTotal = mm[2] / 1048576;
+                win.temp = parseInt(l[2]);
+                const dk = l[3].split(/\s+/).map(Number);
+                win.disk = dk[0]; win.diskUsed = dk[1] / 1048576; win.diskTotal = dk[2] / 1048576;
+                const net = l[4].split(/\s+/).map(Number);
+                const now = Date.now();
+                if (win.lastNet) { const dts = (now - win.lastNet.t) / 1000; if (dts > 0.3 && dts < 10) { win.netDown = Math.max(0, (net[0] - win.lastNet.rx) / dts); win.netUp = Math.max(0, (net[1] - win.lastNet.tx) / dts); } }
+                win.lastNet = { rx: net[0], tx: net[1], t: now };
+                win.uptimeS = parseInt(l[5]);
+                win.load = l[6].trim().replace(/\s+/g, "  ");
             }
         }
     }
-    Timer { interval: 2000; running: win.reveal && win.page === 2; repeat: true; triggeredOnStart: true; onTriggered: statProc.running = true }
+    Timer { interval: 1500; running: win.reveal && win.page === 2; repeat: true; triggeredOnStart: true; onTriggered: statProc.running = true }
+    // drop stale deltas when leaving the system page, so the next first reading isn't a spike
+    onPageChanged: if (page !== 2) { win.last = null; win.lastNet = null; }
     Timer { interval: 500; running: win.reveal && win.page === 1 && win.p && win.p.isPlaying; repeat: true; onTriggered: if (win.p) win.p.positionChanged() }
 
     component Meter: RowLayout {
@@ -112,11 +145,25 @@ PanelWindow {
             // card header: name + left/right arrows
             RowLayout {
                 Layout.fillWidth: true
-                Text { text: ""; font.family: Theme.font; font.pixelSize: 12; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.cycle(-1) } }
+                Rectangle {
+                    implicitWidth: 30; implicitHeight: 30; radius: 15
+                    color: lhov.hovered ? Theme.surfaceHigh : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Text { anchors.centerIn: parent; text: ""; font.family: Theme.font; font.pixelSize: 19; color: lhov.hovered ? Theme.primary : Theme.text }
+                    HoverHandler { id: lhov; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: win.cycle(-1) }
+                }
                 Item { Layout.fillWidth: true }
-                Text { text: ["Time", "Media", "System"][win.page]; font.family: Theme.font; font.pixelSize: 12; font.bold: true; color: Theme.textDim }
+                Text { text: ["Time", "Media", "System"][win.page]; font.family: Theme.font; font.pixelSize: 13; font.bold: true; color: Theme.textDim }
                 Item { Layout.fillWidth: true }
-                Text { text: ""; font.family: Theme.font; font.pixelSize: 12; color: Theme.textDim; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.cycle(1) } }
+                Rectangle {
+                    implicitWidth: 30; implicitHeight: 30; radius: 15
+                    color: rhov.hovered ? Theme.surfaceHigh : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Text { anchors.centerIn: parent; text: ""; font.family: Theme.font; font.pixelSize: 19; color: rhov.hovered ? Theme.primary : Theme.text }
+                    HoverHandler { id: rhov; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: win.cycle(1) }
+                }
             }
 
             // ── pages ──
@@ -157,10 +204,48 @@ PanelWindow {
 
                 // SYSTEM
                 ColumnLayout {
-                    spacing: 14
+                    spacing: 11
                     Meter { label: "CPU"; pct: win.cpu }
-                    Meter { label: "Memory"; pct: win.mem }
+                    Meter { label: "Memory"; pct: win.mem; value: win.memUsed.toFixed(1) + " / " + win.memTotal.toFixed(1) + " GB" }
+                    Meter { label: "Disk /"; pct: win.disk; value: win.diskUsed.toFixed(0) + " / " + win.diskTotal.toFixed(0) + " GB" }
                     Meter { label: "Temp"; pct: Math.min(100, win.temp); value: win.temp + "°C" }
+
+                    // network throughput
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 3
+                        spacing: 10
+                        Repeater {
+                            model: [
+                                { g: "", tint: Theme.primary, rate: win.netDown, label: "download" },
+                                { g: "", tint: Theme.yellow,  rate: win.netUp,   label: "upload" }
+                            ]
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                implicitHeight: 48; radius: 12; color: Theme.surfaceHigh
+                                RowLayout {
+                                    anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 9
+                                    Text { text: modelData.g; font.family: Theme.font; font.pixelSize: 15; color: modelData.tint }
+                                    ColumnLayout {
+                                        spacing: 0
+                                        Text { text: win.fmtRate(modelData.rate); font.family: Theme.font; font.pixelSize: 14; font.bold: true; color: Theme.text }
+                                        Text { text: modelData.label; font.family: Theme.font; font.pixelSize: 9; color: Theme.textDim }
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                            }
+                        }
+                    }
+
+                    // uptime + load average
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 2
+                        Text { text: "  up " + win.fmtUp(win.uptimeS); font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                        Item { Layout.fillWidth: true }
+                        Text { text: "load  " + win.load; font.family: Theme.font; font.pixelSize: 10; color: Theme.textDim }
+                    }
                 }
             }
 
