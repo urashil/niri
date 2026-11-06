@@ -310,15 +310,16 @@ PanelWindow {
     Rectangle {
         id: card
         x: 56
-        y: 16
         readonly property int rows: Math.min(results.length, 9)
         width: 660
         height: body.implicitHeight + 36
+        y: win.height - height - 16
         radius: Theme.radius + 10
         color: Qt.alpha(Theme.surface, 0.94)
         border.width: 1
         border.color: Theme.outlineVariant
         Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+        Behavior on y { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
         MouseArea { anchors.fill: parent }
 
         // accent strip down the left edge, so it reads as sliding out of the bar
@@ -327,98 +328,31 @@ PanelWindow {
             width: 3; radius: 2; color: Theme.primary; opacity: 0.85
         }
 
+        // top -> bottom: hints, results (grow upward), mode chips, then the search field at the bottom
         ColumnLayout {
             id: body
-            anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 18; leftMargin: 20; rightMargin: 20 }
+            anchors { bottom: parent.bottom; left: parent.left; right: parent.right; bottomMargin: 18; leftMargin: 20; rightMargin: 20 }
             spacing: 12
 
-            // ---- search field ----
-            Rectangle {
+            // ---- footer / hints ----
+            Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 50
-                radius: 15
-                color: Qt.alpha(Theme.surfaceHigh, 0.6)
-                border.width: 1.5
-                border.color: input.activeFocus ? Qt.alpha(Theme.primary, 0.7) : Qt.alpha(Theme.outlineVariant, 0.9)
-                Behavior on border.color { ColorAnimation { duration: 150 } }
-
+                Layout.preferredHeight: 16
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
                 Text {
-                    id: glyph
-                    anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
-                    text: ""
-                    font.family: Theme.font; font.pixelSize: 16
-                    color: input.activeFocus ? Theme.primary : Theme.textDim
-                }
-                TextInput {
-                    id: input
-                    anchors { left: glyph.right; leftMargin: 14; right: clearBtn.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                    height: 30
-                    verticalAlignment: TextInput.AlignVCenter
-                    font.family: Theme.font; font.pixelSize: 16
-                    color: Theme.text
-                    selectionColor: Theme.primary; selectedTextColor: Theme.fgPrimary
-                    clip: true
-                    onTextChanged: { win.query = text; if (text.startsWith("f ")) fileDelay.restart(); else if (win.files.length) win.files = []; list.currentIndex = 0; if (text.startsWith("c ") && win.clip.length === 0) clipProc.running = true; if (text === "c") clipProc.running = true; }
-                    function step(d) { list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d)); }
-                    Keys.onEscapePressed: { if (text !== "") text = ""; else win.close(); }
-                    Keys.onReturnPressed: win.accept()
-                    Keys.onEnterPressed: win.accept()
-                    Keys.onDownPressed: step(1)
-                    Keys.onUpPressed: step(-1)
-                    Keys.onTabPressed: step(1)
-                    Keys.onBacktabPressed: step(-1)
-                    Keys.onPressed: e => {
-                        if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_N || e.key === Qt.Key_J)) { step(1); e.accepted = true; }
-                        else if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_P || e.key === Qt.Key_K)) { step(-1); e.accepted = true; }
-                        else if (e.key === Qt.Key_PageDown) { step(8); e.accepted = true; }
-                        else if (e.key === Qt.Key_PageUp) { step(-8); e.accepted = true; }
-                    }
-                    Text { visible: !input.text; text: "Search apps, actions, windows…"; font: input.font; color: Theme.outline; anchors.verticalCenter: parent.verticalCenter }
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    text: win.results.length === 0 ? (win.query === "" ? "" : "Nothing found") : win.results.length + (win.results.length === 1 ? " result" : " results")
+                    font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
                 }
                 Text {
-                    id: clearBtn
-                    anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-                    visible: input.text !== ""
-                    text: ""; font.family: Theme.font; font.pixelSize: 14
-                    color: cbh.hovered ? Theme.text : Theme.outline
-                    HoverHandler { id: cbh; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: { input.text = ""; input.forceActiveFocus(); } }
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    text: "↑↓ move    ↵ open    esc " + (win.query === "" ? "close" : "clear") + "    ·  5 km in mi · 2^10"
+                    font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
                 }
             }
 
-            // ---- mode chips ----
-            Flow {
-                id: modeRow
-                Layout.fillWidth: true
-                Layout.leftMargin: 2
-                spacing: 7
-                Repeater {
-                    model: win.modes
-                    delegate: Rectangle {
-                        id: chip
-                        required property var modelData
-                        readonly property bool on: win.mode === modelData
-                        height: 24; radius: 12
-                        width: chipText.implicitWidth + 20
-                        color: on ? Theme.primary : chipHover.hovered ? Theme.surfaceHigh : Qt.alpha(Theme.surfaceHigh, 0.4)
-                        border.width: 1
-                        border.color: on ? "transparent" : Qt.alpha(Theme.outlineVariant, 0.8)
-                        Behavior on color { ColorAnimation { duration: 110 } }
-                        Text {
-                            id: chipText
-                            anchors.centerIn: parent
-                            textFormat: Text.StyledText
-                            text: "<b>" + chip.modelData[0] + "</b>  " + chip.modelData[1]
-                            font.family: Theme.font; font.pixelSize: 10
-                            color: chip.on ? Theme.fgPrimary : Theme.textDim
-                        }
-                        HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
-                        TapHandler { onTapped: { input.text = chip.on ? "" : chip.modelData[0] + ("?>".indexOf(chip.modelData[0]) >= 0 ? "" : " "); input.forceActiveFocus(); } }
-                    }
-                }
-            }
-
-            // ---- results ----
+            // ---- results (best match sits at the bottom, nearest the input; more stack upward) ----
             ListView {
                 id: list
                 Layout.fillWidth: true
@@ -426,6 +360,7 @@ PanelWindow {
                 clip: true
                 model: win.results
                 currentIndex: 0
+                verticalLayoutDirection: ListView.BottomToTop
                 highlightMoveDuration: 90
                 delegate: Rectangle {
                     id: row
@@ -464,21 +399,90 @@ PanelWindow {
                 }
             }
 
-            // ---- footer ----
-            Item {
+            // ---- mode chips ----
+            Flow {
+                id: modeRow
                 Layout.fillWidth: true
-                Layout.preferredHeight: 16
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
+                Layout.leftMargin: 2
+                spacing: 7
+                Repeater {
+                    model: win.modes
+                    delegate: Rectangle {
+                        id: chip
+                        required property var modelData
+                        readonly property bool on: win.mode === modelData
+                        height: 24; radius: 12
+                        width: chipText.implicitWidth + 20
+                        color: on ? Theme.primary : chipHover.hovered ? Theme.surfaceHigh : Qt.alpha(Theme.surfaceHigh, 0.4)
+                        border.width: 1
+                        border.color: on ? "transparent" : Qt.alpha(Theme.outlineVariant, 0.8)
+                        Behavior on color { ColorAnimation { duration: 110 } }
+                        Text {
+                            id: chipText
+                            anchors.centerIn: parent
+                            textFormat: Text.StyledText
+                            text: "<b>" + chip.modelData[0] + "</b>  " + chip.modelData[1]
+                            font.family: Theme.font; font.pixelSize: 10
+                            color: chip.on ? Theme.fgPrimary : Theme.textDim
+                        }
+                        HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: { input.text = chip.on ? "" : chip.modelData[0] + ("?>".indexOf(chip.modelData[0]) >= 0 ? "" : " "); input.forceActiveFocus(); } }
+                    }
+                }
+            }
+
+            // ---- search field (bottom) ----
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 50
+                radius: 15
+                color: Qt.alpha(Theme.surfaceHigh, 0.6)
+                border.width: 1.5
+                border.color: input.activeFocus ? Qt.alpha(Theme.primary, 0.7) : Qt.alpha(Theme.outlineVariant, 0.9)
+                Behavior on border.color { ColorAnimation { duration: 150 } }
+
                 Text {
-                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                    text: win.results.length === 0 ? (win.query === "" ? "" : "Nothing found") : win.results.length + (win.results.length === 1 ? " result" : " results")
-                    font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
+                    id: glyph
+                    anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
+                    text: ""
+                    font.family: Theme.font; font.pixelSize: 16
+                    color: input.activeFocus ? Theme.primary : Theme.textDim
+                }
+                TextInput {
+                    id: input
+                    anchors { left: glyph.right; leftMargin: 14; right: clearBtn.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                    height: 30
+                    verticalAlignment: TextInput.AlignVCenter
+                    font.family: Theme.font; font.pixelSize: 16
+                    color: Theme.text
+                    selectionColor: Theme.primary; selectedTextColor: Theme.fgPrimary
+                    clip: true
+                    onTextChanged: { win.query = text; if (text.startsWith("f ")) fileDelay.restart(); else if (win.files.length) win.files = []; list.currentIndex = 0; if (text.startsWith("c ") && win.clip.length === 0) clipProc.running = true; if (text === "c") clipProc.running = true; }
+                    function step(d) { list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d)); }
+                    Keys.onEscapePressed: { if (text !== "") text = ""; else win.close(); }
+                    Keys.onReturnPressed: win.accept()
+                    Keys.onEnterPressed: win.accept()
+                    // list grows upward, so Up moves up the list and Down heads back toward the input
+                    Keys.onDownPressed: step(-1)
+                    Keys.onUpPressed: step(1)
+                    Keys.onTabPressed: step(1)
+                    Keys.onBacktabPressed: step(-1)
+                    Keys.onPressed: e => {
+                        if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_N || e.key === Qt.Key_J)) { step(1); e.accepted = true; }
+                        else if (e.modifiers & Qt.ControlModifier && (e.key === Qt.Key_P || e.key === Qt.Key_K)) { step(-1); e.accepted = true; }
+                        else if (e.key === Qt.Key_PageDown) { step(-8); e.accepted = true; }
+                        else if (e.key === Qt.Key_PageUp) { step(8); e.accepted = true; }
+                    }
+                    Text { visible: !input.text; text: "Search apps, actions, windows…"; font: input.font; color: Theme.outline; anchors.verticalCenter: parent.verticalCenter }
                 }
                 Text {
-                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                    text: "↑↓ move    ↵ open    esc " + (win.query === "" ? "close" : "clear") + "    ·  5 km in mi · 2^10"
-                    font.family: Theme.font; font.pixelSize: 10; color: Theme.outline
+                    id: clearBtn
+                    anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
+                    visible: input.text !== ""
+                    text: ""; font.family: Theme.font; font.pixelSize: 14
+                    color: cbh.hovered ? Theme.text : Theme.outline
+                    HoverHandler { id: cbh; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: { input.text = ""; input.forceActiveFocus(); } }
                 }
             }
         }

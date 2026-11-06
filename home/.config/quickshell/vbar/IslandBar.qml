@@ -95,7 +95,7 @@ PanelWindow {
             Rectangle { height: parent.height; radius: 5; width: parent.width * Math.max(0, Math.min(1, meter.pct / 100)); color: meter.tint
                 Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } } }
         }
-        Text { text: meter.value; Layout.preferredWidth: 52; horizontalAlignment: Text.AlignRight; font.family: Theme.font; font.pixelSize: 12; font.bold: true; color: meter.tint }
+        Text { text: meter.value; Layout.preferredWidth: Math.max(52, implicitWidth); horizontalAlignment: Text.AlignRight; maximumLineCount: 1; elide: Text.ElideNone; font.family: Theme.font; font.pixelSize: 12; font.bold: true; color: meter.tint }
     }
 
     mask: Region { item: catcher }
