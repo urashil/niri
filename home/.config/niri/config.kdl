@@ -273,7 +273,7 @@ layout {
 spawn-at-startup "awww-daemon"
 spawn-at-startup "awww-daemon" "--namespace" "backdrop"
 spawn-sh-at-startup "sleep 0.5 && @HOME@/.local/bin/wallpaper restore"
-spawn-at-startup "quickshell" "-c" "bar"
+spawn-at-startup "quickshell" "-c" "vbar"
 spawn-sh-at-startup "wl-paste --type text --watch cliphist store"
 spawn-sh-at-startup "wl-paste --type image --watch cliphist store"
 spawn-at-startup "@HOME@/.local/bin/keyboard-mode" "auto"
@@ -485,29 +485,29 @@ binds {
 
     // Suggested binds for running programs: terminal, app launcher, screen locker.
     Mod+Return hotkey-overlay-title="Open a Terminal: kitty" { spawn "kitty"; }
-    Mod+Space hotkey-overlay-title="Launcher" { spawn "quickshell" "-c" "bar" "ipc" "call" "launcher" "toggle"; }
-    Mod+D hotkey-overlay-title=null { spawn "quickshell" "-c" "bar" "ipc" "call" "launcher" "toggle"; }
+    Mod+Space hotkey-overlay-title="Launcher" { spawn "quickshell" "-c" "vbar" "ipc" "call" "launcher" "toggle"; }
+    Mod+D hotkey-overlay-title=null { spawn "quickshell" "-c" "vbar" "ipc" "call" "launcher" "toggle"; }
     Mod+Shift+Space hotkey-overlay-title="Fallback launcher: fuzzel" { spawn "fuzzel"; }
-    Alt+Tab repeat=false hotkey-overlay-title="Window Switcher" { spawn "quickshell" "-c" "bar" "ipc" "call" "switcher" "next"; }
-    Alt+Shift+Tab repeat=false hotkey-overlay-title=null { spawn "quickshell" "-c" "bar" "ipc" "call" "switcher" "prev"; }
+    Alt+Tab repeat=false hotkey-overlay-title="Window Switcher" { spawn "quickshell" "-c" "vbar" "ipc" "call" "switcher" "next"; }
+    Alt+Shift+Tab repeat=false hotkey-overlay-title=null { spawn "quickshell" "-c" "vbar" "ipc" "call" "switcher" "prev"; }
     Mod+Shift+T hotkey-overlay-title="Light / Dark" { spawn "@HOME@/.local/bin/theme-mode" "toggle"; }
 
     // Wallpaper: next random wallpaper (colors follow it via matugen).
-    Mod+X hotkey-overlay-title="Power Menu" { spawn "quickshell" "-c" "bar" "ipc" "call" "power" "toggle"; }
-    Mod+Shift+W hotkey-overlay-title="Wallpaper Picker" { spawn "quickshell" "-c" "bar" "ipc" "call" "wallpaper" "toggle"; }
-    Mod+A hotkey-overlay-title="Quick Settings" { spawn "quickshell" "-c" "bar" "ipc" "call" "quick" "toggle"; }
-    Mod+N hotkey-overlay-title="Notification History" { spawn "quickshell" "-c" "bar" "ipc" "call" "history" "toggle"; }
-    Mod+Shift+M hotkey-overlay-title=null { spawn "quickshell" "-c" "bar" "ipc" "call" "media" "toggle"; }
-    Mod+Shift+D hotkey-overlay-title="Do Not Disturb" { spawn "quickshell" "-c" "bar" "ipc" "call" "dnd" "toggle"; }
-    Mod+Shift+B hotkey-overlay-title="Caffeine / Super caffeine" { spawn "quickshell" "-c" "bar" "ipc" "call" "caffeine" "cycle"; }
-    Ctrl+Shift+Escape hotkey-overlay-title="Task Monitor" { spawn "quickshell" "-c" "bar" "ipc" "call" "monitor" "open" "cpu"; }
+    Mod+X hotkey-overlay-title="Power Menu" { spawn "quickshell" "-c" "vbar" "ipc" "call" "power" "toggle"; }
+    Mod+Shift+W hotkey-overlay-title="Wallpaper Picker" { spawn "quickshell" "-c" "vbar" "ipc" "call" "wallpaper" "toggle"; }
+    Mod+A hotkey-overlay-title="Quick Settings" { spawn "quickshell" "-c" "vbar" "ipc" "call" "quick" "toggle"; }
+    Mod+N hotkey-overlay-title="Notification History" { spawn "quickshell" "-c" "vbar" "ipc" "call" "history" "toggle"; }
+    Mod+Shift+M hotkey-overlay-title=null { spawn "quickshell" "-c" "vbar" "ipc" "call" "media" "toggle"; }
+    Mod+Shift+D hotkey-overlay-title="Do Not Disturb" { spawn "quickshell" "-c" "vbar" "ipc" "call" "dnd" "toggle"; }
+    Mod+Shift+B hotkey-overlay-title="Caffeine / Super caffeine" { spawn "quickshell" "-c" "vbar" "ipc" "call" "caffeine" "cycle"; }
+    Ctrl+Shift+Escape hotkey-overlay-title="Task Monitor" { spawn "quickshell" "-c" "vbar" "ipc" "call" "monitor" "open" "cpu"; }
     Mod+Alt+R hotkey-overlay-title="Record Screen (toggle)" { spawn "@HOME@/.local/bin/rec" "toggle"; }
     Mod+Alt+Shift+R hotkey-overlay-title="Record Region" { spawn "@HOME@/.local/bin/rec" "region"; }
-    Mod+Alt+T hotkey-overlay-title="Timer / Todo" { spawn "quickshell" "-c" "bar" "ipc" "call" "focus" "open" "timer"; }
-    Mod+Y hotkey-overlay-title="Clipboard History" { spawn "quickshell" "-c" "bar" "ipc" "call" "launcher" "open" "c "; }
-    Mod+Alt+A hotkey-overlay-title="Ask Claude" { spawn "quickshell" "-c" "bar" "ipc" "call" "ask" "open"; }
+    Mod+Alt+T hotkey-overlay-title="Timer / Todo" { spawn "quickshell" "-c" "vbar" "ipc" "call" "focus" "open" "timer"; }
+    Mod+Y hotkey-overlay-title="Clipboard History" { spawn "quickshell" "-c" "vbar" "ipc" "call" "launcher" "open" "c "; }
+    Mod+Alt+A hotkey-overlay-title="Ask Claude" { spawn "quickshell" "-c" "vbar" "ipc" "call" "ask" "open"; }
     Mod+Alt+S hotkey-overlay-title="Explain a screen region (Claude)" { spawn "@HOME@/.local/bin/explain-shot"; }
-    Mod+Alt+P hotkey-overlay-title="Memorize" { spawn "quickshell" "-c" "bar" "ipc" "call" "drill" "toggle"; }
+    Mod+Alt+P hotkey-overlay-title="Memorize" { spawn "quickshell" "-c" "vbar" "ipc" "call" "drill" "toggle"; }
     Mod+Alt+C hotkey-overlay-title="Colour picker" { spawn "@HOME@/.local/bin/colorpick"; }
     Mod+Shift+S hotkey-overlay-title="Screenshot + Annotate" { spawn "@HOME@/.local/bin/shot" "region"; }
     Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "@HOME@/.local/bin/scratch"; }

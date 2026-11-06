@@ -1,0 +1,3 @@
+[
+  { "name": "school", "run": "anonium school --no-tor", "sub": "anonium · no-tor session", "icon": "network-vpn" }
+]
