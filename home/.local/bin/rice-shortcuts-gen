@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+# Generate .desktop entries from ~/.config/rice/launcher-shortcuts.json so custom
+# shortcuts (e.g. "school") appear in any app launcher. Run on login / on edit.
+import json, os, re, sys
+
+home = os.path.expanduser("~")
+src = os.path.join(home, ".config/rice/launcher-shortcuts.json")
+dst = os.path.join(home, ".local/share/applications")
+os.makedirs(dst, exist_ok=True)
+
+try:
+    with open(src) as f:
+        items = json.load(f)
+except Exception:
+    items = []
+
+keep = set()
+for s in items if isinstance(items, list) else []:
+    name = (s or {}).get("name")
+    run = (s or {}).get("run")
+    if not name or not run:
+        continue
+    slug = re.sub(r"[^a-zA-Z0-9_-]", "_", str(name))
+    fn = f"caelestia-shortcut-{slug}.desktop"
+    keep.add(fn)
+    exec_cmd = ("kitty -e sh -c " if s.get("term") else "sh -c ") + json.dumps(str(run))
+    icon = s.get("icon", "utilities-terminal")
+    sub = str(s.get("sub", "") or "")
+    with open(os.path.join(dst, fn), "w") as f:
+        f.write(
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            f"Name={name}\n"
+            f"Comment={sub}\n"
+            f"Exec={exec_cmd}\n"
+            f"Icon={icon}\n"
+            "Terminal=false\n"
+            "Categories=Utility;\n"
+            "Keywords=shortcut;rice;\n"
+        )
+
+# drop stale generated entries
+for f in os.listdir(dst):
+    if f.startswith("caelestia-shortcut-") and f.endswith(".desktop") and f not in keep:
+        try:
+            os.remove(os.path.join(dst, f))
+        except OSError:
+            pass
+
+print(f"generated {len(keep)} shortcut(s)")

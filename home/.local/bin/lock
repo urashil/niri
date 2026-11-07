@@ -11,6 +11,11 @@ if grep -q '^NoNewPrivs:[[:space:]]*1' /proc/self/status 2>/dev/null; then
   exec systemd-run --user --quiet --collect --unit="rice-lock-$$" "$self"
 fi
 
+# Prefer the caelestia lock when the caelestia shell is running (the active shell on niri).
+if command -v caelestia >/dev/null 2>&1 && pgrep -x -u "$(id -u)" qs >/dev/null 2>&1; then
+  caelestia shell lock lock >/dev/null 2>&1 && exit 0
+fi
+
 STATE="$HOME/.cache/rice"; mkdir -p "$STATE"
 # one at a time: two triggers at once (lock + before-sleep) used to start two locks, and the second one,
 # refused by the compositor, stayed behind forever
