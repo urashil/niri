@@ -280,7 +280,7 @@ spawn-at-startup "@HOME@/.local/bin/keyboard-mode" "auto"
 spawn-at-startup "@HOME@/.local/bin/clip-prune" "--daemon"
 spawn-at-startup "@HOME@/.local/bin/vpn-autoconnect"
 // Lock before suspend (lid close -> logind suspend), lock after 5 min idle, screens off after 10.
-spawn-sh-at-startup "swayidle -w before-sleep '@HOME@/.local/bin/lock' lock '@HOME@/.local/bin/lock' timeout 300 '@HOME@/.local/bin/lock' timeout 600 'niri msg action power-off-monitors'"
+spawn-sh-at-startup "swayidle -w before-sleep 'caelestia shell lock lock' lock 'caelestia shell lock lock' timeout 300 'caelestia shell lock lock' timeout 600 'niri msg action power-off-monitors'"
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
 // spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"
@@ -513,7 +513,7 @@ binds {
     Mod+Grave hotkey-overlay-title="Scratch Terminal" { spawn "@HOME@/.local/bin/scratch"; }
     Ctrl+Grave hotkey-overlay-title="Next Wallpaper" { spawn "@HOME@/.local/bin/wallpaper" "next"; }
     Ctrl+Shift+Grave hotkey-overlay-title=null { spawn "@HOME@/.local/bin/wallpaper" "prev"; }
-    Super+Alt+L hotkey-overlay-title="Lock the Screen" { spawn "@HOME@/.local/bin/lock"; }
+    Super+Alt+L hotkey-overlay-title="Lock the Screen" { spawn "caelestia" "shell" "lock" "lock"; }
 
     // Use spawn-sh to run a shell command. Do this if you need pipes, multiple commands, etc.
     // Note: the entire command goes as a single argument. It's passed verbatim to `sh -c`.
