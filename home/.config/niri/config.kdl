@@ -499,7 +499,7 @@ binds {
     Mod+N hotkey-overlay-title="Notification History" { spawn "caelestia" "shell" "drawers" "toggle" "sidebar"; }
     Mod+Shift+M hotkey-overlay-title=null { spawn "quickshell" "-c" "vbar" "ipc" "call" "media" "toggle"; }
     Mod+Shift+D hotkey-overlay-title="Do Not Disturb" { spawn "quickshell" "-c" "vbar" "ipc" "call" "dnd" "toggle"; }
-    Mod+Shift+B hotkey-overlay-title="Caffeine / Super caffeine" { spawn "quickshell" "-c" "vbar" "ipc" "call" "caffeine" "cycle"; }
+    Mod+Shift+B hotkey-overlay-title="Caffeine / Super caffeine" { spawn "caelestia" "shell" "idleInhibitor" "cycle"; }
     Ctrl+Shift+Escape hotkey-overlay-title="Task Monitor" { spawn "quickshell" "-c" "vbar" "ipc" "call" "monitor" "open" "cpu"; }
     Mod+Alt+R hotkey-overlay-title="Record Screen (toggle)" { spawn "@HOME@/.local/bin/rec" "toggle"; }
     Mod+Alt+Shift+R hotkey-overlay-title="Record Region" { spawn "@HOME@/.local/bin/rec" "region"; }
