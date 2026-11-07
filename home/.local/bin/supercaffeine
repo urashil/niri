@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# supercaffeine [on|off|toggle|status] — control caelestia super caffeine from the terminal
+#   on      block suspend + keep awake (persists across restarts)
+#   off     turn off and kill all our inhibitors
+#   toggle  flip it (default)
+#   status  print off | caffeine | super
+case "${1:-toggle}" in
+  on)            caelestia shell idleInhibitor superEnable  >/dev/null 2>&1 ;;
+  off)           caelestia shell idleInhibitor superDisable >/dev/null 2>&1 ;;
+  toggle|"")     caelestia shell idleInhibitor superToggle  >/dev/null 2>&1 ;;
+  caffeine)      caelestia shell idleInhibitor enable       >/dev/null 2>&1 ;;
+  status)        caelestia shell idleInhibitor state ;;
+  -h|--help)     sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *)             echo "usage: supercaffeine [on|off|toggle|status]" >&2; exit 1 ;;
+esac
