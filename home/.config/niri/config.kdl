@@ -7,6 +7,9 @@
 // Find the full list of options on the wiki:
 // https://niri-wm.github.io/niri/Configuration:-Input
 input {
+    // the power key is bound below (power-key ignores the press that woke it); logind ignores it too
+    disable-power-key-handling
+
     keyboard {
         xkb {
             // You can set rules, model, layout, variant and options.
@@ -469,6 +472,9 @@ switch-events {
 }
 
 binds {
+    // Power button: suspend, but not from the press that just woke it (see ~/.local/bin/power-key)
+    XF86PowerOff allow-when-locked=true { spawn "@HOME@/.local/bin/power-key"; }
+
     // Keys consist of modifiers separated by + signs, followed by an XKB key name
     // in the end. To find an XKB name for a particular key, you may use a program
     // like wev.
@@ -531,10 +537,10 @@ binds {
 
     // Example media keys mapping using playerctl.
     // This will work with any MPRIS-enabled media player.
-    XF86AudioPlay        allow-when-locked=true { spawn-sh "qs -c bar ipc call song key play-pause"; }
-    XF86AudioStop        allow-when-locked=true { spawn-sh "qs -c bar ipc call song key stop"; }
-    XF86AudioPrev        allow-when-locked=true { spawn-sh "qs -c bar ipc call song key previous"; }
-    XF86AudioNext        allow-when-locked=true { spawn-sh "qs -c bar ipc call song key next"; }
+    XF86AudioPlay        allow-when-locked=true { spawn-sh "qs -c vbar ipc call song key play-pause"; }
+    XF86AudioStop        allow-when-locked=true { spawn-sh "qs -c vbar ipc call song key stop"; }
+    XF86AudioPrev        allow-when-locked=true { spawn-sh "qs -c vbar ipc call song key previous"; }
+    XF86AudioNext        allow-when-locked=true { spawn-sh "qs -c vbar ipc call song key next"; }
 
     // Example brightness key mappings for brightnessctl.
     // You can use regular spawn with multiple arguments too (to avoid going through "sh"),
@@ -781,7 +787,7 @@ binds {
     Mod+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
 
     // Mod+Shift+E asks in the bar's own prompt (press it again to confirm); niri's dialog if the bar is not running.
-    Mod+Shift+E hotkey-overlay-title="Log out" { spawn-sh "qs -c bar ipc call power quit || niri msg action quit"; }
+    Mod+Shift+E hotkey-overlay-title="Log out" { spawn-sh "qs -c vbar ipc call power quit || niri msg action quit"; }
     Ctrl+Alt+Delete { quit; }
 
     // Powers off the monitors. To turn them back on, do any input like

@@ -73,3 +73,7 @@ for f in /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh; do 
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
 for f in /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh; do [[ -r $f ]] && source $f; done
+
+
+# Added by Antigravity CLI installer
+export PATH="@HOME@/.local/bin:$PATH"

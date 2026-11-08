@@ -1,0 +1,17 @@
+{
+  "bar": {
+    "workspaces": {
+      "showUnoccupied": false,
+      "showWindows": false
+    },
+    "popouts": {
+      "activeWindow": false
+    }
+  },
+  "services": {
+    "weatherLocation": ""
+  },
+  "lock": {
+    "useWallpaper": true
+  }
+}

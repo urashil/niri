@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# GitHub status for the mitch.pro bar card. Read-only status + one write (approve a deploy).
+# Needs: gh (authenticated), jq.
+#   mitch-gh status            JSON: { repo, error, prs[], deploys[] }
+#   mitch-gh approve RUN ENV   approve one environment of a waiting deployment (numeric run id + env id)
+set -u
+REPO="${MITCH_REPO:-mitch-pro/mitch.pro}"
+ERRF=$(mktemp); trap 'rm -f "$ERRF"' EXIT
+GH() { timeout 20 gh "$@"; }
+
+emit_err() {
+  if command -v jq >/dev/null 2>&1; then
+    jq -cn --arg repo "$REPO" --arg e "$1" '{repo:$repo,error:$e,prs:[],deploys:[]}'
+  else
+    printf '{"repo":"%s","error":"jq not installed","prs":[],"deploys":[]}\n' "$REPO"
+  fi
+  exit 0
+}
+
+case "${1:-status}" in
+  status)
+    command -v gh >/dev/null 2>&1 || emit_err "gh not installed"
+    command -v jq >/dev/null 2>&1 || emit_err "jq not installed"
+
+    prs=$(GH pr list --repo "$REPO" --state open --limit 20 \
+            --json number,title,author,isDraft,url,createdAt,reviewDecision 2>"$ERRF") \
+      || emit_err "pr list: $(head -c 200 "$ERRF")"
+
+    runs=$(GH api "repos/$REPO/actions/runs?status=waiting&per_page=30" \
+            --jq '[.workflow_runs[] | {id, name, title: .display_title, branch: .head_branch, url: .html_url, actor: .actor.login}]' 2>"$ERRF") \
+      || emit_err "runs: $(head -c 200 "$ERRF")"
+
+    # recent workflow runs of every kind (CI, deploy, notify, ...), newest first, so the card can
+    # flag completions (failures) as they happen
+    recent=$(GH api "repos/$REPO/actions/runs?per_page=20" \
+            --jq '[.workflow_runs[] | {id, name, title: .display_title, branch: .head_branch, status, conclusion, url: .html_url, actor: .actor.login, at: .updated_at}]' 2>"$ERRF") \
+      || emit_err "recent: $(head -c 200 "$ERRF")"
+
+    # each waiting run can gate on several environments; list the ones still pending review
+    deploys='[]'
+    for rid in $(printf '%s' "$runs" | jq -r '.[].id'); do
+      pd=$(GH api "repos/$REPO/actions/runs/$rid/pending_deployments" 2>/dev/null) || continue
+      meta=$(printf '%s' "$runs" | jq -c --argjson id "$rid" '.[] | select(.id==$id)')
+      item=$(printf '%s' "$pd" | jq -c --argjson run "$meta" \
+        '[.[] | {run_id: $run.id, name: $run.name, title: $run.title, branch: $run.branch,
+                 url: $run.url, actor: $run.actor,
+                 env: .environment.name, env_id: .environment.id,
+                 canApprove: .current_user_can_approve}]')
+      deploys=$(jq -cn --argjson a "$deploys" --argjson b "$item" '$a + $b')
+    done
+
+    jq -cn --arg repo "$REPO" --argjson prs "$prs" --argjson deploys "$deploys" --argjson runs "$recent" \
+      '{repo:$repo, error:"", prs:$prs, deploys:$deploys, runs:$runs}'
+    ;;
+
+  approve)
+    run="${2:-}"; env="${3:-}"
+    case "$run" in ''|*[!0-9]*) echo "run id must be numeric" >&2; exit 2 ;; esac
+    case "$env" in ''|*[!0-9]*) echo "env id must be numeric" >&2; exit 2 ;; esac
+    GH api --method POST "repos/$REPO/actions/runs/$run/pending_deployments" \
+      -F "environment_ids[]=$env" -f "state=approved" -f "comment=approved from bar" \
+      >/dev/null 2>"$ERRF" && echo ok || { head -c 300 "$ERRF" >&2; exit 1; }
+    ;;
+
+  *) echo "usage: mitch-gh {status|approve RUN ENV}" >&2; exit 2 ;;
+esac

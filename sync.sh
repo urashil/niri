@@ -8,8 +8,8 @@ FILES=(
   .config/kitty/kitty.conf
   .config/fuzzel/fuzzel.ini
   .config/matugen
-  .config/quickshell/bar
-  .config/quickshell/lock
+  .config/quickshell/caelestia
+  .config/caelestia
   .config/nvim
   .config/gtk-3.0/settings.ini .config/gtk-4.0/settings.ini
   .config/btop/btop.conf
@@ -18,9 +18,9 @@ FILES=(
   .config/librewolf/librewolf/6yv4qbnb.default-release/chrome/userContent.css
   .config/librewolf/librewolf/6yv4qbnb.default-release/user.js
   .local/bin/lock .local/bin/lid-close .local/bin/rec .local/bin/notify-me .local/bin/caffeine-off .local/bin/theme-mode .local/bin/wallpaper .local/bin/shot .local/bin/clip .local/bin/scratch
-  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login .local/bin/pia-killswitch .local/bin/still-film .local/bin/still-fetch .local/bin/song .local/bin/still .local/bin/film .local/bin/spotify .local/bin/spicetify-fetch .local/bin/spotify-theme .local/bin/claude-usage .local/bin/keyboard-mode .local/bin/explain-shot .local/bin/colorpick .local/bin/claude-island .local/bin/awake .local/bin/lid-open .local/bin/download-watch .local/bin/rice-remote .local/bin/larp
+  .local/bin/clip-prune .local/bin/vpn-autoconnect .local/bin/boot-preview .local/bin/librewolf-theme-host .local/bin/network-login .local/bin/pia-killswitch .local/bin/still-film .local/bin/still-fetch .local/bin/song .local/bin/still .local/bin/film .local/bin/spotify .local/bin/spicetify-fetch .local/bin/spotify-theme .local/bin/claude-usage .local/bin/keyboard-mode .local/bin/explain-shot .local/bin/colorpick .local/bin/claude-island .local/bin/awake .local/bin/lid-open .local/bin/download-watch .local/bin/rice-remote .local/bin/larp .local/bin/supercaffeine .local/bin/rice-shortcuts-gen
   .config/quickshell/bootpreview
-  .config/rice/wallpaper-modes.json
+  .config/rice/wallpaper-modes.json .config/rice/launcher-shortcuts.json
   .config/rice/network-login.sh .config/spotify-launcher.conf .config/spicetify/Themes/rice/user.css .config/spicetify/Extensions/rice-live.js .config/spicetify/config-xpui.ini .local/share/applications/spotify-launcher.desktop
   .local/share/rice/librewolf-ext
   .local/share/rice/emoji.tsv .local/share/rice/still-at-server/frame.html .local/share/rice/still-at-server/frame.js
@@ -31,7 +31,7 @@ for f in "${FILES[@]}"; do
   rm -rf "home/$f"
   cp -a "$HOME/$f" "home/$f"
 done
-rm -f home/.config/quickshell/bar/colors.json
+# caelestia keeps generated scheme/state outside the synced config dir, so nothing to strip here
 # absolute home paths become a placeholder that install.sh fills in for whoever installs it
 grep -rIl "$HOME" home 2>/dev/null | xargs -r sed -i "s|$HOME|@HOME@|g"
 [ -f ~/deps.sh ] && cp -a ~/deps.sh deps.sh

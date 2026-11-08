@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Generate a diceware passphrase from the EFF large wordlist with a cryptographic RNG.
+
+  diceware [N]        print an N-word passphrase (default 6), space separated
+  diceware --json [N] print {"words":[...], "bits": <entropy>} for the bar's Memorize card
+
+Each word is one uniform draw from 7776 words = log2(7776) ≈ 12.925 bits.
+Wordlist: ~/.local/share/rice/eff_large_wordlist.txt (one word per line).
+"""
+import json
+import math
+import os
+import secrets
+import sys
+
+LIST = os.path.expanduser("~/.local/share/rice/eff_large_wordlist.txt")
+
+
+def main():
+    args = [a for a in sys.argv[1:] if a != "--json"]
+    as_json = "--json" in sys.argv[1:]
+    n = 6
+    if args:
+        if not args[0].isdigit():
+            sys.exit("usage: diceware [--json] [N]")
+        n = max(1, min(40, int(args[0])))
+
+    try:
+        with open(LIST, encoding="utf-8") as f:
+            words = [w.strip() for w in f if w.strip()]
+    except OSError as e:
+        sys.exit(f"wordlist unavailable: {e}")
+    if len(words) < 1000:
+        sys.exit("wordlist too small; refusing to generate")
+
+    picks = [words[secrets.randbelow(len(words))] for _ in range(n)]
+    bits = round(n * math.log2(len(words)), 1)
+    if as_json:
+        print(json.dumps({"words": picks, "bits": bits}))
+    else:
+        print(" ".join(picks))
+
+
+if __name__ == "__main__":
+    main()

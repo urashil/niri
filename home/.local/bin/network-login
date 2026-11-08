@@ -66,7 +66,7 @@ step "Kill switch $ks"
 pia-killswitch "$ks" >>"$log" 2>&1 || failed="$failed kill switch"
 case "$vpn" in
   off) say "vpn stays off" ;;
-  *)   [ "$vpn" = 443 ] && vpn=school; step "Connecting VPN ($( case $vpn in wg|wireguard) echo WireGuard ;; school) echo OpenVPN 443 ;; *) echo $vpn ;; esac))"; qs -c bar ipc call vpn "$vpn" >>"$log" 2>&1
+  *)   [ "$vpn" = 443 ] && vpn=school; step "Connecting VPN ($( case $vpn in wg|wireguard) echo WireGuard ;; school) echo OpenVPN 443 ;; *) echo $vpn ;; esac))"; qs -c caelestia ipc call vpn "$vpn" >>"$log" 2>&1
        # DoH back only once the VPN carries it: networks that block DoH cannot see it inside the tunnel
        c=""; for _ in $(seq 45); do c=$(timeout 5 piactl get connectionstate 2>/dev/null); [ "$c" = Connected ] && break; sleep 1; done
        [ "$c" = Connected ] || failed="$failed VPN" ;;
