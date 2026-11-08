@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Lid opened (niri switch-event): undo "low power while closed" (power profile, keyboard light).
 STATE="$HOME/.cache/rice"
+# restore caelestia's screen-on idle inhibit (paused on lid-close while super caffeine was on)
+caelestia shell idleInhibitor resumeScreen >/dev/null 2>&1
 f="$STATE/lowpower-saved"
 [ -f "$f" ] || exit 0
 read -r profile kbd < "$f"

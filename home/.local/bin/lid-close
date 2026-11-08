@@ -5,6 +5,8 @@
 STATE="$HOME/.cache/rice"
 # Super caffeine: stay running (logind is blocked from suspending) but lock and turn the screen off
 if [ -f "$STATE/super" ]; then
+  # drop caelestia's screen-on idle inhibit (keep the suspend block) so power-off-monitors sticks
+  caelestia shell idleInhibitor pauseScreen >/dev/null 2>&1
   # low power while closed (caffeine menu): remember the profile and keyboard light, lid-open puts them back
   if [ -f "$STATE/super-lowpower" ] && [ ! -f "$STATE/lowpower-saved" ]; then
     printf '%s %s\n' "$(powerprofilesctl get 2>/dev/null)" "$(brightnessctl -d "$(ls /sys/class/leds 2>/dev/null | grep -m1 kbd_backlight)" get 2>/dev/null || echo -)" > "$STATE/lowpower-saved"
