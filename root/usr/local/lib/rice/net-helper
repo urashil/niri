@@ -359,14 +359,17 @@ def dispatch(cmd, a):
         if a[1] == "off":
             tell_user("VPN kill switch is off")
     elif cmd == "vpn-daemon" and len(a) == 2 and a[1] in VPN_UNITS:
-        for name, unit in VPN_UNITS.items():
-            if name != a[1] and run("systemctl", "cat", unit).returncode == 0:
-                run("systemctl", "disable", "--now", unit)
         if run("systemctl", "cat", VPN_UNITS[a[1]]).returncode != 0:
             sys.exit(f"{VPN_UNITS[a[1]]}.service is not installed")
         r = run("systemctl", "enable", "--now", VPN_UNITS[a[1]])
         if r.returncode != 0:
             sys.exit(r.stderr.strip())
+        # the old daemons stop in the background (PIA alone takes ~15 s to shut down); stopping takes its
+        # tunnel, kill switch and DNS with it, so nothing needs to wait for that
+        for name, unit in VPN_UNITS.items():
+            if name != a[1] and run("systemctl", "cat", unit).returncode == 0:
+                run("systemctl", "disable", unit)
+                run("systemctl", "stop", "--no-block", unit)
     elif cmd == "pia" and len(a) == 2 and a[1] in ("school", "auto"):
         if a[1] == "school":
             pia_settings({"method": "openvpn", "protocol": "tcp", "remotePortTCP": 443, "automaticTransport": False})

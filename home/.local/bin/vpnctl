@@ -174,8 +174,7 @@ case $cmd in
     case $new in pia|mullvad|ivpn) ;; *) echo "unknown provider $new" >&2; exit 2 ;; esac
     has "$(bin_of "$new")" || { echo "$new is not installed" >&2; exit 1; }
     [ "$new" = "$P" ] && { pkexec "$HELPER" vpn-daemon "$new"; exit $?; }
-    disconnect >/dev/null 2>&1
-    # a kill switch left on in the old client would block the new one; stopping its daemon takes its rules with it
+    # no disconnect first: stopping the old daemon (in the background) takes its tunnel and kill switch with it
     pkexec "$HELPER" vpn-daemon "$new" || exit 1
     cfg_set provider "\"$new\""
     echo "VPN provider: $new" ;;
