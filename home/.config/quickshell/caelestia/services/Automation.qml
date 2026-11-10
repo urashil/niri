@@ -19,7 +19,7 @@ Singleton {
     property bool prevDnd: false
     property string appliedFor: ""
     property var lastApplied: ({})          // ssid -> ms of the last time its rule ran
-    property int busyWaits: 0               // settle retries spent waiting for PIA to stop being busy
+    property int busyWaits: 0               // settle retries spent waiting for the VPN to stop being busy
 
     // live Wi-Fi state (from Nmcli)
     readonly property bool wifiConnected: !!Nmcli.active
@@ -59,11 +59,11 @@ Singleton {
         if (signin.running)
             return;
         // what to restore afterwards: the rule's choice, else whatever was in use before
-        const was = (Pia.connected || Pia.busy) ? (Pia.choice === "wireguard" ? "wg" : Pia.choice === "school" ? "443" : "auto") : "off";
+        const was = (Tunnel.connected || Tunnel.busy) ? (Tunnel.choice === "wireguard" ? "wg" : Tunnel.choice === "school" ? "443" : "auto") : "off";
         const vpn = r.vpn || was;
         signin.ssid = ssid;
         signin.lastStep = "";
-        signin.command = ["network-login", vpn, r.ks || Pia.killswitch, Nmcli.wifiDev, r.login ? "1" : "0"];
+        signin.command = ["network-login", vpn, r.ks || Tunnel.killswitch, Nmcli.wifiDev, r.login ? "1" : "0"];
         signin.running = true;
     }
 
@@ -89,13 +89,13 @@ Singleton {
 
     function apply(ssid) {
         const r = rule(ssid);
-        // a flapping link must not re-run the rule over and over (each run talks to the PIA daemon):
+        // a flapping link must not re-run the rule over and over (each run talks to the VPN daemon):
         // once a minute per network at most, and never while the previous run is still going
         if (Date.now() - (lastApplied[ssid] || 0) < 60000 || signin.running)
             return;
-        // PIA still busy with the last network (e.g. "Reconnecting" after waking somewhere new, which
+        // the VPN still busy with the last network (e.g. "Reconnecting" after waking somewhere new, which
         // behind a portal never ends): a sign-in rule disconnects it anyway; a plain VPN rule waits a little
-        if (Pia.busy && !r.login && !r.ks && busyWaits < 6) {
+        if (Tunnel.busy && !r.login && !r.ks && busyWaits < 6) {
             busyWaits++;
             settle.restart();
             return;
@@ -112,15 +112,15 @@ Singleton {
         if (r.login || r.ks) {
             startSignin(ssid, r);
         } else if (r.vpn === "wg") {
-            if (!(Pia.connected && Pia.choice === "wireguard"))
-                Pia.useWireguard();
-            did.push("WireGuard");
+            if (!(Tunnel.connected && Tunnel.choice === "wireguard"))
+                Tunnel.useWireguard();
+            did.push(Tunnel.methodLabel("wireguard"));
         } else if (r.vpn === "443") {
-            if (!(Pia.connected && Pia.choice === "school"))
-                Pia.useSchool();
-            did.push("OpenVPN 443");
+            if (!(Tunnel.connected && Tunnel.choice === "school"))
+                Tunnel.useSchool();
+            did.push(Tunnel.methodLabel("school"));
         } else if (r.vpn === "off") {
-            Pia.disconnect();
+            Tunnel.disconnect();
             did.push("VPN off");
         }
         appliedFor = ssid;

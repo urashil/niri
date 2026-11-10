@@ -146,19 +146,19 @@ StyledRect {
             }
         }
 
-        // VPN (PIA) — sits with the other status icons; hover for details, click to connect/disconnect
+        // VPN (PIA / Mullvad / IVPN) — sits with the other status icons; hover for details, click to connect/disconnect
         MaterialIcon {
             property string name: "vpn"
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: root.spacing
             animate: true
-            text: Pia.connected || Pia.busy ? "vpn_key" : "vpn_key_off"
-            fill: Pia.connected ? 1 : 0
-            color: Pia.connected ? Colours.palette.m3primary : root.colour
-            opacity: Pia.connected || Pia.busy ? 1 : 0.55
+            text: Tunnel.connected || Tunnel.busy ? "vpn_key" : "vpn_key_off"
+            fill: Tunnel.connected ? 1 : 0
+            color: Tunnel.connected ? Colours.palette.m3primary : root.colour
+            opacity: Tunnel.connected || Tunnel.busy ? 1 : 0.55
 
             SequentialAnimation on opacity {
-                running: Pia.busy
+                running: Tunnel.busy
                 loops: Animation.Infinite
                 NumberAnimation { to: 0.35; duration: 500 }
                 NumberAnimation { to: 1; duration: 500 }
@@ -168,7 +168,7 @@ StyledRect {
                 anchors.fill: parent
                 anchors.margins: -4
                 cursorShape: Qt.PointingHandCursor
-                onClicked: Pia.toggle()
+                onClicked: Tunnel.toggle()
             }
         }
 

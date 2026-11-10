@@ -29,7 +29,7 @@ for pkg in niri quickshell kitty fuzzel sddm librewolf iwd bluez bluez-utils upo
            cmatrix cava genact asciiquarium sl; do
   pacman -S --needed --noconfirm "$pkg" >/dev/null 2>&1 || echo "   (could not install $pkg from the repos: install it yourself if you need it)"
 done
-# AUR packages: PIA is what the VPN controls talk to
+# AUR packages: PIA is the default VPN client (mullvad-vpn or ivpn work as well: install one, pick it in the VPN popout)
 if ! pacman -Q piavpn-bin >/dev/null 2>&1; then
   if command -v yay >/dev/null; then
     sudo -u "$USER_NAME" yay -S --needed --noconfirm piavpn-bin || echo "   (piavpn-bin did not install; the VPN controls need it)"
@@ -40,7 +40,7 @@ fi
 # larp mode extras (it skips whatever is missing)
 command -v yay >/dev/null && sudo -u "$USER_NAME" yay -S --needed --noconfirm tty-clock cbonsai pipes.sh >/dev/null 2>&1 || true
 
-echo "==> network privacy helper (MAC / hostname / PIA transport)"
+echo "==> network privacy helper (MAC / hostname / VPN transport and daemon)"
 SRC="$UHOME/dotfiles/root"
 [ -d "$SRC" ] || SRC="$HERE/root"
 install -Dm755 "$SRC/usr/local/lib/rice/net-helper" /usr/local/lib/rice/net-helper

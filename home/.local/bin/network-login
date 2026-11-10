@@ -22,17 +22,17 @@ restore() {
   [ "$finished" = 1 ] && return
   say "interrupted: DNS guard and kill switch back on"
   pkexec /usr/local/lib/rice/net-helper dns-guard on >>"$log" 2>&1
-  pia-killswitch "$ks" >>"$log" 2>&1
+  vpnctl killswitch "$ks" >>"$log" 2>&1
 }
 trap restore EXIT
 trap 'exit 130' HUP INT TERM
 step "Turning VPN and kill switch off"
-timeout 10 piactl disconnect >/dev/null 2>&1
-pia-killswitch off >>"$log" 2>&1
+vpnctl disconnect >/dev/null 2>&1
+vpnctl killswitch off >>"$log" 2>&1
 # a DNS guard (rice-dns-guard.service, if installed) blocks plain DNS, and the sign-in page needs it
 pkexec /usr/local/lib/rice/net-helper dns-guard off >>"$log" 2>&1
 for _ in 1 2 3 4 5 6 7 8; do
-  [ "$(timeout 5 piactl get connectionstate 2>/dev/null)" = Disconnected ] && break
+  [ "$(vpnctl state 2>/dev/null)" = Disconnected ] && break
   sleep 1
 done
 
@@ -63,13 +63,12 @@ fi
 
 failed=""
 step "Kill switch $ks"
-pia-killswitch "$ks" >>"$log" 2>&1 || failed="$failed kill switch"
+vpnctl killswitch "$ks" >>"$log" 2>&1 || failed="$failed kill switch"
 case "$vpn" in
   off) say "vpn stays off" ;;
-  *)   [ "$vpn" = 443 ] && vpn=school; step "Connecting VPN ($( case $vpn in wg|wireguard) echo WireGuard ;; school) echo OpenVPN 443 ;; *) echo $vpn ;; esac))"; qs -c caelestia ipc call vpn "$vpn" >>"$log" 2>&1
+  *)   [ "$vpn" = 443 ] && vpn=school; step "Connecting VPN ($(vpnctl provider), $( case $vpn in wg|wireguard) echo WireGuard ;; school) echo restricted-network transport ;; *) echo $vpn ;; esac))"; qs -c caelestia ipc call vpn "$vpn" >>"$log" 2>&1
        # DoH back only once the VPN carries it: networks that block DoH cannot see it inside the tunnel
-       c=""; for _ in $(seq 45); do c=$(timeout 5 piactl get connectionstate 2>/dev/null); [ "$c" = Connected ] && break; sleep 1; done
-       [ "$c" = Connected ] || failed="$failed VPN" ;;
+       vpnctl wait 45 || failed="$failed VPN" ;;
 esac
 if [ "$login" = 1 ]; then
   step "DNS back to DoH"; pkexec /usr/local/lib/rice/net-helper dns-guard on >>"$log" 2>&1 || failed="$failed DNS guard"

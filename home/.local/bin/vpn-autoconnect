@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Connect the VPN (PIA) once per login. Turn it off in quick settings > VPN > "Connect at startup",
-# or with: vpn-autoconnect off | on | status
+# Connect the VPN (PIA, Mullvad or IVPN, whichever vpnctl uses) once per login. Turn it off in quick settings > VPN >
+# "Connect at startup", or with: vpn-autoconnect off | on | status
 CONF="$HOME/.config/rice/vpn.json"
 FLAG="${XDG_RUNTIME_DIR:-/tmp}/rice-vpn-autoconnect"
 
-enabled() { ! grep -Eq '"autoConnect"[[:space:]]*:[[:space:]]*false' "$CONF" 2>/dev/null; }
-setting() { mkdir -p "$(dirname "$CONF")"; printf '{"autoConnect": %s}\n' "$1" > "$CONF"; }
+enabled() { [ "$(jq -r '.autoConnect' "$CONF" 2>/dev/null)" != false ]; }
+setting() { # keep the other keys (provider, per-client choices)
+  mkdir -p "$(dirname "$CONF")"
+  local cur; cur=$(cat "$CONF" 2>/dev/null); jq -e . >/dev/null 2>&1 <<<"$cur" || cur='{}'
+  jq --argjson v "$1" '.autoConnect = $v' <<<"$cur" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
+}
 
 case "${1:-}" in
   off) setting false; echo "VPN will not connect at startup"; exit 0 ;;
@@ -20,11 +24,10 @@ enabled || exit 0
 # the daemon starts with the system; wait for it to answer
 state=""
 for _ in $(seq 1 40); do
-  state=$(timeout 5 piactl get connectionstate 2>/dev/null) && [ -n "$state" ] && break
-  sleep 2
+  state=$(vpnctl state 2>/dev/null)
+  case "$state" in ""|Unavailable) sleep 2 ;; *) break ;; esac
 done
-[ -n "$state" ] || exit 1
+case "$state" in ""|Unavailable) exit 1 ;; esac
 enabled || exit 0                    # switched off while we waited
-case "$state" in
-  Disconnected) piactl background enable; piactl connect ;;
-esac
+[ "$state" = Disconnected ] && vpnctl connect
+exit 0

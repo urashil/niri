@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# vpnctl: one front for the VPN clients the rice can drive (PIA, Mullvad, IVPN).
+# The shell, network-login and vpn-autoconnect all talk to the VPN through this, so they don't care which one is in use.
+#
+#   vpnctl provider [pia|mullvad|ivpn]  show / switch (switching stops the other daemons, enables this one: root, once)
+#   vpnctl providers                    the installed ones
+#   vpnctl state                        Connected | Connecting | Reconnecting | Disconnecting | Disconnected | Interrupted | Unavailable
+#   vpnctl connect | disconnect | toggle
+#   vpnctl wait [secs]                  until Connected (exit 1 on timeout)
+#   vpnctl method <wireguard|school|auto|stealth>  and connect. school = the restrictive-network transport:
+#                                       PIA/IVPN OpenVPN over TCP 443, Mullvad WireGuard over TCP 443 (udp2tcp);
+#                                       IVPN only: stealth = WireGuard in V2Ray VMESS/TCP on 443, stealth-quic = V2Ray QUIC,
+#                                       obfs4 = OpenVPN through obfsproxy
+#   vpnctl ivpn-set <key> <value> ...   IVPN connection options (method port region exit ipv6 mtu), reconnects if up
+#   vpnctl region <id|auto>             region ids as printed by `vpnctl regions` (id<TAB>label)
+#   vpnctl killswitch <on|auto|off> [reconnect]
+#                                       on = block whenever the VPN is down, auto = only while it should be up, off = never
+#                                       (Mullvad always blocks on an unexpected drop, so it has no 'off')
+#
+# Choices the clients don't keep themselves (Mullvad/IVPN method, region, IVPN kill switch) live in ~/.config/rice/vpn.json.
+set -u
+CONF="$HOME/.config/rice/vpn.json"
+HELPER=/usr/local/lib/rice/net-helper
+
+cfg() { jq -r "$1 // empty" "$CONF" 2>/dev/null; }
+cfg_set() { # cfg_set <key> <json value>
+  mkdir -p "$(dirname "$CONF")"
+  local cur; cur=$(cat "$CONF" 2>/dev/null); jq -e . >/dev/null 2>&1 <<<"$cur" || cur='{}'
+  jq --arg k "$1" --argjson v "$2" '.[$k] = $v' <<<"$cur" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
+}
+
+has() { command -v "$1" >/dev/null 2>&1; }
+installed() { local p; for p in pia mullvad ivpn; do has "$(bin_of $p)" && echo $p; done; }
+bin_of() { case $1 in pia) echo piactl ;; mullvad) echo mullvad ;; ivpn) echo ivpn ;; esac; }
+provider() {
+  local p; p=$(cfg .provider)
+  [ -n "$p" ] && has "$(bin_of "$p")" && { echo "$p"; return; }
+  installed | head -n1
+}
+P=$(provider)
+[ -n "$P" ] || { [ "${1:-}" = state ] && echo Unavailable; echo "no VPN client installed (piavpn-bin, mullvad-vpn, ivpn)" >&2; exit 1; }
+
+# ── PIA ─────────────────────────────────────────────────────────────────────────
+pia_state() { timeout 5 piactl get connectionstate 2>/dev/null || echo Unavailable; }
+pia_connect() { piactl background enable; timeout 20 piactl connect; }
+pia_method() {
+  case $1 in
+    wireguard) piactl set protocol wireguard ;;
+    school) # the TCP/443 pin lives in the daemon settings (root); only ask once
+            jq -e '.protocol == "tcp" and .remotePortTCP == 443 and .automaticTransport == false' /opt/piavpn/etc/settings.json >/dev/null 2>&1 \
+              || pkexec "$HELPER" pia school || return 1
+            piactl set protocol openvpn ;;
+    auto) pkexec "$HELPER" pia auto; piactl set protocol openvpn ;;
+  esac
+  pia_connect
+}
+pia_region() { piactl set region "$1" && { [ "$(pia_state)" = Connected ] && piactl connect; true; }; }
+pia_regions() { timeout 10 piactl get regions | grep -vx auto | sort | while read -r r; do printf '%s\t%s\n' "$r" "$(sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' <<<"$r")"; done; }
+
+# ── Mullvad ─────────────────────────────────────────────────────────────────────
+mv_json() { timeout 5 mullvad status --json 2>/dev/null | grep -m1 '^{'; }
+mv_state() {
+  local s; s=$(mv_json | jq -r .state 2>/dev/null)
+  case $s in
+    connected) echo Connected ;; connecting) echo Connecting ;; disconnecting) echo Disconnecting ;;
+    disconnected) echo Disconnected ;; error) echo Interrupted ;; *) echo Unavailable ;;
+  esac
+}
+mv_method() {
+  case $1 in wireguard) m=off ;; school) m=udp2tcp ;; *) m=auto ;; esac
+  # school: UDP-over-TCP pinned to 443, the one port a locked-down network lets out
+  if [ "$m" = udp2tcp ]; then mullvad anti-censorship set udp2tcp --port 443 || return 1; fi
+  mullvad anti-censorship set mode "$m" && cfg_set mullvadMethod "\"$1\"" && mullvad connect
+}
+mv_region() { # id: auto | se | se/got
+  if [ "$1" = auto ]; then mullvad relay set location any; else mullvad relay set location ${1//\// }; fi && cfg_set mullvadRegion "\"$1\""
+}
+mv_regions() { # "Sweden (se)" / "\tGothenburg (got) @ ..." -> se<TAB>Sweden, se/got<TAB>Sweden · Gothenburg
+  timeout 15 mullvad relay list | awk '
+    /^[^\t].* \([a-z]+\)$/ { match($0, /\(([a-z]+)\)$/); cc = substr($0, RSTART + 1, RLENGTH - 2); country = substr($0, 1, RSTART - 2); print cc "\t" country; next }
+    /^\t[^\t].* \([a-z]+\) @/ { line = substr($0, 2); sub(/ @.*/, "", line); match(line, /\(([a-z]+)\)$/); print cc "/" substr(line, RSTART + 1, RLENGTH - 2) "\t" country " · " substr(line, 1, RSTART - 2) }'
+}
+mv_killswitch() {
+  case $1 in on) mullvad lockdown-mode set on ;; *) mullvad lockdown-mode set off ;; esac && cfg_set mullvadKs "\"$( [ "$1" = on ] && echo on || echo auto )\""
+}
+
+# ── IVPN ────────────────────────────────────────────────────────────────────────
+iv_status() { timeout 8 ivpn status 2>/dev/null; }
+iv_state() {
+  local s; s=$(iv_status | sed -nE 's/^VPN[[:space:]]*:[[:space:]]*([A-Z_]+).*/\1/p' | head -n1)
+  case $s in
+    CONNECTED) echo Connected ;; DISCONNECTED|PAUSED|INITIALISED) echo Disconnected ;; EXITING) echo Disconnecting ;;
+    RECONNECTING) echo Reconnecting ;; "") echo Unavailable ;; *) echo Connecting ;;
+  esac
+}
+# connection options live in vpn.json (ivpnMethod, ivpnPort, ivpnRegion, ivpnExit, ivpnIpv6, ivpnMtu, ivpnKs) because
+# `ivpn connect` takes them as flags each time. Region: auto | CC (country, upper case) | gateway key ("us-ut" for
+# us-ut.wg.ivpn.net / us-ut.gw.ivpn.net). ivpnExit: gateway key of a Multi-Hop exit, "" = single hop.
+iv_connect() {
+  local m r k port x6 mtu exit sfx args=()
+  m=$(cfg .ivpnMethod); r=$(cfg .ivpnRegion); k=$(cfg .ivpnKs); port=$(cfg .ivpnPort)
+  x6=$(cfg .ivpnIpv6); mtu=$(cfg .ivpnMtu); exit=$(cfg .ivpnExit)
+  sfx=wg
+  case ${m:-wireguard} in
+    wireguard)    args+=(-p wg); [ -n "$port" ] && args+=(-port "$port") ;;
+    stealth)      args+=(-p wg -v2ray tcp -port "${port:-tcp:443}") ;;    # WireGuard in V2Ray VMESS/TCP: looks like TCP 443
+    stealth-quic) args+=(-p wg -v2ray quic -port "${port:-udp:443}") ;;   # WireGuard in V2Ray VMESS/QUIC (HTTP/3-like)
+    school)       sfx=gw; args+=(-p ovpn -port "${port:-tcp:443}") ;;
+    obfs4)        sfx=gw; args+=(-p ovpn -o obfs4) ;;
+    *)            sfx=gw; args+=(-p ovpn); [ -n "$port" ] && args+=(-port "$port") ;;
+  esac
+  if [ "$sfx" = wg ]; then
+    [ "$x6" = true ] && args+=(-ipv6tunnel)
+    [ -n "$mtu" ] && [ "$mtu" != 0 ] && args+=(-mtu "$mtu")
+  fi
+  [ "${k:-auto}" = off ] && args+=(-fw_off)
+  if [ -n "$exit" ]; then
+    # Multi-Hop: one exact entry gateway, no -fastest
+    [[ $r =~ ^[a-z0-9-]+$ ]] || { echo "Multi-Hop needs a specific entry server (pick a city)" >&2; return 2; }
+    args+=(-exit_svr "$exit.$sfx.ivpn.net" "$r.$sfx.ivpn.net")
+  elif [ -z "$r" ] || [ "$r" = auto ]; then args+=(-fastest)
+  elif [[ $r =~ ^[A-Z]{2}$ ]]; then args+=(-cc -any "$r")
+  else args+=(-any "$r.$sfx.ivpn.net")
+  fi
+  [ -n "${VPNCTL_DRY:-}" ] && { echo "ivpn connect ${args[*]}"; return 0; }
+  # flags first, location last: the CLI stops reading flags at the first plain argument
+  local out rc; out=$(timeout 45 ivpn connect "${args[@]}" 2>&1); rc=$?
+  [ $rc -eq 0 ] || { grep -Ei 'error|not allowed|specify|unable|failed' <<<"$out" | tail -n1 >&2; }
+  return $rc
+}
+# ivpn-set key value [key value ...]: store connection options, reconnect if connected
+iv_set() {
+  local reconnect=0
+  while [ $# -ge 2 ]; do
+    case $1 in
+      method) [[ $2 =~ ^(wireguard|stealth|stealth-quic|school|auto|obfs4)$ ]] || { echo "bad method" >&2; return 2; }; cfg_set ivpnMethod "\"$2\"" ;;
+      port) [[ $2 =~ ^((udp|tcp):[0-9]{1,5})?$ ]] || { echo "bad port (udp:N / tcp:N)" >&2; return 2; }; cfg_set ivpnPort "\"$2\"" ;;
+      region) [[ $2 =~ ^(auto|[A-Z]{2}|[a-z0-9-]{1,30})$ ]] || { echo "bad region" >&2; return 2; }; cfg_set ivpnRegion "\"$2\"" ;;
+      exit) [[ $2 =~ ^[a-z0-9-]{0,30}$ ]] || { echo "bad exit server" >&2; return 2; }; cfg_set ivpnExit "\"$2\"" ;;
+      ipv6) [[ $2 =~ ^(true|false)$ ]] || return 2; cfg_set ivpnIpv6 "$2" ;;
+      mtu) [[ $2 =~ ^[0-9]{0,4}$ ]] || { echo "bad MTU" >&2; return 2; }; cfg_set ivpnMtu "${2:-0}" ;;
+      *) echo "unknown option $1" >&2; return 2 ;;
+    esac
+    shift 2
+  done
+  case $(iv_state) in Connected|Connecting|Reconnecting) iv_connect ;; esac
+}
+iv_method() { cfg_set ivpnMethod "\"$1\""; iv_connect; }
+iv_region() { cfg_set ivpnRegion "\"$1\""; [ "$(iv_state)" = Connected ] && iv_connect; true; }
+iv_regions() { # rows: PROTOCOL|LOCATION|City (CC)| Country|... -> CC<TAB>Country
+  timeout 15 ivpn servers | sed -nE 's/.*\(([A-Z]{2})\)[[:space:]]*\|[[:space:]]*([^|]*[^|[:space:]])[[:space:]]*\|.*/\1\t\2/p' | sort -t$'\t' -k2 -u
+}
+iv_killswitch() {
+  cfg_set ivpnKs "\"$1\""
+  case $1 in
+    on) ivpn firewall -persistent_on >/dev/null && ivpn firewall -on >/dev/null ;;
+    auto) ivpn firewall -persistent_off >/dev/null; [ "$(iv_state)" = Connected ] || ivpn firewall -off >/dev/null; true ;;
+    off) ivpn firewall -persistent_off >/dev/null; ivpn firewall -off >/dev/null; true ;;
+  esac
+}
+
+# ── dispatch ────────────────────────────────────────────────────────────────────
+state() { case $P in pia) pia_state ;; mullvad) mv_state ;; ivpn) iv_state ;; esac; }
+connect() { case $P in pia) pia_connect ;; mullvad) timeout 20 mullvad connect ;; ivpn) iv_connect ;; esac; }
+disconnect() { case $P in pia) timeout 10 piactl disconnect ;; mullvad) timeout 10 mullvad disconnect ;; ivpn) timeout 15 ivpn disconnect >/dev/null ;; esac; }
+up() { case $(state) in Connected|Connecting|Reconnecting) return 0 ;; esac; return 1; }
+
+cmd=${1:-state}; shift || true
+case $cmd in
+  state) state ;;
+  provider)
+    [ $# -eq 0 ] && { echo "$P"; exit 0; }
+    new=$1
+    case $new in pia|mullvad|ivpn) ;; *) echo "unknown provider $new" >&2; exit 2 ;; esac
+    has "$(bin_of "$new")" || { echo "$new is not installed" >&2; exit 1; }
+    [ "$new" = "$P" ] && { pkexec "$HELPER" vpn-daemon "$new"; exit $?; }
+    disconnect >/dev/null 2>&1
+    # a kill switch left on in the old client would block the new one; stopping its daemon takes its rules with it
+    pkexec "$HELPER" vpn-daemon "$new" || exit 1
+    cfg_set provider "\"$new\""
+    echo "VPN provider: $new" ;;
+  providers) installed ;;
+  connect) connect ;;
+  disconnect) disconnect ;;
+  toggle) if up; then disconnect; else connect; fi ;;
+  wait)
+    for _ in $(seq "${1:-45}"); do [ "$(state)" = Connected ] && exit 0; sleep 1; done; exit 1 ;;
+  method)
+    case ${1:-} in wireguard|wg) m=wireguard ;; school|443) m=school ;; auto) m=auto ;; stealth|v2ray) m=stealth ;; stealth-quic|obfs4) m=$1 ;; *) echo "method wireguard|school|auto|stealth|stealth-quic|obfs4" >&2; exit 2 ;; esac
+    case $m in stealth*|obfs4) [ "$P" != ivpn ] && { echo "$m is IVPN only" >&2; exit 2; } ;; esac
+    case $P in pia) pia_method $m ;; mullvad) mv_method $m ;; ivpn) iv_method $m ;; esac ;;
+  region)
+    r=${1:?region}
+    [[ $r =~ ^[A-Za-z0-9/_-]{1,40}$ ]] || { echo "bad region" >&2; exit 2; }
+    case $P in pia) pia_region "$r" ;; mullvad) mv_region "$r" ;; ivpn) iv_region "$r" ;; esac ;;
+  ivpn-set) [ "$P" = ivpn ] || { echo "IVPN is not the provider" >&2; exit 2; }; iv_set "$@" ;;
+  regions) case $P in pia) pia_regions ;; mullvad) mv_regions ;; ivpn) iv_regions ;; esac ;;
+  killswitch)
+    k=${1:?on|auto|off}; reconnect=${2:-}
+    case $k in on|auto|off) ;; *) echo "killswitch on|auto|off" >&2; exit 2 ;; esac
+    case $P in
+      pia) exec pia-killswitch "$k" $reconnect ;;   # restarts the daemon, so it reconnects itself
+      mullvad) mv_killswitch "$k" ;;
+      ivpn) iv_killswitch "$k" ;;
+    esac
+    rc=$?
+    [ -n "$reconnect" ] && ! up && connect >/dev/null
+    exit $rc ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "unknown command $cmd (vpnctl help)" >&2; exit 2 ;;
+esac

@@ -194,7 +194,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Tokens.spacing.small
                     Ch { checked: opts.ar.vpn === "wg"; text: Tr.tr("WireGuard"); onClicked: opts.setAuto("vpn", "wg") }
-                    Ch { checked: opts.ar.vpn === "443"; text: Tr.tr("OpenVPN 443"); onClicked: opts.setAuto("vpn", "443") }
+                    Ch { checked: opts.ar.vpn === "443"; text: Tunnel.methodLabel("school"); onClicked: opts.setAuto("vpn", "443") }
                     Ch { checked: opts.ar.vpn === "off"; text: Tr.tr("Off"); onClicked: opts.setAuto("vpn", "off") }
                 }
 

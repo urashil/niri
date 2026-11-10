@@ -86,17 +86,17 @@ ColumnLayout {
     }
 
     Row_ {
-        icon: Pia.connected ? "vpn_lock" : "vpn_key_off"
-        accent: Pia.connected ? Colours.palette.m3primary : Pia.blocked ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant
+        icon: Tunnel.connected ? "vpn_lock" : "vpn_key_off"
+        accent: Tunnel.connected ? Colours.palette.m3primary : Tunnel.blocked ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant
         label: Tr.tr("VPN")
-        value: Pia.connected ? Pia.pretty(Pia.region) + " · " + Pia.label : Pia.busy ? Tr.tr("Connecting…") : Tr.tr("Off")
+        value: Tunnel.connected ? Tunnel.pretty(Tunnel.region) + " · " + Tunnel.label : Tunnel.busy ? Tr.tr("Connecting…") : Tr.tr("Off")
     }
 
     Row_ {
-        icon: Pia.blocked ? "block" : "shield"
-        accent: Pia.blocked ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant
+        icon: Tunnel.blocked ? "block" : "shield"
+        accent: Tunnel.blocked ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant
         label: Tr.tr("Kill switch")
-        value: Pia.blocked ? Tr.tr("Blocking") : Pia.ksMode === "on" ? Tr.tr("On") : Pia.ksMode === "auto" ? Tr.tr("Auto") : Tr.tr("Off")
+        value: Tunnel.blocked ? Tr.tr("Blocking") : Tunnel.ksMode === "on" ? Tr.tr("On") : Tunnel.ksMode === "auto" ? Tr.tr("Auto") : Tr.tr("Off")
     }
 
     Row_ {

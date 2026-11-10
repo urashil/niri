@@ -14,7 +14,7 @@ It is safe to re-run; anything it replaces in `$HOME` is first saved to `~/.conf
 and back in, and restart LibreWolf once.
 
 - `install.sh`  the one entry point (calls `deps.sh` through sudo, then copies `home/`, `wallpapers/`, builds the LibreWolf extension)
-- `deps.sh`     root part: packages (+ PIA from the AUR via yay), network-privacy helper + polkit rule, SilentSDDM, services
+- `deps.sh`     root part: packages (+ PIA from the AUR via yay; Mullvad / IVPN work too if installed), network-privacy helper + polkit rule, SilentSDDM, services
 - `sync.sh`     the other direction: copy the live config, scripts and wallpapers from `$HOME` into this repo
 - `home/`       dotfiles and scripts, `wallpapers/` the wallpaper set, `assets/` GTK theme archive, `root/` root-owned files, `boot/` GRUB + Plymouth scripts
 
@@ -31,7 +31,7 @@ Lock screen: `~/.local/bin/lock` runs the quickshell lock (`~/.config/quickshell
 swaylock if it does not engage within 4 s. `LOCK_TEST=1 lock` auto-unlocks after 6 s for testing,
 `LOCK_PREVIEW=1 quickshell -c lock` shows the UI in a normal window.
 
-PIA: everything goes through `piactl`; the TCP/443 transport has to be pinned once (PIA app, or the quick
+VPN: everything goes through `vpnctl` (PIA, Mullvad or IVPN, `vpnctl help`). PIA: the TCP/443 transport has to be pinned once (PIA app, or the quick
 settings VPN page, no password prompt once deps.sh has installed the polkit rule) because `piactl` has no port setting.
 
 Clipboard history keeps only the last 60 minutes (`clip-prune --daemon`, started by niri; `CLIP_MAX_MIN` changes it, `clip-prune --wipe` clears it).

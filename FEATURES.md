@@ -122,18 +122,47 @@ Privacy tile exposes:
 The MAC only shows after iwd reconnects, so the UI keeps polling for a few seconds after a
 change.
 
-## VPN (Private Internet Access)
+## VPN (PIA, Mullvad or IVPN)
 
-VPN is **PIA via `piactl`**; state comes from `piactl monitor`, so changes show instantly.
-Supports WireGuard and OpenVPN (incl. TCP 443 for restrictive networks), region selection,
-and a **kill switch** (on / auto / off) that cuts traffic until the VPN connects — the
-quick-settings panel warns and offers to connect or disable it when traffic is blocked.
+One VPN popout for whichever client is installed: **PIA** (`piactl`), **Mullvad** (`mullvad`) or **IVPN** (`ivpn`).
+With more than one installed, a **Provider** row switches between them; switching disconnects the old one, stops and
+disables its daemon and enables the new one (`net-helper vpn-daemon`), so only one client owns the firewall and DNS.
+Everything goes through `~/.local/bin/vpnctl` (`vpnctl help`); the choice is kept in `~/.config/rice/vpn.json`.
+
+State is live: `piactl monitor` and `mullvad status listen` push changes; IVPN has no event stream, so it is polled.
+
+- **Protocol**: WireGuard / the restrictive-network transport / a fallback. PIA and IVPN: OpenVPN over TCP 443.
+  Mullvad has no OpenVPN, so it uses WireGuard over TCP 443 (udp2tcp) and "Auto obfuscation" as the fallback.
+  IVPN also has **WireGuard · V2Ray TCP 443** (WireGuard inside V2Ray VMESS/TCP, which looks like ordinary TCP on 443).
+
+### IVPN menu
+
+With IVPN as the provider the popout becomes a full IVPN menu (`IvpnMenu.qml`, data in `services/Ivpn.qml`):
+
+- **Status card**: server (Multi-Hop entry → exit), protocol + port, uptime, tunnel/server IP, DNS, unhealthy-tunnel
+  warning; connect / disconnect, **pause** (5 m – 1 day) / resume, reconnect. Plan and days left under it.
+- **Server**: fastest, any of ~58 cities or a whole country, search, **ping all**, sort by ping; **Multi-Hop** with
+  entry and exit picked from the same list.
+- **Protocol**: WireGuard, V2Ray TCP (443), V2Ray QUIC (UDP 443), OpenVPN TCP (443) / UDP, OpenVPN obfs4; port presets;
+  IPv6 in the tunnel and MTU for WireGuard.
+- **Kill switch & firewall**: always on (persistent) / with VPN / off, allow LAN, allow IVPN servers, IP exceptions.
+- **DNS & AntiTracker**: off / on / hardcore, block list, custom DNS with optional DoH.
+- **Split tunnel**: on/off, inverse mode, launch a command inside it, running apps.
+- **Trusted Wi-Fi**: IVPN's own trusted/untrusted rules for the current network and the actions they trigger.
+- **Advanced**: connect when the IVPN service starts, WireGuard key rotation, new keys.
+
+Connection options (protocol, port, server, Multi-Hop, IPv6, MTU) are `ivpn connect` flags, so `vpnctl ivpn-set` keeps
+them in `~/.config/rice/vpn.json` and reconnects when the tunnel is up; the rest are IVPN daemon settings.
+- **Kill switch** (on / auto / off): cuts traffic until the VPN connects. Mullvad maps "on" to lockdown mode and has
+  no "off" (it always blocks an unexpected drop). IVPN "on" is the persistent (always-on) firewall.
+- **Region**: PIA regions, Mullvad countries and cities, IVPN countries ("Auto" = PIA's choice, any Mullvad relay,
+  IVPN's fastest server).
 
 ## Per-network automation
 
 `~/.config/rice/networks.json` holds rules applied **when you connect** to an SSID:
 
-- **VPN**: WireGuard / OpenVPN TCP 443 / off.
+- **VPN**: WireGuard / restrictive-network transport (TCP 443) / off.
 - **Kill switch**: on / auto / off.
 - **Quiet** (do-not-disturb) on connect.
 - **Sign in first**: drops VPN + kill switch, runs `~/.config/rice/network-login.sh` for the
