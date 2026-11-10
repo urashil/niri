@@ -56,10 +56,8 @@ PathView {
     Component.onCompleted: currentIndex = Wallpapers.list.findIndex(w => w.path === Wallpapers.actualCurrent)
     Component.onDestruction: Wallpapers.stopPreview()
 
-    onCurrentItemChanged: {
-        if (currentItem)
-            Wallpapers.preview((currentItem as WallpaperItem).modelData.path);
-    }
+    // no live preview while browsing: each one swapped the desktop wallpaper and re-generated the whole scheme
+    // (`caelestia wallpaper -p`), which is slow; nothing changes until a wallpaper is picked
 
     implicitWidth: Math.min(numItems, count) * itemWidth
     pathItemCount: numItems

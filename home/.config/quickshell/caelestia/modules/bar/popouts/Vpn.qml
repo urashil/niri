@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import Caelestia.Config
 import Caelestia.I18n
@@ -12,7 +13,7 @@ Flickable {
     id: flick
 
     implicitWidth: 320
-    implicitHeight: Math.min(root.implicitHeight, 620)
+    implicitHeight: Math.min(root.implicitHeight, 620, Screen.height > 0 ? Math.round(Screen.height * 0.7) : 100000)
     contentWidth: width
     contentHeight: root.implicitHeight
     clip: true
@@ -37,7 +38,7 @@ Flickable {
         Layout.fillWidth: true
         elide: Text.ElideRight
         color: Colours.palette.m3onSurfaceVariant
-        text: Pia.connected ? (Pia.pretty(Pia.region) + (Pia.vpnIp ? "  ·  " + Pia.vpnIp : "")) : Pia.pretty(Pia.region)
+        text: Pia.pretty(Pia.region) + "  ·  " + Pia.label + (Pia.connected && Pia.vpnIp ? "  ·  " + Pia.vpnIp : "")
     }
 
     StyledText {
@@ -53,6 +54,28 @@ Flickable {
         icon: (Pia.connected || Pia.busy) ? "vpn_key_off" : "vpn_key"
         text: (Pia.connected || Pia.busy) ? Tr.tr("Disconnect") : Tr.tr("Connect")
         onClicked: Pia.toggle()
+    }
+
+    StyledText {
+        Layout.topMargin: Tokens.spacing.small
+        text: Tr.tr("Protocol")
+        color: Colours.palette.m3onSurfaceVariant
+    }
+    Flow {
+        Layout.fillWidth: true
+        spacing: Tokens.spacing.small
+        Repeater {
+            model: [["wireguard", "WireGuard"], ["school", "OpenVPN · TCP 443"], ["auto", "OpenVPN · auto"]]
+            delegate: IconTextButton {
+                required property var modelData
+                isToggle: true
+                checked: Pia.choice === modelData[0]
+                text: modelData[1]
+                font: Tokens.font.label.small
+                verticalPadding: Tokens.padding.small
+                onClicked: modelData[0] === "wireguard" ? Pia.useWireguard() : modelData[0] === "school" ? Pia.useSchool() : Pia.useOpenvpnAuto()
+            }
+        }
     }
 
     StyledText {

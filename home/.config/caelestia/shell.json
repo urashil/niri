@@ -1,17 +1,88 @@
 {
-  "bar": {
-    "workspaces": {
-      "showUnoccupied": false,
-      "showWindows": false
+    "appearance": {
+        "transparency": {
+            "enabled": true
+        }
     },
-    "popouts": {
-      "activeWindow": false
+    "bar": {
+        "popouts": {
+            "activeWindow": false
+        },
+        "workspaces": {
+            "showUnoccupied": false,
+            "showWindows": false
+        }
+    },
+    "general": {
+        "idle": {
+            "timeouts": [
+                {
+                    "enabled": true,
+                    "idleAction": "lock",
+                    "inhibitWhenAudio": false,
+                    "inhibitWhenCharging": false,
+                    "respectInhibitors": true,
+                    "timeout": 420
+                },
+                {
+                    "enabled": true,
+                    "idleAction": "dpms off",
+                    "inhibitWhenAudio": false,
+                    "inhibitWhenCharging": false,
+                    "respectInhibitors": true,
+                    "returnAction": "dpms on",
+                    "timeout": 300
+                },
+                {
+                    "enabled": true,
+                    "idleAction": [
+                        "suspendThenHibernate"
+                    ],
+                    "inhibitWhenAudio": false,
+                    "inhibitWhenCharging": false,
+                    "respectInhibitors": true,
+                    "timeout": 600
+                }
+            ]
+        }
+    },
+    "lock": {
+        "useWallpaper": true
+    },
+    "services": {
+        "weatherLocation": ""
+    },
+    "utilities": {
+        "quickToggles": [
+            {
+                "enabled": true,
+                "id": "wifi"
+            },
+            {
+                "enabled": true,
+                "id": "bluetooth"
+            },
+            {
+                "enabled": true,
+                "id": "mic"
+            },
+            {
+                "enabled": true,
+                "id": "settings"
+            },
+            {
+                "enabled": true,
+                "id": "nightlight"
+            },
+            {
+                "enabled": true,
+                "id": "dnd"
+            }
+        ],
+        "vpn": {
+            "provider": [
+            ],
+            "selectedProvider": ""
+        }
     }
-  },
-  "services": {
-    "weatherLocation": ""
-  },
-  "lock": {
-    "useWallpaper": true
-  }
 }

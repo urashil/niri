@@ -73,6 +73,45 @@ Item {
                 return Qt.size(image.implicitWidth * dpr, image.implicitHeight * dpr);
             }
         }
+
+        // light / dark this wallpaper comes up in; click: auto -> light -> dark
+        StyledRect {
+            id: modeBadge
+
+            readonly property string mode: Colours.wallMode(root.modelData.path)
+
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: Tokens.padding.small
+            visible: root.PathView.isCurrentItem || mode !== "auto"
+            implicitWidth: badgeRow.implicitWidth + Tokens.padding.medium * 2
+            implicitHeight: badgeRow.implicitHeight + Tokens.padding.small * 2
+            radius: Tokens.rounding.full
+            color: Qt.alpha(Colours.palette.m3surfaceContainerHighest, 0.85)
+
+            StateLayer {
+                radius: Tokens.rounding.full
+                onClicked: Colours.cycleWallMode(root.modelData.path)
+            }
+
+            Row {
+                id: badgeRow
+
+                anchors.centerIn: parent
+                spacing: Tokens.spacing.extraSmall
+
+                MaterialIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modeBadge.mode === "light" ? "light_mode" : modeBadge.mode === "dark" ? "dark_mode" : "brightness_auto"
+                    color: modeBadge.mode === "auto" ? Colours.palette.m3onSurfaceVariant : Colours.palette.m3primary
+                }
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modeBadge.mode === "light" ? qsTr("Light") : modeBadge.mode === "dark" ? qsTr("Dark") : qsTr("Auto")
+                    font: Tokens.font.label.small
+                }
+            }
+        }
     }
 
     StyledText {

@@ -117,12 +117,6 @@ Item {
         }
 
         Popout {
-            name: "caffeine"
-            sourceComponent: Caffeine {}
-        }
-
-
-        Popout {
             name: "claude"
             sourceComponent: Claude {}
         }

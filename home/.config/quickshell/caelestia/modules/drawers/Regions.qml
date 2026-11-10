@@ -67,6 +67,13 @@ Region {
         height: panel.height * (1 - root.panels.utilities.offsetScale) + root.borderThickness
     }
 
+    // the wifi/bluetooth/night-light flyout that pops out to the left of the utilities panel; without this
+    // it is outside the window's input mask, so it gets no pointer events and moving onto it reads as
+    // leaving the shell (hiding the panel and the flyout)
+    R {
+        panel: root.panels.networkFlyout
+    }
+
     R {
         panel: root.panels.popoutsWrapper
         width: panel.width * (1 - root.panels.popoutsWrapper.offsetScale)

@@ -1,23 +1,15 @@
 #!/usr/bin/env bash
-# theme-mode [dark|light|toggle] [--no-restore]: regenerate every colour scheme in the other mode.
-# --no-restore only switches the mode and the GTK theme (wallpaper does the colours itself).
+# theme-mode [dark|light|toggle]: switch caelestia (and, through its postHook rice-theme-sync, every app) to light
+# or dark. The choice sticks for the wallpaper on screen, like the old theme-mode: next time it comes up, it comes
+# up in this mode. (`wallpaper mode <file> auto` hands it back to caelestia's automatic pick.)
 set -u
-STATE="$HOME/.cache/rice"; mkdir -p "$STATE"
-cur=$(cat "$STATE/mode" 2>/dev/null); [ "$cur" = light ] || cur=dark
+cur=$(python3 -I -c 'import json,os;print(json.load(open(os.path.expanduser("~/.local/state/caelestia/scheme.json"))).get("mode","dark"))' 2>/dev/null)
+[ "$cur" = light ] || cur=dark
 case "${1:-toggle}" in
   toggle) [ "$cur" = dark ] && mode=light || mode=dark ;;
   dark|light) mode=$1 ;;
   *) echo "usage: theme-mode [dark|light|toggle]" >&2; exit 1 ;;
 esac
-echo "$mode" > "$STATE/mode"
-# a mode chosen by hand sticks for this wallpaper (also across restarts); wallpaper uses --no-restore and leaves it alone
-[ "${2:-}" = --no-restore ] || cat "$STATE/current" > "$STATE/mode-manual" 2>/dev/null
-
-if [ "$mode" = dark ]; then theme=Nordic-darker; scheme=prefer-dark; pd=1; else theme=Adwaita; scheme=prefer-light; pd=0; fi
-gsettings set org.gnome.desktop.interface color-scheme "$scheme" 2>/dev/null
-gsettings set org.gnome.desktop.interface gtk-theme "$theme" 2>/dev/null
-for f in "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"; do
-  [ -f "$f" ] && sed -i "s/^gtk-theme-name=.*/gtk-theme-name=$theme/; s/^gtk-application-prefer-dark-theme=.*/gtk-application-prefer-dark-theme=$pd/" "$f"
-done
-[ "${2:-}" = --no-restore ] && exit 0
-exec "$HOME/.local/bin/wallpaper" restore
+wall=$(cat "$HOME/.local/state/caelestia/wallpaper/path.txt" 2>/dev/null)
+[ -n "$wall" ] && "$HOME/.local/bin/rice-theme-sync" --mode "$wall" "$mode"
+exec caelestia scheme set -m "$mode"

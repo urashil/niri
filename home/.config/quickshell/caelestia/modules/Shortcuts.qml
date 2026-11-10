@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Caelestia
+import Caelestia.Config
 import qs.components.misc
 import qs.services
 import qs.modules.nexus
@@ -118,6 +119,15 @@ Scope {
             } else {
                 console.warn(lc, `Drawer "${drawer}" does not exist`);
             }
+        }
+
+        // open the launcher on the wallpaper picker
+        function wallpapers(): void {
+            if (root.hasFullscreen)
+                return;
+            const screenState = ShellState.forActive();
+            screenState.launcherQuery = `${GlobalConfig.launcher.actionPrefix}wallpaper `;
+            screenState.launcher = true;
         }
 
         function list(): string {

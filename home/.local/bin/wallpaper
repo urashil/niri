@@ -1,118 +1,42 @@
 #!/usr/bin/env bash
 # wallpaper [next|prev|random|restore|set <file>|mode <file> [light|dark|auto]]
-# Sets the wallpaper with awww, then regenerates the whole color scheme from it
-# with matugen (kitty, niri, fuzzel, quickshell bar, swaylock, GTK accent).
+# Thin front for caelestia (it draws the wallpaper and builds the colour scheme); its theme.postHook,
+# rice-theme-sync, carries the colours to kitty, niri, GTK, LibreWolf, Spotify, nvim, SDDM.
+# Light/dark: caelestia picks it from the image ("auto") unless you saved a choice for that wallpaper
+# (`wallpaper mode <file> light|dark`, the picker's sun/moon badge, or toggling light/dark while it is on).
 set -u
+DIR="${CAELESTIA_WALLPAPERS_DIR:-$HOME/Pictures/Wallpapers}"
+CUR_F="$HOME/.local/state/caelestia/wallpaper/path.txt"
+cur() { cat "$CUR_F" 2>/dev/null; }
+set_wall() { [ -f "$1" ] || { echo "not found: $1" >&2; exit 1; }; exec caelestia wallpaper -f "$(realpath "$1")"; }
+list() { find -L "$DIR" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' \) | sort; }
 
-DIR="${WALLPAPER_DIR:-$HOME/Pictures/Wallpapers}"
-STATE="$HOME/.cache/rice"
-CUR="$STATE/current"
-SCHEME="${WALLPAPER_SCHEME:-scheme-tonal-spot}"
-MODES="$HOME/.config/rice/wallpaper-modes.json"   # { "<file name>": "light" | "dark" }, missing = keep the current mode
-mkdir -p "$STATE"
-
-# the light/dark mode saved for a wallpaper ("" if none)
-mode_of() {
-  [ -f "$MODES" ] || return 0
-  python3 -I -c 'import json,sys,os; print(json.load(open(sys.argv[1])).get(os.path.basename(sys.argv[2]),""))' "$MODES" "$1" 2>/dev/null
-}
-# wallpaper mode <file> light|dark|auto : remember the choice (applies at once if it is the wallpaper in use)
-set_mode_of() {
-  mkdir -p "$(dirname "$MODES")"
-  python3 -I - "$MODES" "$1" "$2" <<'PY'
-import json, os, sys
-path, name, val = sys.argv[1], os.path.basename(sys.argv[2]), sys.argv[3]
-try: d = json.load(open(path))
-except Exception: d = {}
-if val in ("light", "dark"): d[name] = val
-else: d.pop(name, None)
-json.dump(d, open(path, "w"), indent=1)
-PY
-}
-
-list() { find -L "$DIR" -maxdepth 2 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' \) | sort; }
-
-pick() {
-  local cur files n i
-  cur=$(cat "$CUR" 2>/dev/null)
-  mapfile -t files < <(list)
-  n=${#files[@]}
+step() {
+  local c files n i=-1
+  c=$(cur); mapfile -t files < <(list); n=${#files[@]}
   [ "$n" -gt 0 ] || { echo "no wallpapers in $DIR" >&2; exit 1; }
-  case "$1" in
-    next|prev)
-      i=-1
-      for k in "${!files[@]}"; do [ "${files[$k]}" = "$cur" ] && i=$k; done
-      if [ "$1" = next ]; then i=$(( (i + 1) % n )); else i=$(( (i - 1 + n) % n )); fi
-      echo "${files[$i]}" ;;
-    random)
-      if [ "$n" -eq 1 ]; then echo "${files[0]}"; return; fi
-      while :; do f=${files[RANDOM % n]}; [ "$f" != "$cur" ] && { echo "$f"; return; }; done ;;
-  esac
-}
-
-ensure_daemon() {
-  awww query >/dev/null 2>&1 && return
-  setsid -f awww-daemon >/dev/null 2>&1
-  for _ in $(seq 20); do awww query >/dev/null 2>&1 && return; sleep 0.1; done
-}
-
-apply() {
-  local img="$1" t
-  [ -f "$img" ] || { echo "not found: $img" >&2; exit 1; }
-  img=$(realpath "$img")
-  ensure_daemon
-  local types=(wipe wave grow outer center fade)
-  t=${types[RANDOM % ${#types[@]}]}
-  awww img --all "$img" --transition-type "$t" --transition-fps 120 --transition-duration 1.2 \
-       --transition-angle $(( RANDOM % 360 )) --transition-pos 0.5,0.5 >/dev/null 2>&1 &
-  echo "$img" > "$CUR"
-  ln -sf "$img" "$STATE/lock.png"
-
-  local mode; mode=$(cat "$STATE/mode" 2>/dev/null); [ "$mode" = light ] || mode=dark
-  # this wallpaper's own light/dark choice; a manual toggle (theme-mode) on this very wallpaper wins over it
-  if [ -z "${WALLPAPER_KEEP_MODE:-}" ]; then
-    local want manual
-    want=$(mode_of "$img"); manual=$(cat "$STATE/mode-manual" 2>/dev/null)
-    if [ -n "$want" ] && [ "$want" != "$mode" ] && [ "$manual" != "$img" ]; then
-      WALLPAPER_KEEP_MODE=1 "$HOME/.local/bin/theme-mode" "$want" --no-restore
-      mode=$want
-    fi
-  fi
-  matugen image "$img" --mode "$mode" --type "$SCHEME" --prefer saturation --quiet >/dev/null 2>&1 \
-    || echo "matugen failed" >&2
-  # Spotify's spicetify theme re-reads this palette live
-  "$HOME/.local/bin/spotify-theme" >/dev/null 2>&1 &
-  # libadwaita/GTK4: Nordic-darker underneath in dark mode only (light mode uses stock Adwaita)
-  if [ "$mode" = dark ] && [ -f "$HOME/.config/gtk-4.0/gtk.css" ]; then
-    sed -i '1i @import url("file://'"$HOME"'/.themes/Nordic-darker/gtk-4.0/gtk-dark.css");' "$HOME/.config/gtk-4.0/gtk.css"
-  fi
-
-  # kitty re-reads its config (and the included colors.conf) on SIGUSR1
-  pkill -USR1 -x kitty 2>/dev/null
-  pkill -USR2 -x btop 2>/dev/null
-
-  # login screen (SilentSDDM): only when deps.sh made the theme files writable
-  local theme=/usr/share/sddm/themes/silent
-  if [ -w "$theme/backgrounds/rice-bg.png" ] && [ -w "$theme/configs/rice.conf" ]; then
-    cp -f "$img" "$theme/backgrounds/rice-bg.png"
-    cp -f "$STATE/sddm.conf" "$theme/configs/rice.conf"
-  fi
-  wait
+  for k in "${!files[@]}"; do [ "${files[$k]}" = "$c" ] && i=$k; done
+  if [ "$1" = next ]; then i=$(( (i + 1) % n )); else i=$(( (i - 1 + n) % n )); fi
+  set_wall "${files[$i]}"
 }
 
 case "${1:-next}" in
-  next|prev|random) apply "$(pick "$1")" ;;
-  set) [ -n "${2:-}" ] || { echo "usage: wallpaper set <file>" >&2; exit 1; }; apply "$2" ;;
-  restore)
-    f=$(cat "$CUR" 2>/dev/null)
-    [ -f "$f" ] || f=$(pick random)
-    apply "$f" ;;
+  next|prev) step "$1" ;;
+  random) exec caelestia wallpaper -r ;;
+  set) [ -n "${2:-}" ] || { echo "usage: wallpaper set <file>" >&2; exit 1; }; set_wall "$2" ;;
+  restore) exec "$HOME/.local/bin/rice-theme-sync" ;;   # caelestia restores the wallpaper itself; re-sync the apps
   mode)
     [ -n "${2:-}" ] || { echo "usage: wallpaper mode <file> [light|dark|auto]" >&2; exit 1; }
-    if [ -z "${3:-}" ]; then echo "$(mode_of "$2")"; exit 0; fi
+    if [ -z "${3:-}" ]; then
+      python3 -I -c 'import json,sys,os
+try: print(json.load(open(sys.argv[1])).get(os.path.basename(sys.argv[2]),"auto"))
+except Exception: print("auto")' "$HOME/.config/rice/wallpaper-modes.json" "$2"; exit 0
+    fi
     case "$3" in light|dark|auto) ;; *) echo "mode must be light, dark or auto" >&2; exit 1 ;; esac
-    set_mode_of "$2" "$3"
-    # the wallpaper on screen: switch now
-    if [ "$3" != auto ] && [ "$(realpath "$2")" = "$(cat "$CUR" 2>/dev/null)" ]; then exec "$HOME/.local/bin/theme-mode" "$3"; fi ;;
-  *) echo "usage: wallpaper [next|prev|random|restore|set <file>]" >&2; exit 1 ;;
+    "$HOME/.local/bin/rice-theme-sync" --mode "$2" "$3"
+    # the wallpaper on screen: apply now (auto: let caelestia measure it again)
+    if [ "$(realpath "$2")" = "$(cur)" ]; then
+      if [ "$3" = auto ]; then exec caelestia wallpaper -f "$(cur)"; else exec caelestia scheme set -m "$3"; fi
+    fi ;;
+  *) echo "usage: wallpaper [next|prev|random|restore|set <file>|mode <file> [light|dark|auto]]" >&2; exit 1 ;;
 esac

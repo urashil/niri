@@ -1,0 +1,5 @@
+{
+  "theme": {
+    "postHook": "$HOME/.local/bin/rice-theme-sync"
+  }
+}

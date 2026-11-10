@@ -14,5 +14,6 @@ PersistentProperties {
 
     // Dashboard state
     property int dashboardTab
+    property string launcherQuery // set with launcher = true to open it pre-filled (drawers wallpapers)
     property date dashboardDate: new Date()
 }

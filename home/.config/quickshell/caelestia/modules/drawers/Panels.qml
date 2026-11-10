@@ -31,6 +31,7 @@ Item {
     readonly property alias popouts: popoutsWrapper.content
     readonly property alias popoutsWrapper: popoutsWrapper
     readonly property alias utilities: utilities
+    readonly property alias networkFlyout: networkFlyout
     readonly property alias toasts: toasts
     readonly property alias sidebar: sidebar
 
@@ -132,6 +133,16 @@ Item {
 
         anchors.bottom: parent.bottom
         anchors.right: parent.right
+    }
+
+    // Wi-Fi / Bluetooth management, flown out to the left of the utilities panel on toggle hover
+    Utilities.NetworkFlyout {
+        id: networkFlyout
+
+        anchors.right: utilities.left
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 0
+        anchors.bottomMargin: Tokens.padding.large
     }
 
     Toasts.Toasts {

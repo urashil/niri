@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import Quickshell
 import Caelestia.Config
@@ -10,10 +11,27 @@ import qs.components.controls
 import qs.services
 import qs.utils
 
+// Scrolls once the list (or an expanded network) is taller than 70% of the screen, so it never runs off
+// a small display.
+Flickable {
+    id: flick
+
+    required property PopoutState popouts
+    property alias view: root.view
+    readonly property alias passwordNetwork: root.passwordNetwork
+
+    implicitWidth: root.width
+    implicitHeight: Math.min(root.implicitHeight, Screen.height > 0 ? Math.round(Screen.height * 0.7) : 100000)
+    contentWidth: width
+    contentHeight: root.implicitHeight
+    clip: true
+    boundsBehavior: Flickable.StopAtBounds
+    interactive: contentHeight > height
+
 ColumnLayout {
     id: root
 
-    required property PopoutState popouts
+    readonly property PopoutState popouts: flick.popouts
 
     property string connectingToSsid: ""
     property string view: "wireless" // "wireless" or "ethernet"
@@ -437,4 +455,5 @@ ColumnLayout {
             id: toggle
         }
     }
+}
 }

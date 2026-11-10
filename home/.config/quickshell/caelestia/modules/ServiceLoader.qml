@@ -16,8 +16,8 @@ Scope {
         Captive;
         Privacy;
         Automation;
+        NightLight;
         Backdrop;
-        LibrewolfTheme;
         Weather.reload();
 
         if (GlobalConfig.utilities.vpn.enabled)

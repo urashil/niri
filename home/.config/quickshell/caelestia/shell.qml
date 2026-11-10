@@ -10,6 +10,7 @@ import "modules/background"
 import "modules/areapicker"
 import "modules/lock"
 import "modules/memorize"
+import "modules/prreview"
 import QtQuick
 import Quickshell
 import qs.services
@@ -36,6 +37,7 @@ ShellRoot {
     }
 
     PasswordDrill {}
+    PrReview {}
 
     Shortcuts {}
     BatteryMonitor {}

@@ -52,9 +52,7 @@ RowLayout {
             radius: Tokens.rounding.medium
             color: Colours.tPalette.m3surfaceContainer
 
-            NotifDock {
-                lock: root.lock
-            }
+            StatusDock {}
         }
     }
 }

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Caelestia.Components
 import Caelestia.Config
 import Caelestia.I18n
@@ -191,10 +192,57 @@ PageBase {
         ToggleRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
 
-            last: true
             text: Tr.tr("Dark theme")
+            subtext: Tr.tr("Sticks for this wallpaper")
             checked: !Colours.light
             onToggled: Colours.setMode(checked ? "dark" : "light")
+        }
+
+        // which mode this wallpaper comes up in: auto (caelestia measures the image) or a fixed light / dark
+        ConnectedRect {
+            Layout.fillWidth: true
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+            last: true
+            implicitHeight: modeRow.implicitHeight + Tokens.padding.medium * 2
+
+            RowLayout {
+                id: modeRow
+
+                readonly property string wall: String(Wallpapers.actualCurrent)
+                readonly property string mode: Colours.wallMode(wall)
+
+                anchors.fill: parent
+                anchors.leftMargin: Tokens.padding.largeIncreased
+                anchors.rightMargin: Tokens.padding.largeIncreased
+                spacing: Tokens.spacing.small
+
+                Column {
+                    Layout.fillWidth: true
+                    StyledText {
+                        text: Tr.tr("This wallpaper")
+                        font: Tokens.font.body.small
+                    }
+                    StyledText {
+                        text: modeRow.mode === "auto" ? Tr.tr("Light / dark picked from the image") : Tr.tr("Always %1").arg(modeRow.mode === "light" ? Tr.tr("light") : Tr.tr("dark"))
+                        color: Colours.palette.m3outline
+                        font: Tokens.font.label.small
+                    }
+                }
+
+                Repeater {
+                    model: [["auto", "brightness_auto", Tr.tr("Auto")], ["light", "light_mode", Tr.tr("Light")], ["dark", "dark_mode", Tr.tr("Dark")]]
+                    delegate: IconTextButton {
+                        required property var modelData
+                        isToggle: true
+                        checked: modeRow.mode === modelData[0]
+                        icon: modelData[1]
+                        text: modelData[2]
+                        font: Tokens.font.label.small
+                        verticalPadding: Tokens.padding.small
+                        onClicked: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/wallpaper", "mode", modeRow.wall, modelData[0]])
+                    }
+                }
+            }
         }
     }
 }

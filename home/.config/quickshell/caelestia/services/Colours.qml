@@ -79,7 +79,8 @@ Singleton {
     }
 
     function setMode(mode: string): void {
-        Quickshell.execDetached(["caelestia", "scheme", "set", "--notify", "-m", mode]);
+        // theme-mode remembers the choice for the wallpaper on screen, then runs `caelestia scheme set -m`
+        Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/theme-mode", mode]);
     }
 
     function reloadHyprRules(): void {
@@ -120,22 +121,9 @@ Singleton {
         onLoaded: root.load(text(), false)
     }
 
-    // follow the system-wide light/dark mode (written by ~/.local/bin/theme-mode to
-    // ~/.cache/rice/mode); switch the caelestia scheme to match when it differs
-    FileView {
-        path: Quickshell.env("HOME") + "/.cache/rice/mode"
-        watchChanges: true
-        printErrors: false
-        onFileChanged: reload()
-        onLoaded: {
-            const wantLight = text().trim() === "light";
-            if (root.currentLight !== wantLight)
-                root.setMode(wantLight ? "light" : "dark");
-        }
-    }
-
-    // auto light/dark per wallpaper: ~/.config/rice/wallpaper-modes.json maps "<file>" -> "light"|"dark";
-    // when the wallpaper changes, switch the scheme mode to the one saved for it
+    // per-wallpaper light/dark choices (~/.config/rice/wallpaper-modes.json: "<file>" -> "light"|"dark", missing =
+    // auto). caelestia's smart pick already honours them (rice-theme-sync writes them into its cache), so this is
+    // only read for the picker badge.
     property var wallModes: ({})
     FileView {
         path: Quickshell.env("HOME") + "/.config/rice/wallpaper-modes.json"
@@ -150,17 +138,14 @@ Singleton {
             }
         }
     }
-    function applyWallpaperMode() {
-        const name = String(Wallpapers.current).split("/").pop();
-        const m = root.wallModes[name];
-        if ((m === "light" || m === "dark") && root.currentLight !== (m === "light"))
-            root.setMode(m);
+    function wallMode(path: string): string {
+        const m = root.wallModes[String(path).split("/").pop()];
+        return m === "light" || m === "dark" ? m : "auto";
     }
-    Connections {
-        target: Wallpapers
-        function onCurrentChanged(): void {
-            root.applyWallpaperMode();
-        }
+    // auto -> light -> dark -> auto
+    function cycleWallMode(path: string): void {
+        const m = wallMode(path);
+        Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/wallpaper", "mode", String(path).replace(/^file:\/\//, ""), m === "auto" ? "light" : m === "light" ? "dark" : "auto"]);
     }
 
     ImageAnalyser {

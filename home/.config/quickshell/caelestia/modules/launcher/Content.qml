@@ -65,8 +65,6 @@ Item {
             const currentItem = list.currentList?.currentItem;
             if (currentItem) {
                 if (list.showWallpapers) {
-                    if (Colours.scheme === "dynamic" && currentItem.modelData.path !== Wallpapers.actualCurrent)
-                        Wallpapers.previewColourLock = true;
                     Wallpapers.setWallpaper(currentItem.modelData.path);
                     root.screenState.launcher = false;
                 } else if (text.startsWith(GlobalConfig.launcher.actionPrefix)) {
@@ -107,12 +105,25 @@ Item {
             }
         }
 
-        Component.onCompleted: forceActiveFocus()
+        Component.onCompleted: {
+            forceActiveFocus();
+            takeQuery();
+        }
+        function takeQuery(): void {
+            if (root.screenState.launcherQuery !== "") {
+                search.text = root.screenState.launcherQuery;
+                root.screenState.launcherQuery = "";
+            }
+        }
 
         Connections {
             function onLauncherChanged(): void {
                 if (!root.screenState.launcher)
                     search.text = "";
+            }
+
+            function onLauncherQueryChanged(): void {
+                search.takeQuery();
             }
 
             function onSessionChanged(): void {

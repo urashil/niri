@@ -85,6 +85,19 @@ StyledRect {
                         icon: "wifi"
                         checked: Nmcli.wifiEnabled
                         onClicked: Nmcli.toggleWifi()
+                        // hover opens the Wi-Fi flyout, debounced so crossing this toggle on the way to a
+                        // different one's flyout doesn't switch the content
+                        // open instantly when nothing is flown out (reliable); when something already is,
+                        // debounce so quickly crossing this toggle on the way to the flyout doesn't switch it
+                        onHoveredChanged: {
+                            if (!hovered)
+                                openFlyout.stop();
+                            else if (QuickFlyout.which === "")
+                                QuickFlyout.open("network");
+                            else
+                                openFlyout.restart();
+                        }
+                        Timer { id: openFlyout; interval: 130; onTriggered: QuickFlyout.open("network") }
                     }
                 }
                 DelegateChoice {
@@ -97,6 +110,15 @@ StyledRect {
                             if (adapter)
                                 adapter.enabled = !adapter.enabled;
                         }
+                        onHoveredChanged: {
+                            if (!hovered)
+                                openFlyout.stop();
+                            else if (QuickFlyout.which === "")
+                                QuickFlyout.open("bluetooth");
+                            else
+                                openFlyout.restart();
+                        }
+                        Timer { id: openFlyout; interval: 130; onTriggered: QuickFlyout.open("bluetooth") }
                     }
                 }
                 DelegateChoice {
@@ -124,11 +146,21 @@ StyledRect {
                     }
                 }
                 DelegateChoice {
-                    roleValue: "gameMode"
+                    roleValue: "nightlight"
                     delegate: Toggle {
-                        icon: "gamepad"
-                        checked: GameMode.enabled
-                        onClicked: GameMode.enabled = !GameMode.enabled
+                        icon: "dark_mode"
+                        checked: NightLight.active
+                        onClicked: NightLight.cycle()
+                        // hover opens the night-light + auto-off controls as a flyout beside the panel
+                        onHoveredChanged: {
+                            if (!hovered)
+                                openFlyout.stop();
+                            else if (QuickFlyout.which === "")
+                                QuickFlyout.open("nightlight");
+                            else
+                                openFlyout.restart();
+                        }
+                        Timer { id: openFlyout; interval: 130; onTriggered: QuickFlyout.open("nightlight") }
                     }
                 }
                 DelegateChoice {

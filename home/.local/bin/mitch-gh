@@ -1,66 +1,188 @@
 #!/usr/bin/env bash
-# GitHub status for the mitch.pro bar card. Read-only status + one write (approve a deploy).
+# GitHub status for the mitch.pro bar card. Read-only status + small writes (approve a deploy, re-run failed jobs).
 # Needs: gh (authenticated), jq.
-#   mitch-gh status            JSON: { repo, error, prs[], deploys[] }
+#   mitch-gh status            JSON: { repo, error, prs[], deploys[], runs[] }   (all API calls in parallel)
 #   mitch-gh approve RUN ENV   approve one environment of a waiting deployment (numeric run id + env id)
+#   mitch-gh rerun RUN         re-run the failed jobs of a workflow run
+#   mitch-gh cancel RUN        cancel a queued / running workflow run
+# PR review (the review window):
+#   mitch-gh pr N              JSON: one PR with body, commits, conversation, reviews, line comments, files, checks
+#   mitch-gh diff N            the PR's unified diff (capped at 4 MB)
+#   mitch-gh review N approve|request|comment   submit a review; body on stdin (needed for request / comment)
+#   mitch-gh comment N         add a conversation comment; body on stdin
+#   mitch-gh merge N squash|merge|rebase [delete]   merge (delete = delete the branch afterwards)
+#   mitch-gh close N | reopen N | ready N
+#   mitch-gh log RUN           last 150 lines of the failed jobs' logs of a workflow run
 set -u
 REPO="${MITCH_REPO:-mitch-pro/mitch.pro}"
-ERRF=$(mktemp); trap 'rm -f "$ERRF"' EXIT
-GH() { timeout 20 gh "$@"; }
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+GH() { timeout 15 gh "$@"; }
 
 emit_err() {
   if command -v jq >/dev/null 2>&1; then
-    jq -cn --arg repo "$REPO" --arg e "$1" '{repo:$repo,error:$e,prs:[],deploys:[]}'
+    jq -cn --arg repo "$REPO" --arg e "$1" '{repo:$repo,error:$e,prs:[],deploys:[],runs:[]}'
   else
-    printf '{"repo":"%s","error":"jq not installed","prs":[],"deploys":[]}\n' "$REPO"
+    printf '{"repo":"%s","error":"jq not installed","prs":[],"deploys":[],"runs":[]}\n' "$REPO"
   fi
   exit 0
 }
+numeric() { case "${1:-}" in ''|*[!0-9]*) echo "id must be numeric" >&2; exit 2 ;; esac; }
 
 case "${1:-status}" in
   status)
     command -v gh >/dev/null 2>&1 || emit_err "gh not installed"
     command -v jq >/dev/null 2>&1 || emit_err "jq not installed"
 
-    prs=$(GH pr list --repo "$REPO" --state open --limit 20 \
-            --json number,title,author,isDraft,url,createdAt,reviewDecision 2>"$ERRF") \
-      || emit_err "pr list: $(head -c 200 "$ERRF")"
+    # open PRs with one rolled-up check state: fail > pending > ok ("" = no checks)
+    ( GH pr list --repo "$REPO" --state open --limit 20 \
+        --json number,title,author,isDraft,url,createdAt,updatedAt,reviewDecision,headRefName,statusCheckRollup \
+        --jq '[.[] | (.statusCheckRollup // []) as $c
+               | ($c | map(if .__typename == "StatusContext" then (.state // "")
+                           elif (.status // "") != "COMPLETED" then "PENDING" else (.conclusion // "") end)) as $s
+               | del(.statusCheckRollup)
+               + {checks: (if ($s | length) == 0 then ""
+                           elif ($s | any(. == "FAILURE" or . == "ERROR" or . == "TIMED_OUT" or . == "CANCELLED" or . == "STARTUP_FAILURE" or . == "ACTION_REQUIRED")) then "fail"
+                           elif ($s | any(. == "PENDING" or . == "EXPECTED" or . == "QUEUED" or . == "IN_PROGRESS")) then "pending"
+                           else "ok" end)}]' \
+        >"$T/prs" 2>"$T/prs.err" || echo $? >"$T/prs.fail" ) &
+    ( GH api "repos/$REPO/actions/runs?status=waiting&per_page=30" \
+        --jq '[.workflow_runs[] | {id, name, title: .display_title, branch: .head_branch, url: .html_url, actor: .actor.login}]' \
+        >"$T/waiting" 2>"$T/waiting.err" || echo $? >"$T/waiting.fail" ) &
+    # recent runs of every kind, newest first: running ones show live, failures get flagged
+    ( GH api "repos/$REPO/actions/runs?per_page=25" \
+        --jq '[.workflow_runs[] | {id, name, title: .display_title, branch: .head_branch, status, conclusion, event,
+               url: .html_url, actor: .actor.login, at: .updated_at, started: .run_started_at, attempt: .run_attempt}]' \
+        >"$T/recent" 2>"$T/recent.err" || echo $? >"$T/recent.fail" ) &
+    wait
 
-    runs=$(GH api "repos/$REPO/actions/runs?status=waiting&per_page=30" \
-            --jq '[.workflow_runs[] | {id, name, title: .display_title, branch: .head_branch, url: .html_url, actor: .actor.login}]' 2>"$ERRF") \
-      || emit_err "runs: $(head -c 200 "$ERRF")"
-
-    # recent workflow runs of every kind (CI, deploy, notify, ...), newest first, so the card can
-    # flag completions (failures) as they happen
-    recent=$(GH api "repos/$REPO/actions/runs?per_page=20" \
-            --jq '[.workflow_runs[] | {id, name, title: .display_title, branch: .head_branch, status, conclusion, url: .html_url, actor: .actor.login, at: .updated_at}]' 2>"$ERRF") \
-      || emit_err "recent: $(head -c 200 "$ERRF")"
-
-    # each waiting run can gate on several environments; list the ones still pending review
-    deploys='[]'
-    for rid in $(printf '%s' "$runs" | jq -r '.[].id'); do
-      pd=$(GH api "repos/$REPO/actions/runs/$rid/pending_deployments" 2>/dev/null) || continue
-      meta=$(printf '%s' "$runs" | jq -c --argjson id "$rid" '.[] | select(.id==$id)')
-      item=$(printf '%s' "$pd" | jq -c --argjson run "$meta" \
-        '[.[] | {run_id: $run.id, name: $run.name, title: $run.title, branch: $run.branch,
-                 url: $run.url, actor: $run.actor,
-                 env: .environment.name, env_id: .environment.id,
-                 canApprove: .current_user_can_approve}]')
-      deploys=$(jq -cn --argjson a "$deploys" --argjson b "$item" '$a + $b')
+    for k in prs waiting recent; do
+      [ -e "$T/$k.fail" ] && emit_err "$k: $(head -c 200 "$T/$k.err")"
     done
 
-    jq -cn --arg repo "$REPO" --argjson prs "$prs" --argjson deploys "$deploys" --argjson runs "$recent" \
-      '{repo:$repo, error:"", prs:$prs, deploys:$deploys, runs:$runs}'
+    # each waiting run can gate on several environments; list the ones still pending review (in parallel too)
+    i=0
+    for rid in $(jq -r '.[].id' "$T/waiting"); do
+      ( pd=$(GH api "repos/$REPO/actions/runs/$rid/pending_deployments" 2>/dev/null) || exit 0
+        jq -c --argjson run "$(jq -c --argjson id "$rid" '.[] | select(.id==$id)' "$T/waiting")" \
+          '[.[] | {run_id: $run.id, name: $run.name, title: $run.title, branch: $run.branch,
+                   url: $run.url, actor: $run.actor,
+                   env: .environment.name, env_id: .environment.id,
+                   canApprove: .current_user_can_approve}]' <<<"$pd" >"$T/pd.$i" ) &
+      i=$((i + 1))
+    done
+    wait
+    deploys=$(cat "$T"/pd.* 2>/dev/null | jq -cs 'add // []')
+
+    jq -cn --arg repo "$REPO" --slurpfile prs "$T/prs" --argjson deploys "$deploys" --slurpfile runs "$T/recent" \
+      '{repo:$repo, error:"", prs:$prs[0], deploys:$deploys, runs:$runs[0]}'
     ;;
 
   approve)
-    run="${2:-}"; env="${3:-}"
-    case "$run" in ''|*[!0-9]*) echo "run id must be numeric" >&2; exit 2 ;; esac
-    case "$env" in ''|*[!0-9]*) echo "env id must be numeric" >&2; exit 2 ;; esac
+    run="${2:-}"; env="${3:-}"; numeric "$run"; numeric "$env"
     GH api --method POST "repos/$REPO/actions/runs/$run/pending_deployments" \
       -F "environment_ids[]=$env" -f "state=approved" -f "comment=approved from bar" \
-      >/dev/null 2>"$ERRF" && echo ok || { head -c 300 "$ERRF" >&2; exit 1; }
+      >/dev/null 2>"$T/err" && echo ok || { head -c 300 "$T/err" >&2; exit 1; }
     ;;
 
-  *) echo "usage: mitch-gh {status|approve RUN ENV}" >&2; exit 2 ;;
+  rerun)
+    numeric "${2:-}"
+    GH api --method POST "repos/$REPO/actions/runs/$2/rerun-failed-jobs" >/dev/null 2>"$T/err" \
+      && echo ok || { head -c 300 "$T/err" >&2; exit 1; }
+    ;;
+
+  cancel)
+    numeric "${2:-}"
+    GH api --method POST "repos/$REPO/actions/runs/$2/cancel" >/dev/null 2>"$T/err" \
+      && echo ok || { head -c 300 "$T/err" >&2; exit 1; }
+    ;;
+
+  pr)
+    numeric "${2:-}"
+    ( GH pr view "$2" --repo "$REPO" --json number,title,body,author,state,isDraft,mergeable,mergeStateStatus,reviewDecision,headRefName,baseRefName,additions,deletions,changedFiles,files,comments,reviews,statusCheckRollup,url,createdAt,updatedAt,commits,reviewRequests,labels \
+        >"$T/pr" 2>"$T/pr.err" || echo $? >"$T/pr.fail" ) &
+    ( GH api "repos/$REPO/pulls/$2/comments?per_page=100" \
+        --jq '[.[] | {id, path, line: (.line // .original_line), side, body, author: .user.login, at: .created_at, url: .html_url, reply_to: .in_reply_to_id}]' \
+        >"$T/lc" 2>/dev/null || echo '[]' >"$T/lc" ) &
+    wait
+    [ -e "$T/pr.fail" ] && { head -c 300 "$T/pr.err" >&2; exit 1; }
+    jq -c --slurpfile lc "$T/lc" '
+      . + {lineComments: $lc[0],
+           checks: [(.statusCheckRollup // [])[] |
+             if .__typename == "StatusContext" then
+               {name: .context, workflow: "", status: (if .state == "PENDING" or .state == "EXPECTED" then "IN_PROGRESS" else "COMPLETED" end),
+                conclusion: (if .state == "PENDING" or .state == "EXPECTED" then "" else .state end), url: .targetUrl, run: null,
+                started: .createdAt, done: null}
+             else
+               {name, workflow: (.workflowName // ""), status, conclusion: (.conclusion // ""), url: .detailsUrl,
+                run: ((.detailsUrl // "") | capture("/actions/runs/(?<r>[0-9]+)")?.r // null),
+                started: .startedAt, done: .completedAt}
+             end]}
+      | del(.statusCheckRollup)' "$T/pr"
+    ;;
+
+  diff)
+    numeric "${2:-}"
+    GH pr diff "$2" --repo "$REPO" --color never 2>"$T/err" | head -c 4194304 || { head -c 300 "$T/err" >&2; exit 1; }
+    ;;
+
+  review)
+    numeric "${2:-}"
+    body=$(cat)
+    case "${3:-}" in
+      approve) flag=--approve ;;
+      request) flag=--request-changes ;;
+      comment) flag=--comment ;;
+      *) echo "review: approve|request|comment" >&2; exit 2 ;;
+    esac
+    if [ -z "$body" ] && [ "$flag" != --approve ]; then echo "write a message first" >&2; exit 2; fi
+    printf '%s' "$body" | GH pr review "$2" --repo "$REPO" "$flag" --body-file - >/dev/null 2>"$T/err" \
+      && echo ok || { head -c 300 "$T/err" >&2; exit 1; }
+    ;;
+
+  comment)
+    numeric "${2:-}"
+    body=$(cat); [ -n "$body" ] || { echo "write a message first" >&2; exit 2; }
+    printf '%s' "$body" | GH pr comment "$2" --repo "$REPO" --body-file - >/dev/null 2>"$T/err" \
+      && echo ok || { head -c 300 "$T/err" >&2; exit 1; }
+    ;;
+
+  merge)
+    numeric "${2:-}"
+    case "${3:-}" in squash|merge|rebase) ;; *) echo "merge: squash|merge|rebase" >&2; exit 2 ;; esac
+    extra=(); [ "${4:-}" = delete ] && extra=(--delete-branch)
+    GH pr merge "$2" --repo "$REPO" "--$3" "${extra[@]}" >/dev/null 2>"$T/err" \
+      && echo ok || { head -c 300 "$T/err" >&2; exit 1; }
+    ;;
+
+  close|reopen|ready)
+    numeric "${2:-}"
+    GH pr "$1" "$2" --repo "$REPO" >/dev/null 2>"$T/err" && echo ok || { head -c 300 "$T/err" >&2; exit 1; }
+    ;;
+
+  log)
+    numeric "${2:-}"
+    # strip "job<TAB>step<TAB>timestamp " and show what led up to the first error, not the runner's cleanup
+    GH run view "$2" --repo "$REPO" --log-failed >"$T/log" 2>"$T/err" || { head -c 300 "$T/err" >&2; exit 1; }
+    python3 -I - "$T/log" <<'PY'
+import re, sys
+lines = []
+for l in open(sys.argv[1], errors="replace"):
+    parts = l.rstrip("\n").split("\t", 2)
+    msg = parts[-1]
+    msg = re.sub(r"^\ufeff?\d{4}-\d\d-\d\dT[\d:.]+Z ?", "", msg)
+    msg = re.sub(r"(\x1b|\^\[)\[[0-9;]*[A-Za-z]", "", msg)
+    lines.append((parts[0] if len(parts) == 3 else "", msg))
+err = next((i for i, (_, m) in enumerate(lines) if "##[error]" in m), None)
+if err is None:
+    err = next((i for i, (_, m) in enumerate(lines) if re.search(r"\berror(\[E\d+\])?:|panicked at|FAILED|failures:", m)), len(lines) - 1)
+start = max(0, err - 120)
+job = None
+for j, m in lines[start:err + 1]:
+    if j != job:
+        print(f"── {j} ──"); job = j
+    print(m.replace("##[error]", "✗ "))
+PY
+    ;;
+
+  *) echo "usage: mitch-gh {status|approve RUN ENV|rerun RUN|cancel RUN|pr N|diff N|review N KIND|comment N|merge N HOW [delete]|close N|reopen N|ready N|log RUN}" >&2; exit 2 ;;
 esac

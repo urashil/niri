@@ -1,17 +1,11 @@
 @import url("colors.css");
 
-/* New tab, home and Firefox's own about: pages follow the wallpaper too */
-@-moz-document url(about:home), url(about:newtab), url(about:blank), url-prefix(about:privatebrowsing) {
-  :root, body {
-    --newtab-background-color: var(--rice-bg) !important;
-    --newtab-background-color-secondary: var(--rice-bg-mid) !important;
-    --newtab-text-primary-color: var(--rice-fg) !important;
-    --newtab-primary-action-background: var(--rice-accent) !important;
-    --newtab-element-hover-color: var(--rice-bg-high) !important;
-    --newtab-border-color: var(--rice-outline) !important;
-    background-color: var(--rice-bg) !important;
-  }
-  .search-handoff-button, .search-wrapper input { background-color: var(--rice-bg-mid) !important; border-radius: 12px !important; color: var(--rice-fg) !important; }
+/* New tab / home: colours come live from the "rice theme" extension (ntp_background / ntp_text /
+   ntp_card_background, fed by librewolf-theme-host), so they follow every wallpaper and light/dark change at once.
+   Setting them here from colors.css would freeze them at browser start (userContent is read once), which left the
+   page white with white text after a light/dark switch. Only shape tweaks here. */
+@-moz-document url(about:home), url(about:newtab), url-prefix(about:privatebrowsing) {
+  .search-handoff-button, .search-wrapper input { border-radius: 12px !important; }
   .card-outer, .card-outer .card { border-radius: 14px !important; }
 }
 

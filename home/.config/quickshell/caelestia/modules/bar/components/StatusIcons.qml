@@ -262,24 +262,6 @@ StyledRect {
             }
         }
 
-        // Caffeine / super caffeine — visible state so it can't silently block suspend; hover to edit, click cycles
-        MaterialIcon {
-            property string name: "caffeine"
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: root.spacing
-            animate: true
-            text: IdleInhibitor.superEnabled ? "local_fire_department" : "local_cafe"
-            fill: IdleInhibitor.enabled ? 1 : 0
-            color: IdleInhibitor.superEnabled ? Colours.palette.m3error : IdleInhibitor.enabled ? Colours.palette.m3tertiary : root.colour
-            opacity: IdleInhibitor.enabled ? 1 : 0.55
-
-            MouseArea {
-                anchors.fill: parent
-                anchors.margins: -4
-                cursorShape: Qt.PointingHandCursor
-                onClicked: IdleInhibitor.cycle()
-            }
-        }
     }
 
     component EntryWrapper: Item {

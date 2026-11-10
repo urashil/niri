@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Native messaging host for the "rice theme" LibreWolf extension: sends the wallpaper colours as a browser
-theme now and again every time ~/.config/quickshell/bar/colors.json changes. Exits when the browser goes away."""
+theme now and again every time ~/.cache/rice/colors.json (rice-theme-sync) changes. Exits when the browser goes away."""
 import json, os, struct, sys, time
 
 LOG = os.path.expanduser("~/.cache/rice/lw-theme-host.log")
@@ -11,7 +11,7 @@ def log(msg):
         pass
 log("started pid %d" % os.getpid())
 
-COLORS = os.path.expanduser("~/.config/quickshell/bar/colors.json")
+COLORS = os.path.expanduser("~/.cache/rice/colors.json")  # written by rice-theme-sync
 
 def theme(c):
     return {"colors": {
@@ -27,7 +27,7 @@ def theme(c):
         "popup": c["surfaceLow"], "popup_text": c["text"], "popup_border": c["outlineVariant"],
         "popup_highlight": c["primaryContainer"], "popup_highlight_text": c["fgContainer"],
         "sidebar": c["surfaceLow"], "sidebar_text": c["text"], "sidebar_border": c["outlineVariant"],
-        "ntp_background": c["surface"], "ntp_text": c["text"],
+        "ntp_background": c["surface"], "ntp_text": c["text"], "ntp_card_background": c["surfaceContainer"],
         "button_background_hover": c["surfaceHigh"], "button_background_active": c["primaryContainer"],
         "bookmark_text": c["text"],
     }}

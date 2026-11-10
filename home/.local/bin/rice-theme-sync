@@ -1,0 +1,242 @@
+#!/usr/bin/python3 -I
+"""rice-theme-sync: caelestia's theme.postHook (~/.config/caelestia/cli.json). Runs after every colour change
+(wallpaper, light/dark, scheme) and spreads caelestia's palette to everything outside the shell, like the old
+matugen `wallpaper` script did:
+  - renders ~/.config/matugen/templates/* (kitty, niri, nvim, LibreWolf, Spotify, SDDM, swaylock) from caelestia's
+    colours (both light and dark palettes where a template wants both)
+  - ~/.cache/rice/colors.json for the LibreWolf live-theme extension (librewolf-theme-host)
+  - GTK light/dark (gsettings color-scheme + adw-gtk3 / adw-gtk3-dark), which caelestia leaves stuck on dark
+  - reloads kitty, pushes Spotify colours, copies the wallpaper to the SDDM theme
+  - ~/.cache/rice/{mode,current,lock.png} for older scripts
+Also keeps caelestia's smart light/dark pick in line with ~/.config/rice/wallpaper-modes.json (see `wallpaper mode`).
+  rice-theme-sync            normal hook run (env from caelestia, falls back to scheme.json)
+  rice-theme-sync --modes    only re-apply the per-wallpaper light/dark choices to caelestia's cache
+  rice-theme-sync --mode FILE light|dark|auto   save one wallpaper's choice (auto = caelestia decides from the image)"""
+import json, os, re, shutil, subprocess, sys
+from pathlib import Path
+
+H = Path.home()
+CACHE = H / ".cache/rice"
+MODES = H / ".config/rice/wallpaper-modes.json"
+TPL = H / ".config/matugen/templates"
+STATE = H / ".local/state/caelestia"
+LOG = CACHE / "theme-sync.log"
+CACHE.mkdir(parents=True, exist_ok=True)
+
+def log(msg):
+    try:
+        with open(LOG, "a") as f:
+            f.write(msg + "\n")
+    except OSError:
+        pass
+
+# template -> output (the old matugen config, minus what caelestia already does: gtk css, fuzzel, btop)
+OUT = {
+    "kitty.conf": H / ".config/kitty/colors.conf",
+    "niri.kdl": H / ".config/niri/colors.kdl",
+    "swaylock": H / ".config/swaylock/config",
+    "colors.json": CACHE / "colors.json",
+    "sddm.conf": CACHE / "sddm.conf",
+    "librewolf-colors.css": H / ".config/librewolf/librewolf/6yv4qbnb.default-release/chrome/colors.css",
+    "nvim-palette.lua": H / ".config/nvim/lua/palette.lua",
+    "spicetify-color.ini": H / ".config/spicetify/Themes/rice/color.ini",
+    "spotify-live.css": CACHE / "spotify-colors.css",
+}
+ALIAS = {"magenta": "mauve", "cyan": "teal"}  # matugen custom colours -> caelestia names
+
+def atomic(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".rice-tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+def load_modes():
+    try:
+        return {k: v for k, v in json.load(open(MODES)).items() if v in ("light", "dark")}
+    except Exception:
+        return {}
+
+def wallpaper():
+    try:
+        return (STATE / "wallpaper/path.txt").read_text().strip()
+    except OSError:
+        return ""
+
+def sync_modes():
+    """caelestia picks light/dark from a cached smart.json per wallpaper: write the user's choice into it, so the
+    wallpaper comes up in the right mode on the first try (and the picker preview agrees)."""
+    modes = load_modes()
+    if not modes:
+        return
+    try:
+        from caelestia.utils.paths import compute_hash, wallpapers_cache_dir, wallpapers_dir
+        from caelestia.utils.wallpaper import convert_gif, get_smart_opts
+    except Exception as e:
+        log(f"modes: caelestia import failed: {e!r}")
+        return
+    roots = [wallpapers_dir]
+    cur = wallpaper()
+    if cur:
+        roots.append(Path(cur).parent)
+    seen = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for p in root.rglob("*"):
+            if p.name not in modes or not p.is_file() or p in seen:
+                continue
+            seen.add(p)
+            try:
+                src = convert_gif(p) if p.suffix.lower() == ".gif" else p
+                cache = wallpapers_cache_dir / compute_hash(src)
+                opts = get_smart_opts(src, cache)
+                if opts.get("mode") != modes[p.name]:
+                    opts["mode"] = modes[p.name]
+                    atomic(cache / "smart.json", json.dumps(opts))
+            except Exception as e:
+                log(f"modes: {p}: {e!r}")
+
+def palettes(mode, colours):
+    """{"light": {...}, "dark": {...}} with the current palette for `mode` and a generated one for the other."""
+    other = "light" if mode == "dark" else "dark"
+    pal = {mode: colours, other: colours}
+    try:
+        from caelestia.utils.scheme import Scheme, get_scheme
+        s = get_scheme()
+        if s.name == "dynamic":
+            from caelestia.utils.material import get_colours_for_image
+            from caelestia.utils.paths import compute_hash, wallpapers_cache_dir
+            from caelestia.utils.wallpaper import convert_gif, get_thumb
+            w = Path(wallpaper())
+            if w.suffix.lower() == ".gif":
+                w = convert_gif(w)
+            cache = wallpapers_cache_dir / compute_hash(w)
+            twin = Scheme({"name": s.name, "flavour": s.flavour, "mode": other, "variant": s.variant, "colours": colours})
+            pal[other] = get_colours_for_image(get_thumb(w, cache), twin)
+        else:
+            f = Path(__import__("caelestia.utils.paths", fromlist=["x"]).scheme_data_dir) / s.name / s.flavour / f"{other}.txt"
+            if f.exists():
+                pal[other] = dict(l.split(" ", 1) for l in f.read_text().split("\n") if " " in l)
+                pal[other] = {k: v.strip() for k, v in pal[other].items()}
+    except Exception as e:
+        log(f"palette for {other}: {e!r}")
+    return pal
+
+def camel(snake):
+    snake = ALIAS.get(snake, snake)
+    head, *rest = snake.split("_")
+    return head + "".join(w.capitalize() for w in rest)
+
+def render(text, mode, pal):
+    def colour(m):
+        name, variant, field = m.group(1), m.group(2), m.group(3)
+        p = pal[mode] if variant == "default" else pal.get(variant, pal[mode])
+        v = p.get(camel(name)) or p.get(name)
+        if v is None:
+            log(f"no colour {name}")
+            return m.group(0)
+        v = v.lstrip("#")[:6]
+        if field == "hex":
+            return "#" + v
+        if field == "hex_stripped":
+            return v
+        return str(int(v[{"red": 0, "green": 2, "blue": 4}[field]:][:2], 16))
+    text = re.sub(r"\{\{\s*colors\.([a-z_]+)\.(default|light|dark)\.(hex_stripped|hex|red|green|blue)\s*\}\}", colour, text)
+    return re.sub(r"\{\{\s*mode\s*\}\}", mode, text)
+
+def gtk(mode):
+    dark = mode == "dark"
+    theme = "adw-gtk3-dark" if dark else "adw-gtk3"
+    if not Path("/usr/share/themes", theme).is_dir():
+        theme = "Adwaita-dark" if dark else "Adwaita"
+    for k, v in (("color-scheme", "prefer-dark" if dark else "prefer-light"), ("gtk-theme", theme)):
+        subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", k, v], stderr=subprocess.DEVNULL)
+    for f in (H / ".config/gtk-3.0/settings.ini", H / ".config/gtk-4.0/settings.ini"):
+        try:
+            t = f.read_text()
+            t = re.sub(r"(?m)^gtk-theme-name=.*$", f"gtk-theme-name={theme}", t)
+            t = re.sub(r"(?m)^gtk-application-prefer-dark-theme=.*$", f"gtk-application-prefer-dark-theme={int(dark)}", t)
+            atomic(f, t)
+        except OSError:
+            pass
+
+def set_mode(file, val):
+    name = os.path.basename(file)
+    try:
+        d = json.load(open(MODES))
+    except Exception:
+        d = {}
+    if val in ("light", "dark"):
+        d[name] = val
+    else:
+        d.pop(name, None)
+        # forget the patched pick so caelestia measures the image again
+        try:
+            from caelestia.utils.paths import compute_hash, wallpapers_cache_dir
+            from caelestia.utils.wallpaper import convert_gif
+            src = Path(file)
+            src = convert_gif(src) if src.suffix.lower() == ".gif" else src
+            (wallpapers_cache_dir / compute_hash(src) / "smart.json").unlink(missing_ok=True)
+        except Exception as e:
+            log(f"auto {file}: {e!r}")
+    MODES.parent.mkdir(parents=True, exist_ok=True)
+    atomic(MODES, json.dumps(d, indent=1, sort_keys=True) + "\n")
+    sync_modes()
+
+def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "--mode" and sys.argv[3] in ("light", "dark", "auto"):
+        set_mode(sys.argv[2], sys.argv[3])
+        return
+    if "--modes" in sys.argv:
+        sync_modes()
+        return
+    mode = os.environ.get("SCHEME_MODE")
+    colours = None
+    try:
+        colours = json.loads(os.environ["SCHEME_COLOURS"])
+    except Exception:
+        pass
+    if not mode or not colours:
+        try:
+            s = json.load(open(STATE / "scheme.json"))
+            mode, colours = s["mode"], s["colours"]
+        except Exception as e:
+            log(f"no scheme: {e!r}")
+            return
+    mode = "light" if mode == "light" else "dark"
+
+    (CACHE / "mode").write_text(mode + "\n")
+    wall = wallpaper()
+    if wall:
+        (CACHE / "current").write_text(wall + "\n")
+        lock = CACHE / "lock.png"
+        lock.unlink(missing_ok=True)
+        lock.symlink_to(wall)
+
+    pal = palettes(mode, colours)
+    for name, out in OUT.items():
+        src = TPL / name
+        if src.is_file():
+            try:
+                atomic(out, render(src.read_text(), mode, pal))
+            except OSError as e:
+                log(f"{name}: {e!r}")
+
+    gtk(mode)
+    subprocess.run(["pkill", "-USR1", "-x", "kitty"], stderr=subprocess.DEVNULL)
+    subprocess.Popen([str(H / ".local/bin/spotify-theme")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # login screen (SilentSDDM): only when install.sh made the theme files writable
+    theme = Path("/usr/share/sddm/themes/silent")
+    bg, conf = theme / "backgrounds/rice-bg.png", theme / "configs/rice.conf"
+    if wall and os.access(bg, os.W_OK) and os.access(conf, os.W_OK):
+        try:
+            shutil.copyfile(wall, bg)
+            shutil.copyfile(CACHE / "sddm.conf", conf)
+        except OSError as e:
+            log(f"sddm: {e!r}")
+
+    sync_modes()
+
+if __name__ == "__main__":
+    main()

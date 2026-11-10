@@ -5,6 +5,7 @@ import Quickshell
 import Caelestia
 import Caelestia.Config
 import qs.components
+import qs.services
 import qs.modules.sidebar as Sidebar
 import qs.modules.bar.popouts as BarPopouts
 
@@ -24,7 +25,9 @@ Item {
 
         reloadableId: "utilities"
     }
-    readonly property bool shouldBeActive: screenState.sidebar || (screenState.utilities && Config.utilities.enabled && !(screenState.session && Config.session.enabled))
+    // keep the panel out while its wifi/bluetooth/night-light flyout is open, even though the pointer has
+    // left the panel's own hover zone to reach the flyout beside it
+    readonly property bool shouldBeActive: screenState.sidebar || QuickFlyout.which !== "" || (screenState.utilities && Config.utilities.enabled && !(screenState.session && Config.session.enabled))
     readonly property real totalPadding: content.anchors.margins + CUtils.clamp(content.anchors.margins - Config.border.thickness, 0, content.anchors.margins)
     readonly property real nonAnimHeight: ((content.item as Content)?.nonAnimHeight ?? 0) + totalPadding
     property real offsetScale: shouldBeActive ? 0 : 1
@@ -68,6 +71,12 @@ Item {
 
     Behavior on offsetScale {
         Anim {}
+    }
+
+    // keep the wifi/bluetooth/night-light flyout open while the pointer is anywhere over the panel, so
+    // crossing the panel's padding toward the flyout (just off its left edge) never times out
+    HoverHandler {
+        onHoveredChanged: hovered ? QuickFlyout.hold() : QuickFlyout.release()
     }
 
     Loader {
